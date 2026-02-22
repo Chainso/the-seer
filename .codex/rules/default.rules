@@ -1,0 +1,113 @@
+# Seer monorepo: common development and verification tooling.
+
+prefix_rule(
+    pattern = ["uv", "sync"],
+    decision = "allow",
+    justification = "Allow dependency sync for local development",
+    match = [
+        "uv sync",
+        "uv sync --extra dev",
+        "uv sync --directory seer-backend --extra dev",
+    ],
+    not_match = [
+        "uv pip install fastapi",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", ["pytest", "ruff", "uvicorn", "python"]],
+    decision = "allow",
+    justification = "Allow standard test, lint, app, and module commands",
+    match = [
+        "uv run pytest",
+        "uv run ruff check .",
+        "uv run uvicorn seer_backend.main:app --reload --host 0.0.0.0 --port 8000",
+        "uv run python -m pytest tests -q",
+    ],
+    not_match = [
+        "uv run bash -lc 'echo hi'",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", ["--directory", "--project"], "seer-backend", ["pytest", "ruff", "uvicorn", "python"]],
+    decision = "allow",
+    justification = "Allow running backend tooling from the monorepo root",
+    match = [
+        "uv run --directory seer-backend pytest -q",
+        "uv run --project seer-backend ruff check seer-backend",
+    ],
+    not_match = [
+        "uv run --directory seer-ui pytest -q",
+    ],
+)
+
+prefix_rule(
+    pattern = [["pytest", "ruff", "uvicorn"]],
+    decision = "allow",
+    justification = "Allow direct invocation of common backend tooling",
+    match = [
+        "pytest -q",
+        "ruff check .",
+        "uvicorn seer_backend.main:app --reload",
+    ],
+    not_match = [
+        "python -m pytest -q",
+    ],
+)
+
+prefix_rule(
+    pattern = [[".venv/bin/pytest", ".venv/bin/ruff", ".venv/bin/uvicorn", "seer-backend/.venv/bin/pytest", "seer-backend/.venv/bin/ruff", "seer-backend/.venv/bin/uvicorn"]],
+    decision = "allow",
+    justification = "Allow direct invocation from local virtual environments",
+    match = [
+        ".venv/bin/pytest -q",
+        "seer-backend/.venv/bin/pytest -q",
+        "seer-backend/.venv/bin/uvicorn seer_backend.main:app --reload",
+    ],
+    not_match = [
+        ".venv/bin/python -m pytest",
+        "seer-backend/.venv/bin/python -m pytest",
+    ],
+)
+
+prefix_rule(
+    pattern = [["./scripts/dev-up.sh", "./scripts/dev-down.sh", "scripts/dev-up.sh", "scripts/dev-down.sh"]],
+    decision = "allow",
+    justification = "Allow project dev environment script entrypoints",
+    match = [
+        "./scripts/dev-up.sh",
+        "./scripts/dev-down.sh",
+        "scripts/dev-up.sh",
+    ],
+    not_match = [
+        "./scripts/other.sh",
+    ],
+)
+
+prefix_rule(
+    pattern = [["bash", "sh"], ["./scripts/dev-up.sh", "./scripts/dev-down.sh", "scripts/dev-up.sh", "scripts/dev-down.sh"]],
+    decision = "allow",
+    justification = "Allow running project dev scripts through bash or sh",
+    match = [
+        "bash ./scripts/dev-up.sh",
+        "sh ./scripts/dev-down.sh",
+    ],
+    not_match = [
+        "bash ./scripts/other.sh",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "add"],
+    decision = "allow",
+    justification = "Allow adding dependencies with uv",
+    match = [
+        "uv add fastapi",
+        "uv add --dev pytest",
+        "uv add --directory seer-backend pydantic",
+    ],
+    not_match = [
+        "uv remove fastapi",
+    ],
+)
