@@ -6,7 +6,7 @@ Catalog user-facing product specs.
 
 ## Specs
 
-1. `foundation-module-shell-phase-0.md` - active
+1. `foundation-module-shell-phase-0.md` - completed
 2. `new-user-onboarding.md` - draft
 
 ## Usage

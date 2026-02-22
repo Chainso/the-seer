@@ -1,6 +1,6 @@
 # MVP Phase 0 Exec Plan: Foundation and Skeleton
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** 0 of 6  
 **Agent slot:** A1  
 **Predecessor:** none  
@@ -67,7 +67,7 @@ Create a deterministic local development foundation for Seer: monorepo structure
 4. Backend can establish network-level reachability to Fuseki and ClickHouse.
 5. Basic CI checks pass on repository changes.
 
-## Handoff Package to Phase 1
+## Planned Handoff Package to Phase 1 (Baseline)
 
 1. Service startup and shutdown commands.
 2. Finalized environment variable list with defaults.
@@ -120,14 +120,14 @@ Create a deterministic local development foundation for Seer: monorepo structure
 3. UI home route renders backend health status server-side for immediate operator feedback.
 4. Next.js build command uses webpack (`next build --webpack`) in this repository to avoid Turbopack sandbox process-binding failures observed locally.
 
-## Acceptance Evidence (Current)
+## Acceptance Evidence
 
 1. `docker compose config -q` (repo root): passes; compose file is syntactically valid.
 2. `cd seer-ui && npm run lint && npm run build`: passes.
 3. `python3 -m compileall seer-backend/src seer-backend/tests`: passes.
 4. `cd seer-backend && uv sync --extra dev`: blocked in current environment due offline package resolution to `pypi.org` (cannot complete backend runtime tests locally in this session).
 
-## Handoff Package to Phase 1 (Draft)
+## Handoff Package to Phase 1
 
 1. Service startup and shutdown commands:
    - `docker compose up --build`

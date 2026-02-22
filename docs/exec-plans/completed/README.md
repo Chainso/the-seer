@@ -7,3 +7,7 @@ Each completed plan should preserve:
 - acceptance criteria status
 - major decisions/deviations
 - follow-up items (if any)
+
+## Plans
+
+1. `mvp-phase-0-foundation-skeleton.md` - completed (2026-02-22)

@@ -17,7 +17,7 @@ This file defines the MVP roadmap at umbrella level:
 4. cross-phase gates,
 5. release decision criteria.
 
-Detailed execution now lives in one file per phase under `docs/exec-plans/active/`.
+Detailed execution lives in phase files under `docs/exec-plans/active/` and `docs/exec-plans/completed/`.
 
 ## 2. MVP Outcome
 
@@ -47,7 +47,7 @@ MVP is complete when Seer can:
 Execution is strictly sequential and each phase is owned by a different agent slot.
 
 1. Phase 0: Foundation and Skeleton  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-0-foundation-skeleton.md`
+   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md`
 2. Phase 1: Ontology Ingestion and Copilot v1  
    `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-1-ontology-copilot-v1.md`
 3. Phase 2: Event Ingestion and History Data Model  
@@ -103,7 +103,7 @@ Must pass before MVP pilot release:
 
 ## 6. Immediate Execution Order
 
-1. Start with Phase 0 and complete handoff package.
+1. Phase 0 is complete; start with Phase 1 using the Phase 0 handoff package.
 2. Run phases strictly in sequence using `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/index.md`.
 3. Do not start a phase until predecessor acceptance criteria are signed off.
 

@@ -1,10 +1,11 @@
 # MVP Phase 1 Exec Plan: Ontology Ingestion and Copilot v1
 
-**Status:** planned  
+**Status:** in_progress  
 **Target order:** 1 of 6  
 **Agent slot:** A2  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-0-foundation-skeleton.md`  
+**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md`  
 **Successor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-2-event-history-ingestion.md`
+**Last updated:** 2026-02-22
 
 ---
 
