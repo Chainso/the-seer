@@ -1,0 +1,661 @@
+[
+  {
+    "event_id": "00000000-0000-0000-0000-000000000101",
+    "occurred_at": "2026-02-22T08:00:00Z",
+    "event_type": "order.created",
+    "source": "erp",
+    "trace_id": "trace-order-100",
+    "payload": {"order_id": "O-100"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-100"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-100",
+          "priority": "low",
+          "channel": "retail",
+          "status": "created"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000102",
+    "occurred_at": "2026-02-22T08:04:00Z",
+    "event_type": "invoice.created",
+    "source": "billing",
+    "trace_id": "trace-order-100",
+    "payload": {"order_id": "O-100", "invoice_id": "INV-100"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-100"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-100",
+          "priority": "low",
+          "channel": "retail",
+          "status": "invoiced"
+        },
+        "relation_role": "context"
+      },
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-100"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-100",
+          "risk": "low",
+          "supplier_id": "SUP-D1"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000103",
+    "occurred_at": "2026-02-22T08:08:00Z",
+    "event_type": "invoice.reviewed",
+    "source": "billing",
+    "trace_id": "trace-order-100",
+    "payload": {"invoice_id": "INV-100", "supplier_id": "SUP-D1"},
+    "updated_objects": [
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-100"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-100",
+          "risk": "low",
+          "supplier_id": "SUP-D1"
+        },
+        "relation_role": "primary"
+      },
+      {
+        "object_type": "Supplier",
+        "object_ref": {"tenant": "acme", "supplier_id": "SUP-D1"},
+        "object": {
+          "object_type": "Supplier",
+          "supplier_id": "SUP-D1",
+          "region": "domestic",
+          "risk_band": "stable"
+        },
+        "relation_role": "context"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000104",
+    "occurred_at": "2026-02-22T08:15:00Z",
+    "event_type": "order.shipped",
+    "source": "logistics",
+    "trace_id": "trace-order-100",
+    "payload": {"order_id": "O-100"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-100"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-100",
+          "priority": "low",
+          "channel": "retail",
+          "status": "shipped"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+
+  {
+    "event_id": "00000000-0000-0000-0000-000000000201",
+    "occurred_at": "2026-02-22T08:20:00Z",
+    "event_type": "order.created",
+    "source": "erp",
+    "trace_id": "trace-order-101",
+    "payload": {"order_id": "O-101"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-101"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-101",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "created"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000202",
+    "occurred_at": "2026-02-22T08:24:00Z",
+    "event_type": "invoice.created",
+    "source": "billing",
+    "trace_id": "trace-order-101",
+    "payload": {"order_id": "O-101", "invoice_id": "INV-101"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-101"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-101",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "invoiced"
+        },
+        "relation_role": "context"
+      },
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-101"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-101",
+          "risk": "high",
+          "supplier_id": "SUP-X1"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000203",
+    "occurred_at": "2026-02-22T08:27:00Z",
+    "event_type": "invoice.reviewed",
+    "source": "billing",
+    "trace_id": "trace-order-101",
+    "payload": {"invoice_id": "INV-101", "supplier_id": "SUP-X1"},
+    "updated_objects": [
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-101"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-101",
+          "risk": "high",
+          "supplier_id": "SUP-X1"
+        },
+        "relation_role": "primary"
+      },
+      {
+        "object_type": "Supplier",
+        "object_ref": {"tenant": "acme", "supplier_id": "SUP-X1"},
+        "object": {
+          "object_type": "Supplier",
+          "supplier_id": "SUP-X1",
+          "region": "overseas",
+          "risk_band": "volatile"
+        },
+        "relation_role": "context"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000204",
+    "occurred_at": "2026-02-22T08:36:00Z",
+    "event_type": "order.delayed",
+    "source": "logistics",
+    "trace_id": "trace-order-101",
+    "payload": {"order_id": "O-101"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-101"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-101",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "delayed"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+
+  {
+    "event_id": "00000000-0000-0000-0000-000000000301",
+    "occurred_at": "2026-02-22T08:40:00Z",
+    "event_type": "order.created",
+    "source": "erp",
+    "trace_id": "trace-order-102",
+    "payload": {"order_id": "O-102"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-102"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-102",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "created"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000302",
+    "occurred_at": "2026-02-22T08:43:00Z",
+    "event_type": "invoice.created",
+    "source": "billing",
+    "trace_id": "trace-order-102",
+    "payload": {"order_id": "O-102", "invoice_id": "INV-102"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-102"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-102",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "invoiced"
+        },
+        "relation_role": "context"
+      },
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-102"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-102",
+          "risk": "high",
+          "supplier_id": "SUP-X2"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000303",
+    "occurred_at": "2026-02-22T08:48:00Z",
+    "event_type": "invoice.reviewed",
+    "source": "billing",
+    "trace_id": "trace-order-102",
+    "payload": {"invoice_id": "INV-102", "supplier_id": "SUP-X2"},
+    "updated_objects": [
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-102"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-102",
+          "risk": "high",
+          "supplier_id": "SUP-X2"
+        },
+        "relation_role": "primary"
+      },
+      {
+        "object_type": "Supplier",
+        "object_ref": {"tenant": "acme", "supplier_id": "SUP-X2"},
+        "object": {
+          "object_type": "Supplier",
+          "supplier_id": "SUP-X2",
+          "region": "overseas",
+          "risk_band": "volatile"
+        },
+        "relation_role": "context"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000304",
+    "occurred_at": "2026-02-22T08:59:00Z",
+    "event_type": "order.delayed",
+    "source": "logistics",
+    "trace_id": "trace-order-102",
+    "payload": {"order_id": "O-102"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-102"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-102",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "delayed"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+
+  {
+    "event_id": "00000000-0000-0000-0000-000000000401",
+    "occurred_at": "2026-02-22T09:02:00Z",
+    "event_type": "order.created",
+    "source": "erp",
+    "trace_id": "trace-order-103",
+    "payload": {"order_id": "O-103"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-103"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-103",
+          "priority": "low",
+          "channel": "retail",
+          "status": "created"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000402",
+    "occurred_at": "2026-02-22T09:06:00Z",
+    "event_type": "invoice.created",
+    "source": "billing",
+    "trace_id": "trace-order-103",
+    "payload": {"order_id": "O-103", "invoice_id": "INV-103"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-103"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-103",
+          "priority": "low",
+          "channel": "retail",
+          "status": "invoiced"
+        },
+        "relation_role": "context"
+      },
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-103"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-103",
+          "risk": "low",
+          "supplier_id": "SUP-D2"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000403",
+    "occurred_at": "2026-02-22T09:10:00Z",
+    "event_type": "invoice.reviewed",
+    "source": "billing",
+    "trace_id": "trace-order-103",
+    "payload": {"invoice_id": "INV-103", "supplier_id": "SUP-D2"},
+    "updated_objects": [
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-103"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-103",
+          "risk": "low",
+          "supplier_id": "SUP-D2"
+        },
+        "relation_role": "primary"
+      },
+      {
+        "object_type": "Supplier",
+        "object_ref": {"tenant": "acme", "supplier_id": "SUP-D2"},
+        "object": {
+          "object_type": "Supplier",
+          "supplier_id": "SUP-D2",
+          "region": "domestic",
+          "risk_band": "stable"
+        },
+        "relation_role": "context"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000404",
+    "occurred_at": "2026-02-22T09:17:00Z",
+    "event_type": "order.shipped",
+    "source": "logistics",
+    "trace_id": "trace-order-103",
+    "payload": {"order_id": "O-103"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-103"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-103",
+          "priority": "low",
+          "channel": "retail",
+          "status": "shipped"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+
+  {
+    "event_id": "00000000-0000-0000-0000-000000000501",
+    "occurred_at": "2026-02-22T09:20:00Z",
+    "event_type": "order.created",
+    "source": "erp",
+    "trace_id": "trace-order-104",
+    "payload": {"order_id": "O-104"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-104"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-104",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "created"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000502",
+    "occurred_at": "2026-02-22T09:23:00Z",
+    "event_type": "invoice.created",
+    "source": "billing",
+    "trace_id": "trace-order-104",
+    "payload": {"order_id": "O-104", "invoice_id": "INV-104"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-104"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-104",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "invoiced"
+        },
+        "relation_role": "context"
+      },
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-104"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-104",
+          "risk": "high",
+          "supplier_id": "SUP-X3"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000503",
+    "occurred_at": "2026-02-22T09:26:00Z",
+    "event_type": "invoice.reviewed",
+    "source": "billing",
+    "trace_id": "trace-order-104",
+    "payload": {"invoice_id": "INV-104", "supplier_id": "SUP-X3"},
+    "updated_objects": [
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-104"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-104",
+          "risk": "high",
+          "supplier_id": "SUP-X3"
+        },
+        "relation_role": "primary"
+      },
+      {
+        "object_type": "Supplier",
+        "object_ref": {"tenant": "acme", "supplier_id": "SUP-X3"},
+        "object": {
+          "object_type": "Supplier",
+          "supplier_id": "SUP-X3",
+          "region": "overseas",
+          "risk_band": "volatile"
+        },
+        "relation_role": "context"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000504",
+    "occurred_at": "2026-02-22T09:33:00Z",
+    "event_type": "order.delayed",
+    "source": "logistics",
+    "trace_id": "trace-order-104",
+    "payload": {"order_id": "O-104"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-104"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-104",
+          "priority": "high",
+          "channel": "b2b",
+          "status": "delayed"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+
+  {
+    "event_id": "00000000-0000-0000-0000-000000000601",
+    "occurred_at": "2026-02-22T09:36:00Z",
+    "event_type": "order.created",
+    "source": "erp",
+    "trace_id": "trace-order-105",
+    "payload": {"order_id": "O-105"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-105"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-105",
+          "priority": "low",
+          "channel": "retail",
+          "status": "created"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000602",
+    "occurred_at": "2026-02-22T09:39:00Z",
+    "event_type": "invoice.created",
+    "source": "billing",
+    "trace_id": "trace-order-105",
+    "payload": {"order_id": "O-105", "invoice_id": "INV-105"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-105"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-105",
+          "priority": "low",
+          "channel": "retail",
+          "status": "invoiced"
+        },
+        "relation_role": "context"
+      },
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-105"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-105",
+          "risk": "low",
+          "supplier_id": "SUP-D3"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000603",
+    "occurred_at": "2026-02-22T09:43:00Z",
+    "event_type": "invoice.reviewed",
+    "source": "billing",
+    "trace_id": "trace-order-105",
+    "payload": {"invoice_id": "INV-105", "supplier_id": "SUP-D3"},
+    "updated_objects": [
+      {
+        "object_type": "Invoice",
+        "object_ref": {"tenant": "acme", "invoice_id": "INV-105"},
+        "object": {
+          "object_type": "Invoice",
+          "invoice_id": "INV-105",
+          "risk": "low",
+          "supplier_id": "SUP-D3"
+        },
+        "relation_role": "primary"
+      },
+      {
+        "object_type": "Supplier",
+        "object_ref": {"tenant": "acme", "supplier_id": "SUP-D3"},
+        "object": {
+          "object_type": "Supplier",
+          "supplier_id": "SUP-D3",
+          "region": "domestic",
+          "risk_band": "stable"
+        },
+        "relation_role": "context"
+      }
+    ]
+  },
+  {
+    "event_id": "00000000-0000-0000-0000-000000000604",
+    "occurred_at": "2026-02-22T09:51:00Z",
+    "event_type": "order.shipped",
+    "source": "logistics",
+    "trace_id": "trace-order-105",
+    "payload": {"order_id": "O-105"},
+    "updated_objects": [
+      {
+        "object_type": "Order",
+        "object_ref": {"tenant": "acme", "order_id": "O-105"},
+        "object": {
+          "object_type": "Order",
+          "order_id": "O-105",
+          "priority": "low",
+          "channel": "retail",
+          "status": "shipped"
+        },
+        "relation_role": "primary"
+      }
+    ]
+  }
+]

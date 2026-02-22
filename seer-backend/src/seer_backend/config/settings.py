@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     process_mining_max_events: int = Field(default=5_000, ge=100, le=200_000)
     process_mining_max_relations: int = Field(default=40_000, ge=100, le=500_000)
     process_mining_max_traces_per_handle: int = Field(default=100, ge=10, le=500)
+    root_cause_max_events: int = Field(default=10_000, ge=100, le=250_000)
+    root_cause_max_relations: int = Field(default=120_000, ge=100, le=1_000_000)
+    root_cause_max_traces_per_insight: int = Field(default=30, ge=1, le=300)
 
     dependency_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     prophet_metamodel_path: str = "../prophet/prophet.ttl"

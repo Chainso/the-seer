@@ -1,9 +1,9 @@
 # MVP Phase 5 Exec Plan: AI Expansion, Hardening, and MVP Release
 
-**Status:** planned  
+**Status:** in_progress  
 **Target order:** 5 of 6  
 **Agent slot:** A6  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-4-root-cause-analysis-v1.md`  
+**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`  
 **Successor:** none (MVP release gate)
 
 ---

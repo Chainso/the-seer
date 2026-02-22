@@ -29,3 +29,14 @@ and are applied lazily on first history API usage.
 Mining requests require `anchor_object_type`, `start_at`, and `end_at`.
 Responses include the UI payload fields (`nodes`, `edges`, `object_types`, `path_stats`)
 plus trace drill-down handles for model elements.
+
+## Phase 4 Root-Cause Analysis APIs
+
+1. `POST /api/v1/root-cause/run`
+2. `GET /api/v1/root-cause/evidence`
+3. `POST /api/v1/root-cause/assist/setup`
+4. `POST /api/v1/root-cause/assist/interpret`
+
+RCA requests require anchor + time window + bounded depth + outcome definition, and may include
+optional cohort filters. Responses provide ranked insights (`WRAcc`, coverage, lift), plus
+evidence handles for trace drill-down.
