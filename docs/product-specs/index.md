@@ -6,7 +6,8 @@ Catalog user-facing product specs.
 
 ## Specs
 
-1. `new-user-onboarding.md` - draft
+1. `foundation-module-shell-phase-0.md` - active
+2. `new-user-onboarding.md` - draft
 
 ## Usage
 

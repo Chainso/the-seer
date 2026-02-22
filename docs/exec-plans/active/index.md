@@ -49,3 +49,6 @@ Use this checklist to track phase completion in order:
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
+
+Current execution state:
+- `in_progress`: Phase 0 (`/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-0-foundation-skeleton.md`)

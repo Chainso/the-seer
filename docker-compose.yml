@@ -1,0 +1,59 @@
+services:
+  seer-backend:
+    build:
+      context: ./seer-backend
+      dockerfile: Dockerfile
+    container_name: seer-backend
+    ports:
+      - "${SEER_BACKEND_PORT:-8000}:8000"
+    environment:
+      SEER_APP_ENV: local
+      SEER_LOG_LEVEL: INFO
+      SEER_FUSEKI_HOST: fuseki
+      SEER_FUSEKI_PORT: 3030
+      SEER_CLICKHOUSE_HOST: clickhouse
+      SEER_CLICKHOUSE_PORT: 8123
+    depends_on:
+      - fuseki
+      - clickhouse
+
+  seer-ui:
+    build:
+      context: ./seer-ui
+      dockerfile: Dockerfile
+    container_name: seer-ui
+    ports:
+      - "${SEER_UI_PORT:-3000}:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:${SEER_BACKEND_PORT:-8000}
+      SEER_BACKEND_INTERNAL_URL: http://seer-backend:8000
+    depends_on:
+      - seer-backend
+
+  fuseki:
+    image: stain/jena-fuseki:5.1.0
+    container_name: seer-fuseki
+    ports:
+      - "${SEER_FUSEKI_PORT:-3030}:3030"
+    environment:
+      ADMIN_PASSWORD: ${FUSEKI_ADMIN_PASSWORD:-admin}
+    volumes:
+      - fuseki-data:/fuseki
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: seer-clickhouse
+    ports:
+      - "${SEER_CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${SEER_CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-seer}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-seer}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-seer}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+
+volumes:
+  fuseki-data:
+  clickhouse-data:

@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+.uv-cache/
+
+# Node
+node_modules/
+.next/
+
+# Environment and local artifacts
+.env
+*.log

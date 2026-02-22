@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  backend-sanity:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: seer-backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install backend dependencies
+        run: uv sync --extra dev
+
+      - name: Lint backend
+        run: uv run ruff check .
+
+      - name: Test backend
+        run: uv run pytest -q
+
+  ui-sanity:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: seer-ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: seer-ui/package-lock.json
+
+      - name: Install UI dependencies
+        run: npm ci
+
+      - name: Lint UI
+        run: npm run lint
+
+      - name: Build UI
+        run: npm run build
