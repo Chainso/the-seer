@@ -77,10 +77,23 @@ Single-command launch with zellij multiplexing:
 This starts Fuseki + ClickHouse in Docker, then opens a `zellij` session with panes
 for backend, UI, and DB logs.
 
+By default, when that zellij session is fully quit (not just detached), the script
+automatically runs:
+
+```bash
+docker compose -f docker-compose.db.yml down
+```
+
 Optional session name override:
 
 ```bash
 SEER_ZELLIJ_SESSION=seer-dev ./scripts/dev-local-zellij.sh
+```
+
+Disable auto DB shutdown on zellij exit:
+
+```bash
+SEER_AUTO_DB_DOWN_ON_EXIT=0 ./scripts/dev-local-zellij.sh
 ```
 
 When finished:

@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
 SESSION_NAME="${SEER_ZELLIJ_SESSION:-seer-local-dev}"
+AUTO_DB_DOWN_ON_EXIT="${SEER_AUTO_DB_DOWN_ON_EXIT:-1}"
 
 if ! command -v zellij >/dev/null 2>&1; then
   echo "zellij is required but not installed." >&2
@@ -25,6 +26,15 @@ if ! command -v npm >/dev/null 2>&1; then
   echo "npm is required but not installed." >&2
   exit 1
 fi
+
+case "${AUTO_DB_DOWN_ON_EXIT,,}" in
+  1|true|yes|y) AUTO_DB_DOWN_ON_EXIT="true" ;;
+  0|false|no|n) AUTO_DB_DOWN_ON_EXIT="false" ;;
+  *)
+    echo "SEER_AUTO_DB_DOWN_ON_EXIT must be one of: 1,true,yes,y,0,false,no,n" >&2
+    exit 1
+    ;;
+esac
 
 # If root .env exists, load it so DB credentials/ports mirror compose defaults.
 if [[ -f "${ROOT_DIR}/.env" ]]; then
@@ -48,16 +58,19 @@ export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://localhost:80
 docker compose -f docker-compose.db.yml up -d
 
 if zellij list-sessions --short 2>/dev/null | grep -Fxq "${SESSION_NAME}"; then
-  exec zellij attach "${SESSION_NAME}"
-fi
+  if zellij attach "${SESSION_NAME}"; then
+    ZELLIJ_EXIT_STATUS=0
+  else
+    ZELLIJ_EXIT_STATUS=$?
+  fi
+else
+  LAYOUT_FILE="$(mktemp /tmp/seer-zellij-layout.XXXXXX.kdl)"
+  cleanup() {
+    rm -f "${LAYOUT_FILE}"
+  }
+  trap cleanup EXIT
 
-LAYOUT_FILE="$(mktemp /tmp/seer-zellij-layout.XXXXXX.kdl)"
-cleanup() {
-  rm -f "${LAYOUT_FILE}"
-}
-trap cleanup EXIT
-
-cat > "${LAYOUT_FILE}" <<EOF
+  cat > "${LAYOUT_FILE}" <<EOF
 layout {
   default_tab_template {
     pane size=1 borderless=true {
@@ -91,9 +104,22 @@ layout {
 }
 EOF
 
-if ! zellij setup --dump-layout "${LAYOUT_FILE}" >/dev/null; then
-  echo "Generated zellij layout is invalid: ${LAYOUT_FILE}" >&2
-  exit 1
+  if ! zellij setup --dump-layout "${LAYOUT_FILE}" >/dev/null; then
+    echo "Generated zellij layout is invalid: ${LAYOUT_FILE}" >&2
+    exit 1
+  fi
+
+  if zellij -s "${SESSION_NAME}" -n "${LAYOUT_FILE}"; then
+    ZELLIJ_EXIT_STATUS=0
+  else
+    ZELLIJ_EXIT_STATUS=$?
+  fi
 fi
 
-exec zellij -s "${SESSION_NAME}" -n "${LAYOUT_FILE}"
+if [[ "${AUTO_DB_DOWN_ON_EXIT}" == "true" ]]; then
+  if ! zellij list-sessions --short 2>/dev/null | grep -Fxq "${SESSION_NAME}"; then
+    docker compose -f docker-compose.db.yml down
+  fi
+fi
+
+exit "${ZELLIJ_EXIT_STATUS}"
