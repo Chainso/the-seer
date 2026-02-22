@@ -22,10 +22,17 @@ class Settings(BaseSettings):
     fuseki_host: str = "fuseki"
     fuseki_port: int = 3030
     fuseki_dataset: str = "ds"
+    fuseki_username: str | None = None
+    fuseki_password: str | None = None
     fuseki_timeout_seconds: float = Field(default=5.0, ge=0.1, le=30.0)
 
     clickhouse_host: str = "clickhouse"
     clickhouse_port: int = 8123
+    clickhouse_database: str = "seer"
+    clickhouse_user: str = "seer"
+    clickhouse_password: str = "seer"
+    clickhouse_timeout_seconds: float = Field(default=5.0, ge=0.1, le=30.0)
+    clickhouse_migrations_dir: str = "migrations/clickhouse"
 
     dependency_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     prophet_metamodel_path: str = "../prophet/prophet.ttl"

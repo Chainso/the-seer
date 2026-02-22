@@ -1,10 +1,11 @@
 # MVP Phase 2 Exec Plan: Event Ingestion and History Data Model
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** 2 of 6  
 **Agent slot:** A3  
 **Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`  
 **Successor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-3-process-mining-ocpn.md`
+**Last updated:** 2026-02-22
 
 ---
 
@@ -82,3 +83,69 @@ Implement immutable historical ingestion in ClickHouse using the three-table MVP
    **Mitigation:** golden fixtures for composite refs and deterministic hash tests.
 2. **Risk:** malformed payload variance across producers.  
    **Mitigation:** strict schema validation with clear rejection diagnostics.
+
+## Completion Summary
+
+1. Implemented ClickHouse migration `001_mvp_phase2_history_tables.sql` for:
+   - `event_history`,
+   - `object_history`,
+   - `event_object_links`,
+   using `MergeTree` and the planned ordering keys.
+2. Implemented history ingestion API `POST /api/v1/history/events/ingest` with strict payload validation and duplicate `event_id` conflict handling.
+3. Implemented deterministic object-reference canonicalization + `xxhash64` hash derivation for object identity joins.
+4. Implemented three-table write flow:
+   - immutable `event_history` append,
+   - immutable `object_history` snapshot append,
+   - `event_object_links` append anchored to concrete `object_history_id`.
+5. Implemented baseline query APIs:
+   - `GET /api/v1/history/events`,
+   - `GET /api/v1/history/objects/timeline`,
+   - `GET /api/v1/history/relations`.
+6. Added Phase 2 test coverage for:
+   - canonicalization/hash determinism,
+   - composite object refs,
+   - missing `updated_objects`,
+   - duplicate event conflict,
+   - UUID validation rejection,
+   - object type mismatch rejection,
+   - occurred-at timeline ordering.
+
+## Decision Log
+
+1. History schema migrations are applied lazily on first history-service usage via repository `ensure_schema`.
+2. `updated_objects` remains optional and does not block event ingestion.
+3. Link/object `object_type` consistency is enforced in validation and in-memory repository checks; service write-path keeps both values in lock-step.
+4. Query default ordering semantics are based on `occurred_at` (not ingestion time) for user-facing timeline behavior.
+
+## Acceptance Evidence
+
+1. `cd seer-backend && uv run ruff check src/seer_backend/history src/seer_backend/api/history.py tests/test_history_phase2.py`  
+   Result: `All checks passed!`
+2. `cd seer-backend && uv run pytest tests/test_history_phase2.py -q`  
+   Result: `7 passed`.
+3. `cd seer-backend && uv run pytest -q`  
+   Result: `19 passed` (all backend tests in this workspace state).
+4. User-provided execution context confirms all tests passed as of 2026-02-22; this aligns with the full-suite run above.
+
+## Doc Updates
+
+1. Moved this plan from `docs/exec-plans/active/` to `docs/exec-plans/completed/`.
+2. Updated execution index and roadmap references so Phase 3 is the active in-progress phase.
+3. Updated completed-plan index to include this phase completion record.
+
+## Known Issues
+
+1. FastAPI startup event uses deprecated `on_event("startup")`; warnings remain non-blocking and are tracked outside Phase 2 scope.
+
+## Next-Phase Starter Context
+
+1. History API and service entry points:
+   - `seer-backend/src/seer_backend/api/history.py`
+   - `seer-backend/src/seer_backend/history/service.py`
+2. Storage contract and migration:
+   - `seer-backend/migrations/clickhouse/001_mvp_phase2_history_tables.sql`
+   - `seer-backend/src/seer_backend/history/repository.py`
+3. Canonicalization/hash contract:
+   - `seer-backend/src/seer_backend/history/canonicalization.py`
+4. Phase 2 fixtures/tests for process-mining bootstrap reference:
+   - `seer-backend/tests/test_history_phase2.py`
