@@ -57,7 +57,7 @@ Execution is strictly sequential and each phase is owned by a different agent sl
 5. Phase 4: Root Cause Analysis v1  
    `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`
 6. Phase 5: AI Expansion, Hardening, and MVP Release  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-5-ai-hardening-release.md`
+   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`
 
 ## 5. Cross-Phase Acceptance Gates
 
@@ -103,9 +103,9 @@ Must pass before MVP pilot release:
 
 ## 6. Immediate Execution Order
 
-1. Phases 0, 1, 2, 3, and 4 are complete; continue with Phase 5 using the Phase 4 handoff package.
-2. Run phases strictly in sequence using `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/index.md`.
-3. Do not start a phase until predecessor acceptance criteria are signed off.
+1. Phases 0, 1, 2, 3, 4, and 5 are complete.
+2. MVP release gate decision: **pass** (2026-02-22).
+3. Preserve this roadmap as completed execution history and use new plans for post-MVP work only.
 
 Phase 1 execution pivot (2026-02-22):
 1. Ontology Copilot v1 model execution uses backend Gemini CLI headless invocation (`gemini -p ...`) with structured output parsing.

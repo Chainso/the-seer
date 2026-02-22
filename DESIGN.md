@@ -20,7 +20,7 @@ Capture design-level decisions that sit between product vision and concrete arch
 3. UUID-based identities are required for event and object history records.
 4. Object-centric process mining is implemented in Python with `pm4py`.
 5. RCA uses a pluggable extraction layer plus ranking methods.
-6. AI UX starts with ontology copilot and expands to process/RCA workflows.
+6. AI UX uses a shared backend gateway with module-scoped permissions and policy-aware evidence/caveat rendering.
 
 ## Design Docs Index
 

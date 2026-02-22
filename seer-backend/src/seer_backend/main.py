@@ -7,6 +7,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from seer_backend.api.ai import inject_ai_gateway_service
+from seer_backend.api.ai import router as ai_router
 from seer_backend.api.health import router as health_router
 from seer_backend.api.history import inject_history_service
 from seer_backend.api.history import router as history_router
@@ -43,10 +45,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(history_router, prefix=settings.api_prefix)
     app.include_router(process_router, prefix=settings.api_prefix)
     app.include_router(root_cause_router, prefix=settings.api_prefix)
+    app.include_router(ai_router, prefix=settings.api_prefix)
     inject_ontology_services(app, settings)
     inject_history_service(app, settings)
     inject_process_service(app, settings)
     inject_root_cause_service(app, settings)
+    inject_ai_gateway_service(app)
 
     logger = logging.getLogger(__name__)
 

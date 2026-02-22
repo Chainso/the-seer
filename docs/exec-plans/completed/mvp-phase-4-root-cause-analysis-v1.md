@@ -4,7 +4,7 @@
 **Target order:** 4 of 6  
 **Agent slot:** A5  
 **Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md`  
-**Successor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-5-ai-hardening-release.md`  
+**Successor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`  
 **Last updated:** 2026-02-22
 
 ---

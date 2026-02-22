@@ -2,13 +2,16 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
+import { AiResponsePanel } from "@/components/ai-response-panel";
+import { RunStatePill, RunState } from "@/components/run-state-pill";
 import {
-  CopilotAnswer,
-  CopilotConversationMessage,
+  AiOntologyQuestionResponse,
+  askAiOntologyQuestion,
+} from "@/lib/backend-ai";
+import {
   OntologyConceptDetail,
   OntologyConceptSummary,
   OntologyCurrent,
-  askOntologyCopilot,
   fetchOntologyConceptDetail,
   fetchOntologyConcepts,
   fetchOntologyCurrent,
@@ -17,8 +20,7 @@ import {
 type ChatMessage = {
   role: "user" | "assistant";
   text: string;
-  evidence?: CopilotAnswer["evidence"];
-  toolResult?: CopilotAnswer["tool_result"];
+  ai?: AiOntologyQuestionResponse;
 };
 
 export function OntologyWorkbench() {
@@ -29,9 +31,8 @@ export function OntologyWorkbench() {
   const [search, setSearch] = useState("");
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loadingConcepts, setLoadingConcepts] = useState(false);
-  const [loadingDetail, setLoadingDetail] = useState(false);
-  const [sendingQuestion, setSendingQuestion] = useState(false);
+  const [loadingConcepts, setLoadingConcepts] = useState(true);
+  const [copilotRunState, setCopilotRunState] = useState<RunState>("completed");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,8 +55,6 @@ export function OntologyWorkbench() {
 
   useEffect(() => {
     let mounted = true;
-    setLoadingConcepts(true);
-    setError(null);
     fetchOntologyConcepts(search)
       .then((data) => {
         if (!mounted) return;
@@ -84,12 +83,10 @@ export function OntologyWorkbench() {
 
   useEffect(() => {
     if (!selectedIri) {
-      setDetail(null);
       return;
     }
 
     let mounted = true;
-    setLoadingDetail(true);
     fetchOntologyConceptDetail(selectedIri)
       .then((data) => {
         if (mounted) {
@@ -99,12 +96,6 @@ export function OntologyWorkbench() {
       .catch((err: Error) => {
         if (mounted) {
           setError(err.message);
-          setDetail(null);
-        }
-      })
-      .finally(() => {
-        if (mounted) {
-          setLoadingDetail(false);
         }
       });
     return () => {
@@ -121,45 +112,51 @@ export function OntologyWorkbench() {
       return;
     }
 
-    const conversation: CopilotConversationMessage[] = messages.map((message) => ({
-      role: message.role,
-      content: message.text,
-    }));
+    const conversation = messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({
+        role: message.role,
+        content: message.text,
+      }));
 
     setMessages((existing) => [...existing, { role: "user", text: trimmedQuestion }]);
     setQuestion("");
-    setSendingQuestion(true);
+    setCopilotRunState("queued");
+    await Promise.resolve();
+    setCopilotRunState("running");
 
     try {
-      const answer = await askOntologyCopilot(trimmedQuestion, conversation);
+      const answer = await askAiOntologyQuestion({
+        question: trimmedQuestion,
+        conversation,
+      });
       setMessages((existing) => [
         ...existing,
         {
           role: "assistant",
-          text: answer.answer,
-          evidence: answer.evidence,
-          toolResult: answer.tool_result,
+          text: answer.summary,
+          ai: answer,
         },
       ]);
+      setCopilotRunState("completed");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setMessages((existing) => [
         ...existing,
         { role: "assistant", text: `Copilot error: ${message}` },
       ]);
-    } finally {
-      setSendingQuestion(false);
+      setCopilotRunState("error");
     }
   }
 
   return (
     <main className="ontology-shell">
       <section className="ontology-header">
-        <p className="eyebrow">MVP Phase 1</p>
+        <p className="eyebrow">MVP Phase 5</p>
         <h1>Ontology Explorer and Copilot</h1>
         <p>
-          Read-only ontology exploration backed by SHACL-validated release graphs. All ontology
-          mutations are backend-only and ingestion-driven.
+          Read-only ontology exploration backed by SHACL-validated release graphs. AI responses use
+          the shared gateway contract and module-scoped read-only tool permissions.
         </p>
         <p className={`status ${isReady ? "ok" : "degraded"}`}>
           {isReady
@@ -182,7 +179,11 @@ export function OntologyWorkbench() {
             type="text"
             value={search}
             placeholder="Try Ticket, Transition, ObjectModel..."
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setLoadingConcepts(true);
+              setError(null);
+              setSearch(event.target.value);
+            }}
           />
           {loadingConcepts ? <p>Loading concepts...</p> : null}
           {error ? <p className="status degraded">{error}</p> : null}
@@ -193,7 +194,10 @@ export function OntologyWorkbench() {
                 <button
                   type="button"
                   className={concept.iri === selectedIri ? "selected" : ""}
-                  onClick={() => setSelectedIri(concept.iri)}
+                  onClick={() => {
+                    setDetail(null);
+                    setSelectedIri(concept.iri);
+                  }}
                 >
                   <span>{concept.label}</span>
                   <small>{concept.category}</small>
@@ -208,8 +212,8 @@ export function OntologyWorkbench() {
             <h2>Concept Detail</h2>
             <p>URI-backed detail from backend SPARQL tools.</p>
           </header>
-          {loadingDetail ? <p>Loading detail...</p> : null}
-          {detail ? (
+          {selectedIri && (!detail || detail.iri !== selectedIri) ? <p>Loading detail...</p> : null}
+          {detail && detail.iri === selectedIri ? (
             <div className="detail-content">
               <p className="detail-title">{detail.label}</p>
               <p className="detail-category">{detail.category}</p>
@@ -232,8 +236,9 @@ export function OntologyWorkbench() {
         <article className="copilot-panel">
           <header>
             <h2>Ontology Copilot</h2>
-            <p>Read-only chat surface over backend ontology tools.</p>
+            <p>Read-only AI gateway over ontology tools.</p>
           </header>
+          <RunStatePill state={copilotRunState} label={`Copilot ${copilotRunState}`} />
           <div className="chat-log" aria-live="polite">
             {messages.length === 0 ? (
               <p className="chat-empty">Ask about ontology concepts, states, or transitions.</p>
@@ -241,20 +246,14 @@ export function OntologyWorkbench() {
               messages.map((message, index) => (
                 <div key={`${message.role}-${index}`} className={`chat-message ${message.role}`}>
                   <p>{message.text}</p>
-                  {message.evidence?.length ? (
-                    <p className="chat-evidence">
-                      Evidence: {message.evidence.map((item) => item.concept_iri).join(", ")}
-                    </p>
-                  ) : null}
-                  {message.toolResult ? (
-                    <p className="chat-evidence">
-                      Tool result:{" "}
-                      {message.toolResult.error
-                        ? `error: ${message.toolResult.error}`
-                        : `${message.toolResult.query_type} rows=${message.toolResult.row_count}${
-                            message.toolResult.truncated ? " (truncated)" : ""
-                          }`}
-                    </p>
+                  {message.ai ? (
+                    <AiResponsePanel
+                      title="Copilot Evidence"
+                      summary={message.ai.summary}
+                      evidence={message.ai.evidence}
+                      caveats={message.ai.caveats}
+                      nextActions={message.ai.next_actions}
+                    />
                   ) : null}
                 </div>
               ))
@@ -271,8 +270,8 @@ export function OntologyWorkbench() {
               rows={3}
               placeholder="What does Ticket transition from New to Triaged mean?"
             />
-            <button type="submit" disabled={sendingQuestion}>
-              {sendingQuestion ? "Answering..." : "Send question"}
+            <button type="submit" disabled={copilotRunState === "running"}>
+              {copilotRunState === "running" ? "Answering..." : "Send question"}
             </button>
           </form>
         </article>

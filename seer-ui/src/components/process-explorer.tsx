@@ -2,6 +2,12 @@
 
 import { FormEvent, useMemo, useState } from "react";
 
+import { AiResponsePanel } from "@/components/ai-response-panel";
+import { RunStatePill, RunState } from "@/components/run-state-pill";
+import {
+  AiProcessInterpretResponse,
+  interpretAiProcessRun,
+} from "@/lib/backend-ai";
 import {
   fetchProcessTraceDrilldown,
   ProcessMiningResponse,
@@ -29,7 +35,7 @@ export function ProcessExplorer() {
   const [anchorObjectType, setAnchorObjectType] = useState("Order");
   const [startAt, setStartAt] = useState(initialStart);
   const [endAt, setEndAt] = useState(initialEnd);
-  const [isLoading, setIsLoading] = useState(false);
+  const [runState, setRunState] = useState<RunState>("completed");
   const [runResult, setRunResult] = useState<ProcessMiningResponse | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
 
@@ -37,12 +43,20 @@ export function ProcessExplorer() {
   const [traceError, setTraceError] = useState<string | null>(null);
   const [traceLoading, setTraceLoading] = useState(false);
 
+  const [aiState, setAiState] = useState<RunState>("completed");
+  const [aiResult, setAiResult] = useState<AiProcessInterpretResponse | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsLoading(true);
+    setRunState("queued");
     setRunError(null);
     setTraceResult(null);
     setTraceError(null);
+    setAiResult(null);
+    setAiError(null);
+    await Promise.resolve();
+    setRunState("running");
 
     try {
       const response = await runProcessMining({
@@ -51,11 +65,11 @@ export function ProcessExplorer() {
         end_at: parseLocalInput(endAt),
       });
       setRunResult(response);
+      setRunState("completed");
     } catch (error) {
       setRunResult(null);
       setRunError(error instanceof Error ? error.message : "Process mining request failed");
-    } finally {
-      setIsLoading(false);
+      setRunState("error");
     }
   }
 
@@ -74,14 +88,34 @@ export function ProcessExplorer() {
     }
   }
 
+  async function onAiInterpret() {
+    if (!runResult) {
+      return;
+    }
+    setAiState("queued");
+    setAiError(null);
+    await Promise.resolve();
+    setAiState("running");
+
+    try {
+      const response = await interpretAiProcessRun({ run: runResult });
+      setAiResult(response);
+      setAiState("completed");
+    } catch (error) {
+      setAiResult(null);
+      setAiError(error instanceof Error ? error.message : "Process AI interpretation failed");
+      setAiState("error");
+    }
+  }
+
   return (
     <main className="process-shell">
       <section className="process-header">
-        <p className="eyebrow">MVP Phase 3</p>
+        <p className="eyebrow">MVP Phase 5</p>
         <h1>Process Explorer</h1>
         <p>
-          Object-centric mining run form and model drill-down for traces produced from
-          event/object/link history.
+          Object-centric mining run form and model drill-down using shared run-state patterns and
+          analytical AI evidence/caveat responses.
         </p>
       </section>
 
@@ -121,10 +155,11 @@ export function ProcessExplorer() {
               required
             />
 
-            <button type="submit" disabled={isLoading}>
-              {isLoading ? "Running..." : "Run process mining"}
+            <button type="submit" disabled={runState === "running"}>
+              {runState === "running" ? "Running..." : "Run process mining"}
             </button>
           </form>
+          <RunStatePill state={runState} label={`Process run ${runState}`} />
           {runError ? <p className="status degraded">{runError}</p> : null}
         </article>
 
@@ -140,6 +175,21 @@ export function ProcessExplorer() {
               <p>Object types: {runResult.object_types.join(", ") || "none"}</p>
               {runResult.warnings.length > 0 ? (
                 <p className="status degraded">{runResult.warnings.join(" | ")}</p>
+              ) : null}
+
+              <button type="button" onClick={onAiInterpret} disabled={aiState === "running"}>
+                {aiState === "running" ? "Summarizing..." : "AI assist: summarize run"}
+              </button>
+              <RunStatePill state={aiState} label={`AI ${aiState}`} />
+              {aiError ? <p className="status degraded">{aiError}</p> : null}
+              {aiResult ? (
+                <AiResponsePanel
+                  title="Process AI Interpretation"
+                  summary={aiResult.summary}
+                  evidence={aiResult.evidence}
+                  caveats={aiResult.caveats}
+                  nextActions={aiResult.next_actions}
+                />
               ) : null}
 
               <h3>Nodes</h3>

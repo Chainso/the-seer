@@ -82,9 +82,10 @@ Expected internal service areas:
    - object-centric Petri net execution via `pm4py`
    - root-cause pipeline (neighborhood extraction + ranking)
 4. `ai` domain:
-   - tool contracts
-   - query planning and evidence packaging
-   - guardrails for read/write scope
+   - unified AI gateway routing by module (`ontology`, `process`, `root_cause`)
+   - module-scoped tool permission policy
+   - response-policy enforcement (`informational` vs `analytical`)
+   - evidence/caveat packaging for analytical outputs
 5. `api` / `transport` domain:
    - request/response contracts
    - endpoint composition
@@ -170,6 +171,10 @@ Flow:
 5. Insight result contract:
    - analytics output shape for UI and AI rendering
    - includes hypothesis, scoring metrics, coverage, and evidence references
+6. AI gateway contract:
+   - single backend `/ai` API surface for ontology/process/RCA AI interactions
+   - module-scoped tool permissions are explicit in responses
+   - analytical responses must include evidence and caveats
 
 ## Architectural Invariants
 
@@ -190,9 +195,11 @@ The following invariants are deliberate and must hold unless explicitly changed 
 13. Primary mining method for this phase is object-centric Petri nets.
 14. Analytics data access uses programmatic SQL with Arrow-backed dataframe flow from ClickHouse into Python.
 15. RCA outcome definition is analysis-run scoped (user or AI configured), not globally fixed.
-16. Multi-tenant data-layer design is out of current architecture scope.
-17. Heavy reliability subsystems (replay/dead-letter/schema-version governance) are intentionally out of current scope.
-18. Governance/trust-center modules are intentionally out of current scope.
+16. AI interactions are served through a unified backend gateway with module-scoped permissions.
+17. Analytical AI outputs (process/RCA) include explicit evidence and caveats; informational ontology Q&A may be concise.
+18. Multi-tenant data-layer design is out of current architecture scope.
+19. Heavy reliability subsystems (replay/dead-letter/schema-version governance) are intentionally out of current scope.
+20. Governance/trust-center modules are intentionally out of current scope.
 
 ## Boundaries and Dependency Direction
 

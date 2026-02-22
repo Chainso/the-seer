@@ -2,15 +2,19 @@
 
 import { FormEvent, useMemo, useState } from "react";
 
+import { AiResponsePanel } from "@/components/ai-response-panel";
+import { RunStatePill, RunState } from "@/components/run-state-pill";
+import {
+  AiRootCauseInterpretResponse,
+  AiRootCauseSetupResponse,
+  assistAiRootCauseSetup,
+  interpretAiRootCause,
+} from "@/lib/backend-ai";
 import {
   InsightResult,
   RcaFilterCondition,
-  RootCauseAssistInterpretResponse,
-  RootCauseAssistSetupResponse,
   RootCauseEvidenceResponse,
   RootCauseRunResponse,
-  assistRootCauseInterpret,
-  assistRootCauseSetup,
   fetchRootCauseEvidence,
   runRootCause,
 } from "@/lib/backend-root-cause";
@@ -44,15 +48,15 @@ export function RootCauseLab() {
   const [filterValue, setFilterValue] = useState("high");
   const [filters, setFilters] = useState<RcaFilterCondition[]>([]);
 
-  const [isRunning, setIsRunning] = useState(false);
+  const [runState, setRunState] = useState<RunState>("completed");
   const [runError, setRunError] = useState<string | null>(null);
   const [runResult, setRunResult] = useState<RootCauseRunResponse | null>(null);
 
-  const [setupLoading, setSetupLoading] = useState(false);
-  const [setupResult, setSetupResult] = useState<RootCauseAssistSetupResponse | null>(null);
+  const [setupState, setSetupState] = useState<RunState>("completed");
+  const [setupResult, setSetupResult] = useState<AiRootCauseSetupResponse | null>(null);
 
-  const [interpretLoading, setInterpretLoading] = useState(false);
-  const [interpretResult, setInterpretResult] = useState<RootCauseAssistInterpretResponse | null>(null);
+  const [interpretState, setInterpretState] = useState<RunState>("completed");
+  const [interpretResult, setInterpretResult] = useState<AiRootCauseInterpretResponse | null>(null);
 
   const [selectedInsight, setSelectedInsight] = useState<InsightResult | null>(null);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
@@ -86,12 +90,14 @@ export function RootCauseLab() {
 
   async function onRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setIsRunning(true);
+    setRunState("queued");
     setRunError(null);
     setInterpretResult(null);
     setEvidenceResult(null);
     setEvidenceError(null);
     setSelectedInsight(null);
+    await Promise.resolve();
+    setRunState("running");
 
     try {
       const response = await runRootCause({
@@ -106,34 +112,36 @@ export function RootCauseLab() {
         filters,
       });
       setRunResult(response);
+      setRunState("completed");
     } catch (error) {
       setRunResult(null);
       setRunError(error instanceof Error ? error.message : "Root-cause run failed");
-    } finally {
-      setIsRunning(false);
+      setRunState("error");
     }
   }
 
   async function onSetupAssist() {
-    setSetupLoading(true);
+    setSetupState("queued");
     setRunError(null);
+    await Promise.resolve();
+    setSetupState("running");
 
     try {
-      const response = await assistRootCauseSetup({
+      const response = await assistAiRootCauseSetup({
         anchor_object_type: anchorObjectType.trim(),
         start_at: parseLocalInput(startAt),
         end_at: parseLocalInput(endAt),
       });
       setSetupResult(response);
-      if (response.suggestions.length > 0) {
-        setOutcomeEventType(response.suggestions[0].outcome.event_type);
+      if (response.setup.suggestions.length > 0) {
+        setOutcomeEventType(response.setup.suggestions[0].outcome.event_type);
       }
-      setDepth(response.suggested_depth);
+      setDepth(response.setup.suggested_depth);
+      setSetupState("completed");
     } catch (error) {
       setSetupResult(null);
       setRunError(error instanceof Error ? error.message : "AI setup assist failed");
-    } finally {
-      setSetupLoading(false);
+      setSetupState("error");
     }
   }
 
@@ -142,21 +150,20 @@ export function RootCauseLab() {
       return;
     }
 
-    setInterpretLoading(true);
+    setInterpretState("queued");
+    await Promise.resolve();
+    setInterpretState("running");
     try {
-      const response = await assistRootCauseInterpret({
+      const response = await interpretAiRootCause({
         baseline_rate: runResult.baseline_rate,
         insights: runResult.insights,
       });
       setInterpretResult(response);
+      setInterpretState("completed");
     } catch (error) {
-      setInterpretResult({
-        summary: error instanceof Error ? error.message : "Interpretation failed",
-        caveats: [],
-        next_steps: [],
-      });
-    } finally {
-      setInterpretLoading(false);
+      setInterpretResult(null);
+      setRunError(error instanceof Error ? error.message : "AI interpretation failed");
+      setInterpretState("error");
     }
   }
 
@@ -179,11 +186,11 @@ export function RootCauseLab() {
   return (
     <main className="root-cause-shell">
       <section className="root-cause-header">
-        <p className="eyebrow">MVP Phase 4</p>
+        <p className="eyebrow">MVP Phase 5</p>
         <h1>Root-Cause Lab</h1>
         <p>
-          Configure a bounded RCA run, inspect ranked associative hypotheses, and drill into
-          supporting traces.
+          Configure bounded RCA runs with shared run-state patterns and analytical AI evidence +
+          caveat rendering.
         </p>
       </section>
 
@@ -297,13 +304,15 @@ export function RootCauseLab() {
               </ul>
             ) : null}
 
-            <button type="button" onClick={onSetupAssist} disabled={setupLoading}>
-              {setupLoading ? "Drafting setup..." : "AI assist: draft setup"}
+            <button type="button" onClick={onSetupAssist} disabled={setupState === "running"}>
+              {setupState === "running" ? "Drafting setup..." : "AI assist: draft setup"}
             </button>
+            <RunStatePill state={setupState} label={`Setup AI ${setupState}`} />
 
-            <button type="submit" disabled={isRunning}>
-              {isRunning ? "Running RCA..." : "Run root-cause analysis"}
+            <button type="submit" disabled={runState === "running"}>
+              {runState === "running" ? "Running RCA..." : "Run root-cause analysis"}
             </button>
+            <RunStatePill state={runState} label={`RCA run ${runState}`} />
           </form>
           {runError ? <p className="status degraded">{runError}</p> : null}
         </article>
@@ -314,9 +323,8 @@ export function RootCauseLab() {
             <>
               <p className="status ok">Run {runResult.run_id}</p>
               <p>
-                Cohort: {runResult.cohort_size} anchors | Positives: {runResult.positive_count} | Baseline:
-                {" "}
-                {(runResult.baseline_rate * 100).toFixed(2)}%
+                Cohort: {runResult.cohort_size} anchors | Positives: {runResult.positive_count} |
+                Baseline: {(runResult.baseline_rate * 100).toFixed(2)}%
               </p>
               <p>Lifted features: {runResult.feature_count}</p>
               {runResult.warnings.length > 0 ? (
@@ -342,9 +350,10 @@ export function RootCauseLab() {
                 ))}
               </ul>
 
-              <button type="button" onClick={onInterpretAssist} disabled={interpretLoading}>
-                {interpretLoading ? "Interpreting..." : "AI assist: interpret findings"}
+              <button type="button" onClick={onInterpretAssist} disabled={interpretState === "running"}>
+                {interpretState === "running" ? "Interpreting..." : "AI assist: interpret findings"}
               </button>
+              <RunStatePill state={interpretState} label={`Interpret AI ${interpretState}`} />
             </>
           ) : (
             <p>Run an RCA analysis to generate ranked hypotheses.</p>
@@ -354,39 +363,23 @@ export function RootCauseLab() {
         <article className="root-cause-panel">
           <h2>AI + Evidence</h2>
           {setupResult ? (
-            <section className="assist-block" aria-label="AI setup suggestions">
-              <h3>Setup Suggestions</h3>
-              <ul>
-                {setupResult.suggestions.map((item) => (
-                  <li key={item.outcome.event_type}>
-                    <p>{item.outcome.event_type}</p>
-                    <p>{item.rationale}</p>
-                  </li>
-                ))}
-              </ul>
-              <ul>
-                {setupResult.notes.map((note) => (
-                  <li key={note}>{note}</li>
-                ))}
-              </ul>
-            </section>
+            <AiResponsePanel
+              title="Setup Guidance"
+              summary={setupResult.summary}
+              evidence={setupResult.evidence}
+              caveats={setupResult.caveats}
+              nextActions={setupResult.next_actions}
+            />
           ) : null}
 
           {interpretResult ? (
-            <section className="assist-block" aria-label="AI interpretation summary">
-              <h3>Interpretation</h3>
-              <p>{interpretResult.summary}</p>
-              <ul>
-                {interpretResult.caveats.map((caveat) => (
-                  <li key={caveat}>{caveat}</li>
-                ))}
-              </ul>
-              <ul>
-                {interpretResult.next_steps.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ul>
-            </section>
+            <AiResponsePanel
+              title="Interpretation"
+              summary={interpretResult.summary}
+              evidence={interpretResult.evidence}
+              caveats={interpretResult.caveats}
+              nextActions={interpretResult.next_actions}
+            />
           ) : null}
 
           {selectedInsight ? <p className="field-label">Evidence for {selectedInsight.insight_id}</p> : null}
@@ -396,7 +389,7 @@ export function RootCauseLab() {
           {evidenceResult ? (
             <section aria-live="polite" className="evidence-block">
               <p>
-                Matched anchors: {evidenceResult.matched_anchor_count} | Positives:{" "}
+                Matched anchors: {evidenceResult.matched_anchor_count} | Positives: {" "}
                 {evidenceResult.matched_positive_count}
                 {evidenceResult.truncated ? " (truncated)" : ""}
               </p>

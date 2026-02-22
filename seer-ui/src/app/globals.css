@@ -122,9 +122,33 @@ a {
   color: #03543f;
 }
 
+.status.completed {
+  background: #def7ec;
+  color: #03543f;
+}
+
+.status.queued {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.status.running {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
 .status.degraded {
   background: #fde8e8;
   color: #9b1c1c;
+}
+
+.status.error {
+  background: #fde8e8;
+  color: #9b1c1c;
+}
+
+.status.run-state {
+  margin-right: 0.4rem;
 }
 
 .module-grid {
@@ -553,6 +577,62 @@ button {
   gap: 0.5rem;
 }
 
+.insights-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.insights-header,
+.insights-panel {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--panel) 90%, white 10%);
+}
+
+.insights-header h1,
+.insights-panel h2 {
+  margin: 0.2rem 0;
+}
+
+.insights-header p,
+.insights-panel p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.insights-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.insights-panel input,
+.insights-panel button,
+.insights-panel select,
+.insights-panel textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  background: #fffef9;
+  color: var(--ink);
+}
+
+.insights-panel button {
+  margin-top: 0.7rem;
+  background: #fff7ea;
+}
+
+.insights-panel button:hover:not(:disabled) {
+  background: #ffe5c7;
+}
+
+.insights-panel button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 @media (max-width: 640px) {
   .page-chrome {
     padding: 0.8rem;
@@ -571,6 +651,10 @@ button {
   }
 
   .root-cause-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .insights-grid {
     grid-template-columns: 1fr;
   }
 }
