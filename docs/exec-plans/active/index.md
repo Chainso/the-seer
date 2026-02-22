@@ -1,0 +1,51 @@
+# MVP Phase Execution Index
+
+**Status:** Canonical per-phase execution map  
+**Date:** 2026-02-22  
+**Parent roadmap:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-roadmap-2026.md`
+
+---
+
+## Purpose
+
+This file defines the sequential phase order for MVP delivery.
+
+Each phase is owned by a different agent and must run in strict sequence.
+
+## Execution Rules
+
+1. Exactly one phase can be `in_progress` at a time.
+2. Each phase has a unique `agent slot` owner.
+3. A phase may start only after the predecessor phase is marked complete.
+4. Handoff artifacts listed in the predecessor plan are mandatory inputs for the next phase.
+5. If a blocker changes product/design/architecture truth, update `VISION.md`, `DESIGN.md`, or `ARCHITECTURE.md` before proceeding.
+
+## Sequence
+
+1. Phase 0: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-0-foundation-skeleton.md` (`agent_slot: A1`)
+2. Phase 1: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-1-ontology-copilot-v1.md` (`agent_slot: A2`)
+3. Phase 2: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-2-event-history-ingestion.md` (`agent_slot: A3`)
+4. Phase 3: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-3-process-mining-ocpn.md` (`agent_slot: A4`)
+5. Phase 4: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-4-root-cause-analysis-v1.md` (`agent_slot: A5`)
+6. Phase 5: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-5-ai-hardening-release.md` (`agent_slot: A6`)
+
+## Shared Handoff Contract
+
+Every completed phase must provide:
+
+1. `Completion summary`: what was delivered versus planned scope.
+2. `Acceptance evidence`: command outputs, test results, and screenshots where relevant.
+3. `Doc updates`: list of changed docs and why.
+4. `Known issues`: blockers, deferred work, and risk notes.
+5. `Next-phase starter context`: exact pointers to code paths, APIs, and fixtures needed by the next phase.
+
+## Status Tracking
+
+Use this checklist to track phase completion in order:
+
+- [ ] Phase 0 complete
+- [ ] Phase 1 complete
+- [ ] Phase 2 complete
+- [ ] Phase 3 complete
+- [ ] Phase 4 complete
+- [ ] Phase 5 complete
