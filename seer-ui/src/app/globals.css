@@ -153,6 +153,170 @@ a {
   background: var(--accent-ink);
 }
 
+.ontology-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.ontology-header,
+.explorer-panel,
+.detail-panel,
+.copilot-panel {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--panel) 90%, white 10%);
+}
+
+.ontology-header h1,
+.ontology-grid h2 {
+  margin: 0.2rem 0;
+}
+
+.ontology-header p,
+.ontology-grid p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.ontology-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.field-label {
+  display: block;
+  margin: 0.8rem 0 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+.ontology-grid input,
+.ontology-grid textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  background: #fffef9;
+  color: var(--ink);
+}
+
+.ontology-grid button {
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  padding: 0.45rem 0.65rem;
+  background: #fff7ea;
+  color: var(--ink);
+}
+
+.concept-list {
+  list-style: none;
+  margin: 0.8rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.concept-list button {
+  width: 100%;
+  text-align: left;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.concept-list button small {
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
+.concept-list button.selected {
+  background: #ffe6d8;
+  border-color: #fbbf9b;
+}
+
+.detail-content {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.detail-title {
+  color: var(--ink) !important;
+  font-weight: 700;
+}
+
+.detail-category,
+.detail-iri {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.chat-log {
+  margin-top: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: #fffefb;
+  padding: 0.7rem;
+  min-height: 12rem;
+  display: grid;
+  gap: 0.55rem;
+  overflow-y: auto;
+}
+
+.chat-message {
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.chat-message.user {
+  background: #eaf5ff;
+}
+
+.chat-message.assistant {
+  background: #fef2e8;
+}
+
+.chat-evidence {
+  margin-top: 0.4rem !important;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}
+
+.chat-empty {
+  font-style: italic;
+}
+
+.chat-form {
+  margin-top: 0.85rem;
+}
+
+.chat-form button {
+  margin-top: 0.6rem;
+  background: var(--accent);
+  color: #fff;
+  width: 100%;
+}
+
+.chat-form button:hover:not(:disabled) {
+  background: var(--accent-ink);
+}
+
+.chat-form button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
 .eyebrow {
   margin: 0;
   letter-spacing: 0.08em;
@@ -174,5 +338,9 @@ a {
 
   .top-nav {
     align-items: flex-start;
+  }
+
+  .chat-log {
+    min-height: 9rem;
   }
 }

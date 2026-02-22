@@ -6,7 +6,7 @@ const moduleCards = [
   {
     href: "/ontology",
     title: "Ontology Explorer",
-    summary: "Read-only semantic graph browsing and concept inspection.",
+    summary: "Read-only semantic graph browsing, concept detail inspection, and ontology copilot chat.",
     phase: "Phase 1",
   },
   {

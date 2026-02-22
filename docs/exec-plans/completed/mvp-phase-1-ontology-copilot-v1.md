@@ -1,6 +1,6 @@
 # MVP Phase 1 Exec Plan: Ontology Ingestion and Copilot v1
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** 1 of 6  
 **Agent slot:** A2  
 **Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md`  
@@ -40,6 +40,7 @@ Deliver deterministic ontology ingestion, SHACL validation, Fuseki upsert behavi
 8. **Copilot output contract (pivot):** backend requests structured CLI output via `--output-format json` and validates it against backend response schema before returning to UI.
 9. **Conversation context (pivot):** full chat history plus ontology evidence context is passed in the headless prompt for each copilot turn.
 10. **Copilot tool/output option (required):** structured output must support a tool-call path where the model can request one read-only SPARQL query; backend executes only if query passes read-only guardrails.
+11. **Tool execution response contract (required):** when a read-only SPARQL tool call is emitted and executed, backend must return query results in the copilot API response payload.
 
 ## Pivot Update (2026-02-22)
 
@@ -56,6 +57,7 @@ Copilot v1 execution path is now explicitly CLI-driven:
 5. Structured output supports two response paths:
    - direct answer path (no tool call),
    - tool-call path with a read-only SPARQL query request.
+6. For tool-call path, backend executes the validated query and returns structured query results to the client response.
 
 Research notes used for this pivot:
 1. Local Gemini CLI help confirms `-p/--prompt` for non-interactive mode.
@@ -81,7 +83,8 @@ Research notes used for this pivot:
    - read-only SPARQL tool invocation,
    - Gemini CLI adapter that calls `gemini -p "<full prompt>" --output-format json`,
    - structured output validation/parsing before API response,
-   - tool-call executor for read-only SPARQL query requests emitted in model output.
+   - tool-call executor for read-only SPARQL query requests emitted in model output,
+   - response mapper that includes SPARQL result rows/metadata in the copilot response.
 6. Implement UI surfaces:
    - read-only ontology explorer,
    - copilot chat with concept context handoff.
@@ -100,7 +103,8 @@ Research notes used for this pivot:
 5. Copilot answers ontology questions with SPARQL-backed context.
 6. Copilot backend execution path is Gemini CLI headless mode with validated JSON output mapping.
 7. Copilot supports structured tool/output mode where model can emit one read-only SPARQL query request that is backend-validated before execution.
-8. No UI path permits ontology mutation.
+8. When tool-call mode is used, backend executes the query and sends structured SPARQL results back in the response.
+9. No UI path permits ontology mutation.
 
 ## Handoff Package to Phase 2
 
@@ -110,7 +114,8 @@ Research notes used for this pivot:
 4. Copilot ontology tool contracts and safety constraints.
 5. Gemini CLI invocation contract (prompt assembly, output schema, error/fallback behavior).
 6. Copilot tool/output schema for read-only SPARQL query requests and validation failures.
-7. Known ontology ingestion limitations to avoid impacting event ingestion.
+7. Copilot response schema for returning SPARQL query results (variables, rows, truncation/error fields).
+8. Known ontology ingestion limitations to avoid impacting event ingestion.
 
 ## Risks and Mitigations
 
@@ -124,3 +129,60 @@ Research notes used for this pivot:
    **Mitigation:** strict JSON schema validation with explicit fallback error handling.
 5. **Risk:** model emits unsafe SPARQL in tool-call output.  
    **Mitigation:** enforce read-only query guard + reject on forbidden clauses before execution.
+6. **Risk:** oversized query results degrade response latency/usability.  
+   **Mitigation:** enforce row/time limits with truncation indicators in returned result payload.
+
+## Completion Summary
+
+1. Implemented ontology ingest API with deterministic `release_id` graph naming, SHACL validation via `pyshacl`, and current-pointer switching only on successful validation.
+2. Implemented read-only ontology query APIs (`current`, `concepts`, `concept-detail`, `query`) with strict read-only SPARQL guardrails.
+3. Implemented Gemini CLI headless copilot runtime contract using `gemini -p "<prompt>" --output-format json` and strict structured-output validation.
+4. Implemented structured copilot response modes:
+   - `direct_answer`
+   - `tool_call` with one read-only SPARQL tool request.
+5. Implemented backend tool-call execution path that validates and runs read-only SPARQL, then returns structured query results (`variables`, `rows`, `row_count`, `truncated`, `graphs`, `error`) in copilot API responses.
+6. Delivered read-only ontology explorer + copilot UI surface with no ontology mutation actions.
+
+## Decision Log
+
+1. Gemini runtime dependency failures are isolated to copilot runtime (`503` on `/ontology/copilot`) while ontology ingest/read services remain available.
+2. SPARQL read-only guard blocks mutation and dataset-scoping clauses (`INSERT/DELETE/...`, `FROM`, `GRAPH`, `SERVICE`, `WITH`, `USING`) to reduce unsafe prompt execution risk.
+3. Copilot tool-call execution returns structured failure payloads instead of hard API failures when tool queries are rejected or runtime execution errors occur.
+
+## Acceptance Evidence
+
+1. `cd seer-backend && uv run ruff check .`  
+   Result: `All checks passed!`
+2. `cd seer-backend && uv run pytest -q`  
+   Result: `12 passed` (includes copilot structured output/tool-call tests and Gemini CLI subprocess contract test).
+3. `cd seer-ui && npm run lint`  
+   Result: `eslint` passed.
+4. `cd seer-ui && npm run build`  
+   Result: Next.js production build passed; `/ontology` route generated successfully.
+
+## Doc Updates
+
+1. Updated this phase plan with pivot details, tool-call response contract, completion summary, evidence, and phase handoff context.
+2. Execution index and roadmap references were updated in the same change to reflect Phase 1 completion and Phase 2 start.
+
+## Known Issues
+
+1. Backend startup logs use FastAPI `on_event("startup")`, which emits deprecation warnings; migration to lifespan handlers is deferred as non-blocking technical debt.
+2. Gemini CLI binary availability remains an environment prerequisite for live copilot responses; when missing, API returns explicit dependency-unavailable responses for copilot calls.
+
+## Next-Phase Starter Context
+
+1. Phase 1 backend API surface:
+   - `seer-backend/src/seer_backend/api/ontology.py`
+   - `seer-backend/src/seer_backend/ontology/service.py`
+   - `seer-backend/src/seer_backend/ontology/repository.py`
+2. Copilot runtime and schema contracts:
+   - `seer-backend/src/seer_backend/ai/ontology_copilot.py`
+   - `seer-backend/src/seer_backend/ontology/models.py`
+   - `seer-backend/src/seer_backend/ontology/query_guard.py`
+3. Phase 1 test fixtures and acceptance tests:
+   - `seer-backend/tests/test_ontology_phase1.py`
+   - `seer-backend/tests/fixtures/ontology_invalid_missing_name.ttl`
+4. UI ontology read-only integration:
+   - `seer-ui/src/components/ontology-workbench.tsx`
+   - `seer-ui/src/lib/backend-ontology.ts`

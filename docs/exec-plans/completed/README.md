@@ -11,3 +11,4 @@ Each completed plan should preserve:
 ## Plans
 
 1. `mvp-phase-0-foundation-skeleton.md` - completed (2026-02-22)
+2. `mvp-phase-1-ontology-copilot-v1.md` - completed (2026-02-22)

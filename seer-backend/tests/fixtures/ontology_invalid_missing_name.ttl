@@ -1,0 +1,5 @@
+@prefix prophet: <http://prophet.platform/ontology#> .
+@prefix invalid: <http://example.org/invalid#> .
+
+invalid:local_ontology a prophet:LocalOntology ;
+  prophet:description "Invalid fixture intentionally missing prophet:name for SHACL failure." .

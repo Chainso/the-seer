@@ -23,7 +23,7 @@ Each phase is owned by a different agent and must run in strict sequence.
 ## Sequence
 
 1. Phase 0: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md` (`agent_slot: A1`, completed)
-2. Phase 1: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-1-ontology-copilot-v1.md` (`agent_slot: A2`)
+2. Phase 1: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md` (`agent_slot: A2`, completed)
 3. Phase 2: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-2-event-history-ingestion.md` (`agent_slot: A3`)
 4. Phase 3: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-3-process-mining-ocpn.md` (`agent_slot: A4`)
 5. Phase 4: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-4-root-cause-analysis-v1.md` (`agent_slot: A5`)
@@ -44,11 +44,11 @@ Every completed phase must provide:
 Use this checklist to track phase completion in order:
 
 - [x] Phase 0 complete
-- [ ] Phase 1 complete
+- [x] Phase 1 complete
 - [ ] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
 
 Current execution state:
-- `in_progress`: Phase 1 (`/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-1-ontology-copilot-v1.md`)
+- `in_progress`: Phase 2 (`/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-2-event-history-ingestion.md`)

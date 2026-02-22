@@ -49,7 +49,7 @@ Execution is strictly sequential and each phase is owned by a different agent sl
 1. Phase 0: Foundation and Skeleton  
    `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md`
 2. Phase 1: Ontology Ingestion and Copilot v1  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-1-ontology-copilot-v1.md`
+   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`
 3. Phase 2: Event Ingestion and History Data Model  
    `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-2-event-history-ingestion.md`
 4. Phase 3: Process Mining v1 (Object-Centric Petri Nets)  
@@ -103,13 +103,13 @@ Must pass before MVP pilot release:
 
 ## 6. Immediate Execution Order
 
-1. Phase 0 is complete; start with Phase 1 using the Phase 0 handoff package.
+1. Phases 0 and 1 are complete; continue with Phase 2 using the Phase 1 handoff package.
 2. Run phases strictly in sequence using `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/index.md`.
 3. Do not start a phase until predecessor acceptance criteria are signed off.
 
 Phase 1 execution pivot (2026-02-22):
 1. Ontology Copilot v1 model execution uses backend Gemini CLI headless invocation (`gemini -p ...`) with structured output parsing.
-2. The detailed command contract, schema expectations, and safeguards are tracked in `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-1-ontology-copilot-v1.md`.
+2. The detailed command contract, schema expectations, and safeguards are tracked in `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`.
 
 ## 7. Change Control
 
