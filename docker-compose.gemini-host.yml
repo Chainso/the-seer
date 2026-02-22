@@ -1,0 +1,11 @@
+services:
+  seer-backend:
+    environment:
+      # Use host-installed Gemini CLI inside the container.
+      SEER_GEMINI_CLI_BIN: /host-gemini/bin/gemini
+      PATH: /host-gemini/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      # Directory that contains both `gemini` and `node` on the host.
+      - ${SEER_GEMINI_HOST_BIN_DIR:?Set SEER_GEMINI_HOST_BIN_DIR to your host Gemini bin directory}:/host-gemini/bin:ro
+      # Reuse host Gemini auth/session state.
+      - ${SEER_GEMINI_HOST_AUTH_DIR:?Set SEER_GEMINI_HOST_AUTH_DIR to your host .gemini directory}:/root/.gemini:ro

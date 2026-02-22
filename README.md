@@ -38,6 +38,27 @@ Helper scripts:
 ./scripts/dev-down.sh
 ```
 
+## Host Gemini CLI In Docker
+
+To reuse your host-installed and already-authenticated Gemini CLI from the
+`seer-backend` container:
+
+1. Set `SEER_GEMINI_HOST_BIN_DIR` to the directory that contains both
+   `gemini` and `node` (for example, `dirname "$(which gemini)"`).
+2. Set `SEER_GEMINI_HOST_AUTH_DIR` to your host Gemini auth directory
+   (typically `~/.gemini`).
+3. Start with the Gemini overlay:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gemini-host.yml up --build
+```
+
+Or use the helper script:
+
+```bash
+SEER_USE_HOST_GEMINI=1 ./scripts/dev-up.sh
+```
+
 ## Service Endpoints
 
 1. UI: `http://localhost:3000`
