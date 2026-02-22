@@ -38,6 +38,31 @@ Helper scripts:
 ./scripts/dev-down.sh
 ```
 
+## Test Data Scripts
+
+Use these scripts when Seer backend is already running:
+
+1. Ingest the complex Prophet Turtle example:
+
+```bash
+python3 scripts/ingest_complex_turtle.py
+```
+
+2. Generate fake history events JSON (with synthetic timestamps):
+
+```bash
+python3 scripts/generate_fake_event_data.py --output /tmp/seer-fake-events.json --count 500
+```
+
+3. Ingest one generated JSON file into history event ingestion:
+
+```bash
+python3 scripts/ingest_history_events.py --input /tmp/seer-fake-events.json
+```
+
+All scripts accept `--api-base-url` and `--api-prefix` when your backend is not using
+`http://localhost:8000/api/v1`.
+
 ## DB-Only Docker (Local Backend + UI)
 
 Use the DB-only compose file when you want to run `seer-backend` and `seer-ui` on
