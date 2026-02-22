@@ -13,3 +13,4 @@ Each completed plan should preserve:
 1. `mvp-phase-0-foundation-skeleton.md` - completed (2026-02-22)
 2. `mvp-phase-1-ontology-copilot-v1.md` - completed (2026-02-22)
 3. `mvp-phase-2-event-history-ingestion.md` - completed (2026-02-22)
+4. `mvp-phase-3-process-mining-ocpn.md` - completed (2026-02-22)

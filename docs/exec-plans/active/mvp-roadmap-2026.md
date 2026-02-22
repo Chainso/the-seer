@@ -53,7 +53,7 @@ Execution is strictly sequential and each phase is owned by a different agent sl
 3. Phase 2: Event Ingestion and History Data Model  
    `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-2-event-history-ingestion.md`
 4. Phase 3: Process Mining v1 (Object-Centric Petri Nets)  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-3-process-mining-ocpn.md`
+   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md`
 5. Phase 4: Root Cause Analysis v1  
    `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-4-root-cause-analysis-v1.md`
 6. Phase 5: AI Expansion, Hardening, and MVP Release  
@@ -103,7 +103,7 @@ Must pass before MVP pilot release:
 
 ## 6. Immediate Execution Order
 
-1. Phases 0, 1, and 2 are complete; continue with Phase 3 using the Phase 2 handoff package.
+1. Phases 0, 1, 2, and 3 are complete; continue with Phase 4 using the Phase 3 handoff package.
 2. Run phases strictly in sequence using `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/index.md`.
 3. Do not start a phase until predecessor acceptance criteria are signed off.
 

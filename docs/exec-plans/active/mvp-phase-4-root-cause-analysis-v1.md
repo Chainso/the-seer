@@ -1,9 +1,9 @@
 # MVP Phase 4 Exec Plan: Root Cause Analysis v1
 
-**Status:** planned  
+**Status:** in_progress  
 **Target order:** 4 of 6  
 **Agent slot:** A5  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-3-process-mining-ocpn.md`  
+**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md`  
 **Successor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-5-ai-hardening-release.md`
 
 ---

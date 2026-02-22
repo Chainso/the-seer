@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     clickhouse_password: str = "seer"
     clickhouse_timeout_seconds: float = Field(default=5.0, ge=0.1, le=30.0)
     clickhouse_migrations_dir: str = "migrations/clickhouse"
+    process_mining_max_events: int = Field(default=5_000, ge=100, le=200_000)
+    process_mining_max_relations: int = Field(default=40_000, ge=100, le=500_000)
+    process_mining_max_traces_per_handle: int = Field(default=100, ge=10, le=500)
 
     dependency_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     prophet_metamodel_path: str = "../prophet/prophet.ttl"

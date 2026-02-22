@@ -12,6 +12,8 @@ from seer_backend.api.history import inject_history_service
 from seer_backend.api.history import router as history_router
 from seer_backend.api.ontology import inject_ontology_services
 from seer_backend.api.ontology import router as ontology_router
+from seer_backend.api.process import inject_process_service
+from seer_backend.api.process import router as process_router
 from seer_backend.config.settings import Settings
 from seer_backend.logging import configure_logging
 
@@ -37,8 +39,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(ontology_router, prefix=settings.api_prefix)
     app.include_router(history_router, prefix=settings.api_prefix)
+    app.include_router(process_router, prefix=settings.api_prefix)
     inject_ontology_services(app, settings)
     inject_history_service(app, settings)
+    inject_process_service(app, settings)
 
     logger = logging.getLogger(__name__)
 

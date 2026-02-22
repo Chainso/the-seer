@@ -331,6 +331,83 @@ button {
   font-size: 0.85rem;
 }
 
+.process-shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.process-header,
+.process-panel {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  background: color-mix(in srgb, var(--panel) 90%, white 10%);
+}
+
+.process-header h1,
+.process-panel h2,
+.process-panel h3 {
+  margin: 0.2rem 0;
+}
+
+.process-header p,
+.process-panel p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.process-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.process-panel input,
+.process-panel button {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  background: #fffef9;
+  color: var(--ink);
+}
+
+.process-panel button {
+  margin-top: 0.7rem;
+  background: #fff7ea;
+}
+
+.process-panel button:hover:not(:disabled) {
+  background: #ffe5c7;
+}
+
+.process-panel button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.process-list,
+.trace-list {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.process-list button {
+  text-align: left;
+}
+
+.trace-list li {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  padding: 0.55rem 0.65rem;
+  background: #fffefb;
+  display: grid;
+  gap: 0.25rem;
+}
+
 @media (max-width: 640px) {
   .page-chrome {
     padding: 0.8rem;
@@ -342,5 +419,9 @@ button {
 
   .chat-log {
     min-height: 9rem;
+  }
+
+  .process-grid {
+    grid-template-columns: 1fr;
   }
 }

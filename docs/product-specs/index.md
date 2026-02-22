@@ -8,6 +8,7 @@ Catalog user-facing product specs.
 
 1. `foundation-module-shell-phase-0.md` - completed
 2. `new-user-onboarding.md` - draft
+3. `process-explorer-phase-3.md` - completed
 
 ## Usage
 
