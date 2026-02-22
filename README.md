@@ -25,6 +25,12 @@ Canonical command:
 docker compose up --build
 ```
 
+The backend compose service now mounts `./prophet` to `/prophet` and uses
+`SEER_PROPHET_METAMODEL_PATH=/prophet/prophet.ttl`, so ontology ingest works
+without manual container patching.
+Compose also provisions Fuseki dataset `/ds` and wires backend Fuseki credentials
+automatically.
+
 Helper scripts:
 
 ```bash

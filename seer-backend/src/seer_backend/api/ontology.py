@@ -65,6 +65,8 @@ def build_ontology_services(
             host=settings.fuseki_host,
             port=settings.fuseki_port,
             dataset=settings.fuseki_dataset,
+            username=settings.fuseki_username,
+            password=settings.fuseki_password,
             timeout_seconds=settings.fuseki_timeout_seconds,
         )
         ontology_service = OntologyService(repository=repository, validator=validator)

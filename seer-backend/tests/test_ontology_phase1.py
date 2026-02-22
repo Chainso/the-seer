@@ -162,6 +162,20 @@ def test_valid_ingest_sets_current_release_pointer(client: TestClient) -> None:
     assert current_body["current_graph_iri"] == "urn:seer:ontology:release:phase1-valid"
 
 
+def test_ontology_routes_handle_cors_preflight(client: TestClient) -> None:
+    headers = {
+        "Origin": "http://localhost:3000",
+        "Access-Control-Request-Method": "GET",
+    }
+    current = client.options("/api/v1/ontology/current", headers=headers)
+    concepts = client.options("/api/v1/ontology/concepts", headers=headers)
+
+    assert current.status_code == 200
+    assert concepts.status_code == 200
+    assert current.headers.get("access-control-allow-origin") == "http://localhost:3000"
+    assert concepts.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
 def test_invalid_ingest_returns_shacl_diagnostics(client: TestClient) -> None:
     response = client.post(
         "/api/v1/ontology/ingest",

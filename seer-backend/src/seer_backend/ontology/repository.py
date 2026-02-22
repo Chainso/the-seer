@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import httpx
 
@@ -51,6 +51,8 @@ class FusekiOntologyRepository:
     host: str
     port: int
     dataset: str
+    username: str | None
+    password: str | None
     timeout_seconds: float
 
     @property
@@ -103,10 +105,11 @@ WHERE {{
   OPTIONAL {{ <{META_CURRENT_SUBJECT_IRI}> <{META_UPDATED_AT_PREDICATE_IRI}> ?existingUpdated . }}
 }}
 """.strip()
+        payload: list[tuple[str, str]] = [("update", update_query)]
         async with self._client() as client:
             response = await client.post(
                 self._update_url,
-                data={"update": update_query},
+                content=self._encode_form(payload),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
         self._raise_for_status(response, "set current release pointer")
@@ -147,8 +150,11 @@ LIMIT 1
         async with self._client() as client:
             response = await client.post(
                 self._query_url,
-                data=payload,
-                headers={"Accept": "application/sparql-results+json"},
+                content=self._encode_form(payload),
+                headers={
+                    "Accept": "application/sparql-results+json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
             )
         self._raise_for_status(response, "execute SELECT query")
         body = response.json()
@@ -162,15 +168,24 @@ LIMIT 1
         async with self._client() as client:
             response = await client.post(
                 self._query_url,
-                data=payload,
-                headers={"Accept": "application/sparql-results+json"},
+                content=self._encode_form(payload),
+                headers={
+                    "Accept": "application/sparql-results+json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
             )
         self._raise_for_status(response, "execute ASK query")
         body = response.json()
         return bool(body.get("boolean"))
 
     def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=self.timeout_seconds)
+        auth: tuple[str, str] | None = None
+        if self.username and self.password:
+            auth = (self.username, self.password)
+        return httpx.AsyncClient(timeout=self.timeout_seconds, auth=auth)
+
+    def _encode_form(self, payload: Sequence[tuple[str, str]]) -> bytes:
+        return urlencode(payload, doseq=True).encode("utf-8")
 
     def _raise_for_status(self, response: httpx.Response, operation: str) -> None:
         if response.is_success:

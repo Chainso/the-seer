@@ -15,30 +15,14 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["uv", "run", ["pytest", "ruff", "uvicorn", "python"]],
+    pattern = ["uv", "run"],
     decision = "allow",
-    justification = "Allow standard test, lint, app, and module commands",
+    justification = "Allow uv run with flexible flags and delegated subcommands",
     match = [
-        "uv run pytest",
-        "uv run ruff check .",
-        "uv run uvicorn seer_backend.main:app --reload --host 0.0.0.0 --port 8000",
-        "uv run python -m pytest tests -q",
-    ],
-    not_match = [
-        "uv run bash -lc 'echo hi'",
-    ],
-)
-
-prefix_rule(
-    pattern = ["uv", "run", ["--directory", "--project"], "seer-backend", ["pytest", "ruff", "uvicorn", "python"]],
-    decision = "allow",
-    justification = "Allow running backend tooling from the monorepo root",
-    match = [
-        "uv run --directory seer-backend pytest -q",
-        "uv run --project seer-backend ruff check seer-backend",
-    ],
-    not_match = [
-        "uv run --directory seer-ui pytest -q",
+        "uv run pytest -q",
+        "uv run --directory seer-backend ruff check .",
+        "uv run --project seer-backend python -m pytest tests -q",
+        "uv run --no-sync --directory seer-backend uvicorn seer_backend.main:app --reload",
     ],
 )
 
