@@ -1,0 +1,3 @@
+[submodule "prophet"]
+	path = prophet
+	url = https://github.com/Chainso/prophet
