@@ -36,6 +36,26 @@ Deliver deterministic ontology ingestion, SHACL validation, Fuseki upsert behavi
 4. **Re-ingest semantics:** ingesting same `release_id` replaces that release graph atomically.
 5. **Copilot query scope:** read-only SPARQL only; no update/delete operations are exposed to AI tools.
 6. **Evidence policy:** analytical ontology claims must include URI references and query-backed evidence snippets.
+7. **Copilot model runtime (pivot):** backend invokes Gemini CLI directly in headless mode (`gemini -p ...`) instead of calling a separate model SDK in this phase.
+8. **Copilot output contract (pivot):** backend requests structured CLI output via `--output-format json` and validates it against backend response schema before returning to UI.
+9. **Conversation context (pivot):** full chat history plus ontology evidence context is passed in the headless prompt for each copilot turn.
+
+## Pivot Update (2026-02-22)
+
+Copilot v1 execution path is now explicitly CLI-driven:
+
+1. Backend constructs a single prompt containing:
+   - conversation history,
+   - ontology context,
+   - read-only SPARQL evidence snippets.
+2. Backend executes Gemini CLI headless:
+   - `gemini -p "<prompt>" --output-format json`
+3. Backend parses/validates JSON output and maps it to copilot API response fields.
+4. Any command/query generation from model output remains read-only and constrained by SPARQL guardrails.
+
+Research notes used for this pivot:
+1. Local Gemini CLI help confirms `-p/--prompt` for non-interactive mode.
+2. Local Gemini CLI help confirms `-o/--output-format` supports `text`, `json`, and `stream-json`.
 
 ## Implementation Steps
 
@@ -54,7 +74,9 @@ Deliver deterministic ontology ingestion, SHACL validation, Fuseki upsert behavi
    - allowlisted query templates for common ontology exploration patterns.
 5. Implement ontology copilot tool layer:
    - context assembly from base metamodel + current release graph,
-   - read-only SPARQL tool invocation.
+   - read-only SPARQL tool invocation,
+   - Gemini CLI adapter that calls `gemini -p "<full prompt>" --output-format json`,
+   - structured output validation/parsing before API response.
 6. Implement UI surfaces:
    - read-only ontology explorer,
    - copilot chat with concept context handoff.
@@ -71,7 +93,8 @@ Deliver deterministic ontology ingestion, SHACL validation, Fuseki upsert behavi
 3. Re-ingest of identical `release_id` is deterministic and does not duplicate state.
 4. UI can browse ontology concepts in read-only mode.
 5. Copilot answers ontology questions with SPARQL-backed context.
-6. No UI path permits ontology mutation.
+6. Copilot backend execution path is Gemini CLI headless mode with validated JSON output mapping.
+7. No UI path permits ontology mutation.
 
 ## Handoff Package to Phase 2
 
@@ -79,7 +102,8 @@ Deliver deterministic ontology ingestion, SHACL validation, Fuseki upsert behavi
 2. Fuseki graph naming and pointer conventions.
 3. SHACL fixture set (valid + invalid) and test commands.
 4. Copilot ontology tool contracts and safety constraints.
-5. Known ontology ingestion limitations to avoid impacting event ingestion.
+5. Gemini CLI invocation contract (prompt assembly, output schema, error/fallback behavior).
+6. Known ontology ingestion limitations to avoid impacting event ingestion.
 
 ## Risks and Mitigations
 
@@ -87,3 +111,7 @@ Deliver deterministic ontology ingestion, SHACL validation, Fuseki upsert behavi
    **Mitigation:** use read-only wrappers + allowlisted query patterns.
 2. **Risk:** accidental pointer drift during ingest failures.  
    **Mitigation:** strict transaction ordering and pointer-switch tests.
+3. **Risk:** Gemini CLI version drift or unavailable binary in runtime environments.  
+   **Mitigation:** add startup/config checks for CLI presence and pin/document required CLI version.
+4. **Risk:** malformed/non-conforming structured output from model.  
+   **Mitigation:** strict JSON schema validation with explicit fallback error handling.

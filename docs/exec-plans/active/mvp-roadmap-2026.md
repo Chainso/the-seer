@@ -107,6 +107,10 @@ Must pass before MVP pilot release:
 2. Run phases strictly in sequence using `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/index.md`.
 3. Do not start a phase until predecessor acceptance criteria are signed off.
 
+Phase 1 execution pivot (2026-02-22):
+1. Ontology Copilot v1 model execution uses backend Gemini CLI headless invocation (`gemini -p ...`) with structured output parsing.
+2. The detailed command contract, schema expectations, and safeguards are tracked in `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-phase-1-ontology-copilot-v1.md`.
+
 ## 7. Change Control
 
 1. Any scope addition must state impacted phase file(s) and gate impact.
