@@ -1,0 +1,29 @@
+services:
+  fuseki:
+    image: stain/jena-fuseki:5.1.0
+    container_name: seer-fuseki
+    ports:
+      - "${SEER_FUSEKI_PORT:-3030}:3030"
+    environment:
+      ADMIN_PASSWORD: ${FUSEKI_ADMIN_PASSWORD:-admin}
+      FUSEKI_DATASET_1: ds
+    volumes:
+      - fuseki-data:/fuseki
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: seer-clickhouse
+    ports:
+      - "${SEER_CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${SEER_CLICKHOUSE_NATIVE_PORT:-9000}:9000"
+    environment:
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-seer}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-seer}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-seer}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+
+volumes:
+  fuseki-data:
+  clickhouse-data:

@@ -38,25 +38,80 @@ Helper scripts:
 ./scripts/dev-down.sh
 ```
 
-## Host Gemini CLI In Docker
+## DB-Only Docker (Local Backend + UI)
 
-To reuse your host-installed and already-authenticated Gemini CLI from the
-`seer-backend` container:
+Use the DB-only compose file when you want to run `seer-backend` and `seer-ui` on
+your host machine, while keeping only data services in Docker.
 
-1. Set `SEER_GEMINI_HOST_BIN_DIR` to the directory that contains both
-   `gemini` and `node` (for example, `dirname "$(which gemini)"`).
-2. Set `SEER_GEMINI_HOST_AUTH_DIR` to your host Gemini auth directory
-   (typically `~/.gemini`).
-3. Start with the Gemini overlay:
+Single-command launch with zellij multiplexing:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.gemini-host.yml up --build
+./scripts/dev-local-zellij.sh
 ```
 
-Or use the helper script:
+This starts Fuseki + ClickHouse in Docker, then opens a `zellij` session with panes
+for backend, UI, and DB logs.
+
+Optional session name override:
 
 ```bash
-SEER_USE_HOST_GEMINI=1 ./scripts/dev-up.sh
+SEER_ZELLIJ_SESSION=seer-dev ./scripts/dev-local-zellij.sh
+```
+
+When finished:
+
+```bash
+./scripts/dev-db-down.sh
+```
+
+Manual DB-only startup remains available:
+
+```bash
+docker compose -f docker-compose.db.yml up -d
+```
+
+Or with helper scripts:
+
+```bash
+./scripts/dev-db-up.sh
+./scripts/dev-db-down.sh
+```
+
+For host-run backend, set these values in `seer-backend/.env`:
+
+```bash
+SEER_FUSEKI_HOST=localhost
+SEER_FUSEKI_PORT=3030
+SEER_FUSEKI_USERNAME=admin
+SEER_FUSEKI_PASSWORD=admin
+SEER_CLICKHOUSE_HOST=localhost
+SEER_CLICKHOUSE_PORT=8123
+SEER_CLICKHOUSE_DATABASE=seer
+SEER_CLICKHOUSE_USER=seer
+SEER_CLICKHOUSE_PASSWORD=seer
+```
+
+Then start apps locally from their directories:
+
+```bash
+cd seer-backend && uv sync --extra dev && uv run uvicorn seer_backend.main:app --reload --host 0.0.0.0 --port 8000
+cd seer-ui && npm ci && npm run dev
+```
+
+## Host Gemini CLI In Docker
+
+`seer-backend` now uses host Gemini CLI/auth by default in compose.
+
+If your local paths differ, override:
+
+1. `SEER_GEMINI_HOST_NODE_DIR` (Node version root containing `bin/` and `lib/`)
+2. `SEER_GEMINI_NODE_VERSION` (used with `${NVM_DIR}`/`${HOME}` defaults)
+3. `SEER_GEMINI_HOST_AUTH_DIR` (typically `~/.gemini`)
+
+Then start normally:
+
+```bash
+docker compose up --build
 ```
 
 ## Service Endpoints
