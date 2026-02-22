@@ -39,6 +39,7 @@ Deliver deterministic ontology ingestion, SHACL validation, Fuseki upsert behavi
 7. **Copilot model runtime (pivot):** backend invokes Gemini CLI directly in headless mode (`gemini -p ...`) instead of calling a separate model SDK in this phase.
 8. **Copilot output contract (pivot):** backend requests structured CLI output via `--output-format json` and validates it against backend response schema before returning to UI.
 9. **Conversation context (pivot):** full chat history plus ontology evidence context is passed in the headless prompt for each copilot turn.
+10. **Copilot tool/output option (required):** structured output must support a tool-call path where the model can request one read-only SPARQL query; backend executes only if query passes read-only guardrails.
 
 ## Pivot Update (2026-02-22)
 
@@ -52,6 +53,9 @@ Copilot v1 execution path is now explicitly CLI-driven:
    - `gemini -p "<prompt>" --output-format json`
 3. Backend parses/validates JSON output and maps it to copilot API response fields.
 4. Any command/query generation from model output remains read-only and constrained by SPARQL guardrails.
+5. Structured output supports two response paths:
+   - direct answer path (no tool call),
+   - tool-call path with a read-only SPARQL query request.
 
 Research notes used for this pivot:
 1. Local Gemini CLI help confirms `-p/--prompt` for non-interactive mode.
@@ -76,7 +80,8 @@ Research notes used for this pivot:
    - context assembly from base metamodel + current release graph,
    - read-only SPARQL tool invocation,
    - Gemini CLI adapter that calls `gemini -p "<full prompt>" --output-format json`,
-   - structured output validation/parsing before API response.
+   - structured output validation/parsing before API response,
+   - tool-call executor for read-only SPARQL query requests emitted in model output.
 6. Implement UI surfaces:
    - read-only ontology explorer,
    - copilot chat with concept context handoff.
@@ -94,7 +99,8 @@ Research notes used for this pivot:
 4. UI can browse ontology concepts in read-only mode.
 5. Copilot answers ontology questions with SPARQL-backed context.
 6. Copilot backend execution path is Gemini CLI headless mode with validated JSON output mapping.
-7. No UI path permits ontology mutation.
+7. Copilot supports structured tool/output mode where model can emit one read-only SPARQL query request that is backend-validated before execution.
+8. No UI path permits ontology mutation.
 
 ## Handoff Package to Phase 2
 
@@ -103,7 +109,8 @@ Research notes used for this pivot:
 3. SHACL fixture set (valid + invalid) and test commands.
 4. Copilot ontology tool contracts and safety constraints.
 5. Gemini CLI invocation contract (prompt assembly, output schema, error/fallback behavior).
-6. Known ontology ingestion limitations to avoid impacting event ingestion.
+6. Copilot tool/output schema for read-only SPARQL query requests and validation failures.
+7. Known ontology ingestion limitations to avoid impacting event ingestion.
 
 ## Risks and Mitigations
 
@@ -115,3 +122,5 @@ Research notes used for this pivot:
    **Mitigation:** add startup/config checks for CLI presence and pin/document required CLI version.
 4. **Risk:** malformed/non-conforming structured output from model.  
    **Mitigation:** strict JSON schema validation with explicit fallback error handling.
+5. **Risk:** model emits unsafe SPARQL in tool-call output.  
+   **Mitigation:** enforce read-only query guard + reject on forbidden clauses before execution.
