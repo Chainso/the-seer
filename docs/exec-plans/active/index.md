@@ -59,3 +59,19 @@ Current execution state:
 - [x] RCA API contract + InsightResult schema handed off.
 - [x] Root-Cause Lab UI and AI-assist starter context documented.
 - [x] Integrated cross-module AI hardening execution started.
+
+---
+
+## Post-MVP Active Plans
+
+1. UI Experience Replatform (current):
+   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/ui-experience-replatform-2026.md`
+   (`agent_slot: UX-R1`, in_progress)
+
+## Post-MVP Status Tracking
+
+- [ ] UI Experience Replatform complete
+
+Current post-MVP execution state:
+
+- `in_progress`: `ui-experience-replatform-2026.md` (Phase A)
