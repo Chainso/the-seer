@@ -198,18 +198,25 @@ Exit criteria:
 2. Locked endpoint/base URL contract to `SEER_OPENAI_BASE_URL=http://localhost:8787/v1` with resolved target `POST /v1/chat/completions`.
 3. Locked migration approach to keep current copilot response schema in this pass while removing Gemini runtime coupling.
 
+## Phase B Completion Notes (2026-02-23)
+
+1. Replaced Gemini CLI runtime adapter with `OpenAiChatCompletionsRuntime` in `seer-backend/src/seer_backend/ai/ontology_copilot.py`.
+2. Switched copilot service injection from `gemini_runtime` to provider-neutral `model_runtime`.
+3. Preserved prompt construction, structured-output validation, and read-only tool-call execution safeguards.
+4. Normalized provider-specific parse errors to model-neutral messages (`Model output ...`).
+
 ## Progress Tracking
 
 - [x] Phase A complete
-- [ ] Phase B complete
+- [x] Phase B complete
 - [ ] Phase C complete
 - [ ] Phase D complete
 - [ ] Phase E complete
 
 Current execution state:
 
-- `in_progress`: Phase B (copilot runtime refactor)
-- `completed`: Phase A (runtime contract + settings lock)
+- `in_progress`: Phase C (service wiring + dependency behavior)
+- `completed`: Phase A (runtime contract + settings lock), Phase B (copilot runtime refactor)
 
 ## Plan Maintenance Rules
 

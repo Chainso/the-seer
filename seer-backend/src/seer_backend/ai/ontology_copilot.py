@@ -1,13 +1,13 @@
-"""Read-only ontology copilot service and Gemini CLI runtime adapter."""
+"""Read-only ontology copilot service and OpenAI runtime adapter."""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import re
-from asyncio.subprocess import PIPE
-from typing import Protocol
+from typing import Any, Protocol
 
+from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
 from pydantic import ValidationError
 
 from seer_backend.ontology.errors import (
@@ -60,70 +60,71 @@ Rules:
 """.strip()
 
 
-class GeminiCliRuntime(Protocol):
-    """Abstract runtime for Gemini CLI completion in tests and production."""
+class CopilotModelRuntime(Protocol):
+    """Abstract runtime for model completion in tests and production."""
 
     async def run_prompt(self, prompt: str) -> str: ...
 
 
-class GeminiCliSubprocessRuntime:
-    """Executes Gemini CLI in headless mode and returns raw JSON text."""
+class OpenAiChatCompletionsRuntime:
+    """Executes OpenAI Chat Completions calls and returns raw JSON text."""
 
-    def __init__(self, command: str = "gemini", timeout_seconds: float = 45.0) -> None:
-        self._command = command
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        api_key: str | None,
+        timeout_seconds: float = 45.0,
+        client: Any | None = None,
+    ) -> None:
+        self._model = model
         self._timeout_seconds = timeout_seconds
+        self._client = client or AsyncOpenAI(
+            base_url=base_url.rstrip("/"),
+            api_key=api_key or "not-needed",
+            timeout=timeout_seconds,
+        )
 
     async def run_prompt(self, prompt: str) -> str:
         try:
-            process = await asyncio.create_subprocess_exec(
-                self._command,
-                "-p",
-                prompt,
-                "--output-format",
-                "json",
-                stdout=PIPE,
-                stderr=PIPE,
+            response = await self._client.chat.completions.create(
+                model=self._model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0,
+                response_format={"type": "json_object"},
             )
-        except FileNotFoundError as exc:
+        except APIConnectionError as exc:
             raise OntologyDependencyUnavailableError(
-                f"Gemini CLI binary '{self._command}' is not available"
+                f"OpenAI endpoint is unavailable: {exc}"
             ) from exc
-
-        try:
-            stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=self._timeout_seconds,
-            )
-        except TimeoutError as exc:
-            process.kill()
-            await process.communicate()
+        except APITimeoutError as exc:
             raise OntologyError(
-                f"Gemini CLI timed out after {self._timeout_seconds:.1f}s"
+                f"OpenAI request timed out after {self._timeout_seconds:.1f}s"
             ) from exc
+        except APIError as exc:
+            raise OntologyError(f"OpenAI chat completion failed: {exc}") from exc
 
-        if process.returncode != 0:
-            stderr_text = stderr.decode("utf-8", errors="replace").strip()
-            raise OntologyError(
-                f"Gemini CLI failed with exit code {process.returncode}: {stderr_text}"
-            )
+        if not response.choices:
+            raise OntologyError("OpenAI chat completion returned no choices")
 
-        output_text = stdout.decode("utf-8", errors="replace").strip()
-        if not output_text:
-            raise OntologyError("Gemini CLI returned empty output")
-        return output_text
+        output_text = response.choices[0].message.content
+        if not isinstance(output_text, str) or not output_text.strip():
+            raise OntologyError("OpenAI chat completion returned empty content")
+        return output_text.strip()
 
 
 class OntologyCopilotService:
-    """Copilot orchestration with Gemini JSON output and read-only tool execution."""
+    """Copilot orchestration with model JSON output and read-only tool execution."""
 
     def __init__(
         self,
         ontology_service: OntologyService | UnavailableOntologyService,
-        gemini_runtime: GeminiCliRuntime,
+        model_runtime: CopilotModelRuntime,
         query_row_limit: int = 100,
     ) -> None:
         self._ontology_service = ontology_service
-        self._gemini_runtime = gemini_runtime
+        self._model_runtime = model_runtime
         self._query_row_limit = query_row_limit
 
     async def answer(
@@ -140,7 +141,7 @@ class OntologyCopilotService:
             context=context,
         )
 
-        raw_output = await self._gemini_runtime.run_prompt(prompt)
+        raw_output = await self._model_runtime.run_prompt(prompt)
         model_output = _parse_model_output(raw_output)
 
         tool_result: CopilotToolResult | None = None
@@ -210,13 +211,13 @@ def _parse_model_output(raw_output: str) -> CopilotStructuredOutput:
         # Validate raw JSON parse before schema validation for clearer diagnostics.
         json.loads(raw_output)
     except json.JSONDecodeError as exc:
-        raise OntologyError(f"Gemini CLI output is not valid JSON: {exc}") from exc
+        raise OntologyError(f"Model output is not valid JSON: {exc}") from exc
 
     try:
         return parse_copilot_structured_output(raw_output)
     except ValidationError as exc:
         details = format_copilot_output_validation_error(exc)
-        raise OntologyError(f"Gemini CLI JSON failed schema validation: {details}") from exc
+        raise OntologyError(f"Model JSON failed schema validation: {details}") from exc
 
 
 def _build_prompt(
