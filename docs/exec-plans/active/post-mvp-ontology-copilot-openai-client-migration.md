@@ -205,18 +205,29 @@ Exit criteria:
 3. Preserved prompt construction, structured-output validation, and read-only tool-call execution safeguards.
 4. Normalized provider-specific parse errors to model-neutral messages (`Model output ...`).
 
+## Phase C Completion Notes (2026-02-23)
+
+1. Updated `build_ontology_services` in `seer-backend/src/seer_backend/api/ontology.py` to construct `OpenAiChatCompletionsRuntime`.
+2. Removed Gemini binary discovery/runtime wiring and replaced it with OpenAI base URL/model config validation.
+3. Preserved graceful fallback behavior via unavailable model runtime stubs so ontology ingest/read paths remain isolated from copilot dependency failures.
+4. Added OpenAI runtime settings in `seer-backend/src/seer_backend/config/settings.py`:
+   - `SEER_OPENAI_BASE_URL`
+   - `SEER_OPENAI_MODEL`
+   - `SEER_OPENAI_API_KEY`
+   - `SEER_OPENAI_TIMEOUT_SECONDS`
+
 ## Progress Tracking
 
 - [x] Phase A complete
 - [x] Phase B complete
-- [ ] Phase C complete
+- [x] Phase C complete
 - [ ] Phase D complete
 - [ ] Phase E complete
 
 Current execution state:
 
-- `in_progress`: Phase C (service wiring + dependency behavior)
-- `completed`: Phase A (runtime contract + settings lock), Phase B (copilot runtime refactor)
+- `in_progress`: Phase D (tests, dependency, docs)
+- `completed`: Phase A (runtime contract + settings lock), Phase B (copilot runtime refactor), Phase C (service wiring + dependency behavior)
 
 ## Plan Maintenance Rules
 

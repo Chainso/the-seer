@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-from shutil import which
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from seer_backend.ai.ontology_copilot import (
-    GeminiCliRuntime,
-    GeminiCliSubprocessRuntime,
+    CopilotModelRuntime,
     OntologyCopilotService,
+    OpenAiChatCompletionsRuntime,
 )
 from seer_backend.config.settings import Settings
 from seer_backend.ontology.errors import (
@@ -36,7 +35,7 @@ from seer_backend.ontology.service import OntologyService, UnavailableOntologySe
 router = APIRouter(prefix="/ontology", tags=["ontology"])
 
 
-class _UnavailableGeminiRuntime:
+class _UnavailableModelRuntime:
     def __init__(self, reason: str) -> None:
         self.reason = reason
 
@@ -48,8 +47,8 @@ class _UnavailableGeminiRuntime:
 def build_ontology_services(
     settings: Settings,
 ) -> tuple[OntologyService | UnavailableOntologyService, OntologyCopilotService]:
-    fallback_runtime: GeminiCliRuntime = _UnavailableGeminiRuntime(
-        "Gemini CLI runtime is unavailable"
+    fallback_runtime: CopilotModelRuntime = _UnavailableModelRuntime(
+        "Model runtime is unavailable"
     )
     try:
         from seer_backend.ontology.repository import FusekiOntologyRepository
@@ -57,7 +56,7 @@ def build_ontology_services(
         from seer_backend.ontology.validation import ShaclValidator
     except Exception as exc:
         fallback = UnavailableOntologyService(f"ontology dependencies unavailable: {exc}")
-        return fallback, OntologyCopilotService(fallback, gemini_runtime=fallback_runtime)
+        return fallback, OntologyCopilotService(fallback, model_runtime=fallback_runtime)
 
     try:
         validator = ShaclValidator(settings.prophet_metamodel_path)
@@ -72,21 +71,27 @@ def build_ontology_services(
         ontology_service = OntologyService(repository=repository, validator=validator)
     except Exception as exc:
         fallback = UnavailableOntologyService(f"ontology service initialization failed: {exc}")
-        return fallback, OntologyCopilotService(fallback, gemini_runtime=fallback_runtime)
+        return fallback, OntologyCopilotService(fallback, model_runtime=fallback_runtime)
 
-    if which(settings.gemini_cli_bin) is None:
-        fallback_runtime = _UnavailableGeminiRuntime(
-            f"Gemini CLI binary '{settings.gemini_cli_bin}' is not on PATH"
+    if not settings.openai_base_url.strip():
+        fallback_runtime = _UnavailableModelRuntime(
+            "OpenAI runtime base URL is not configured"
+        )
+    elif not settings.openai_model.strip():
+        fallback_runtime = _UnavailableModelRuntime(
+            "OpenAI runtime model is not configured"
         )
     else:
-        fallback_runtime = GeminiCliSubprocessRuntime(
-            command=settings.gemini_cli_bin,
-            timeout_seconds=settings.gemini_timeout_seconds,
+        fallback_runtime = OpenAiChatCompletionsRuntime(
+            base_url=settings.openai_base_url,
+            model=settings.openai_model,
+            api_key=settings.openai_api_key,
+            timeout_seconds=settings.openai_timeout_seconds,
         )
 
     copilot_service = OntologyCopilotService(
         ontology_service,
-        gemini_runtime=fallback_runtime,
+        model_runtime=fallback_runtime,
         query_row_limit=settings.copilot_query_row_limit,
     )
     return ontology_service, copilot_service
