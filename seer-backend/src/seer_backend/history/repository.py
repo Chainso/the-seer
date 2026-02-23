@@ -20,6 +20,8 @@ from seer_backend.history.models import (
     ObjectHistoryRecord,
 )
 
+_MISSING = object()
+
 
 class HistoryRepository(Protocol):
     async def ensure_schema(self) -> None: ...
@@ -266,19 +268,19 @@ FORMAT JSON
 
         query = f"""
 SELECT
-  l.event_id,
-  l.object_history_id,
-  l.object_type,
-  l.object_ref,
-  l.object_ref_canonical,
-  l.object_ref_hash,
-  l.relation_role,
-  l.linked_at,
-  e.occurred_at,
-  e.event_type,
-  e.source,
-  o.object_payload,
-  o.recorded_at
+  l.event_id AS event_id,
+  l.object_history_id AS object_history_id,
+  l.object_type AS object_type,
+  l.object_ref AS object_ref,
+  l.object_ref_canonical AS object_ref_canonical,
+  l.object_ref_hash AS object_ref_hash,
+  l.relation_role AS relation_role,
+  l.linked_at AS linked_at,
+  e.occurred_at AS occurred_at,
+  e.event_type AS event_type,
+  e.source AS source,
+  o.object_payload AS object_payload,
+  o.recorded_at AS recorded_at
 FROM event_object_links AS l
 LEFT JOIN event_history AS e ON e.event_id = l.event_id
 LEFT JOIN object_history AS o ON o.object_history_id = l.object_history_id
@@ -493,21 +495,36 @@ def _object_row_from_clickhouse(row: dict[str, Any]) -> ObjectHistoryRecord:
 
 
 def _relation_row_from_clickhouse(row: dict[str, Any]) -> EventObjectRelationRecord:
-    occurred_at_raw = row.get("occurred_at")
-    recorded_at_raw = row.get("recorded_at")
+    occurred_at_raw = _row_value(row, "occurred_at", "e.occurred_at", default=None)
+    recorded_at_raw = _row_value(row, "recorded_at", "o.recorded_at", default=None)
     return EventObjectRelationRecord(
-        event_id=UUID(str(row["event_id"])),
-        object_history_id=UUID(str(row["object_history_id"])),
-        object_type=str(row["object_type"]),
-        object_ref=_load_json_object(row.get("object_ref")),
-        object_ref_canonical=str(row["object_ref_canonical"]),
-        object_ref_hash=int(row["object_ref_hash"]),
-        relation_role=_to_optional_string(row.get("relation_role")),
-        linked_at=_parse_clickhouse_datetime(str(row["linked_at"])),
+        event_id=UUID(str(_row_value(row, "event_id", "l.event_id"))),
+        object_history_id=UUID(
+            str(_row_value(row, "object_history_id", "l.object_history_id"))
+        ),
+        object_type=str(_row_value(row, "object_type", "l.object_type")),
+        object_ref=_load_json_object(
+            _row_value(row, "object_ref", "l.object_ref", default=None)
+        ),
+        object_ref_canonical=str(
+            _row_value(row, "object_ref_canonical", "l.object_ref_canonical")
+        ),
+        object_ref_hash=int(_row_value(row, "object_ref_hash", "l.object_ref_hash")),
+        relation_role=_to_optional_string(
+            _row_value(row, "relation_role", "l.relation_role", default=None)
+        ),
+        linked_at=_parse_clickhouse_datetime(
+            str(_row_value(row, "linked_at", "l.linked_at"))
+        ),
         occurred_at=_parse_clickhouse_datetime(str(occurred_at_raw)) if occurred_at_raw else None,
-        event_type=_to_optional_string(row.get("event_type")),
-        source=_to_optional_string(row.get("source")),
-        object_payload=_load_json_object(row.get("object_payload"), default=None),
+        event_type=_to_optional_string(
+            _row_value(row, "event_type", "e.event_type", default=None)
+        ),
+        source=_to_optional_string(_row_value(row, "source", "e.source", default=None)),
+        object_payload=_load_json_object(
+            _row_value(row, "object_payload", "o.object_payload", default=None),
+            default=None,
+        ),
         recorded_at=_parse_clickhouse_datetime(str(recorded_at_raw)) if recorded_at_raw else None,
     )
 
@@ -577,3 +594,12 @@ def _to_optional_string(raw: Any) -> str | None:
 def _to_optional_uuid(raw: Any) -> UUID | None:
     value = _to_optional_string(raw)
     return UUID(value) if value else None
+
+
+def _row_value(row: dict[str, Any], *keys: str, default: Any = _MISSING) -> Any:
+    for key in keys:
+        if key in row:
+            return row[key]
+    if default is not _MISSING:
+        return default
+    raise KeyError(keys[0] if keys else "missing row key")

@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
 from seer_backend.history.canonicalization import canonicalize_object_ref, xxhash64_uint64
-from seer_backend.history.repository import InMemoryHistoryRepository
+from seer_backend.history.repository import InMemoryHistoryRepository, _relation_row_from_clickhouse
 from seer_backend.history.service import HistoryService
 from seer_backend.main import create_app
 
@@ -231,3 +231,33 @@ def test_event_timeline_uses_occurred_at_ordering() -> None:
     assert timeline.status_code == 200
     items = timeline.json()["items"]
     assert [item["event_id"] for item in items] == [older_event_id, newer_event_id]
+
+
+def test_relation_row_parser_accepts_qualified_join_keys() -> None:
+    event_id = uuid4()
+    object_history_id = uuid4()
+    row = {
+        "l.event_id": str(event_id),
+        "l.object_history_id": str(object_history_id),
+        "l.object_type": "Order",
+        "l.object_ref": '{"order_id":"O-100"}',
+        "l.object_ref_canonical": '{"order_id":"O-100"}',
+        "l.object_ref_hash": 12345,
+        "l.relation_role": "primary",
+        "l.linked_at": "2026-02-22T10:00:00Z",
+        "e.occurred_at": "2026-02-22T10:00:00Z",
+        "e.event_type": "order.created",
+        "e.source": "erp",
+        "o.object_payload": '{"status":"created"}',
+        "o.recorded_at": "2026-02-22T10:00:00Z",
+    }
+
+    parsed = _relation_row_from_clickhouse(row)
+
+    assert parsed.event_id == UUID(str(event_id))
+    assert parsed.object_history_id == UUID(str(object_history_id))
+    assert parsed.object_type == "Order"
+    assert parsed.object_ref == {"order_id": "O-100"}
+    assert parsed.event_type == "order.created"
+    assert parsed.source == "erp"
+    assert parsed.object_payload == {"status": "created"}
