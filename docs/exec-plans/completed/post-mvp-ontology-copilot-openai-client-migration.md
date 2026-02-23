@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: Ontology Copilot Migration to OpenAI Python Client
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 2  
 **Agent slot:** AI-BE1  
 **Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`  
@@ -230,18 +230,32 @@ Exit criteria:
    - `docker-compose.yml` now configures OpenAI endpoint settings (with `host.docker.internal` host-gateway mapping).
    - `README.md` now documents OpenAI endpoint setup instead of host Gemini CLI passthrough.
 
+## Phase E Completion Notes (2026-02-23)
+
+1. Verification commands executed:
+   - `cd seer-backend && uv run pytest -q tests/test_ontology_phase1.py` -> `13 passed`
+   - `cd seer-backend && uv run pytest -q` -> `34 passed`
+   - `cd seer-backend && uv run ruff check src tests` -> `All checks passed`
+2. Acceptance criteria review:
+   - OpenAI client runtime is active for ontology copilot wiring.
+   - Runtime endpoint is env-driven via `SEER_OPENAI_BASE_URL`.
+   - Read-only SPARQL safeguards remain enforced.
+   - Copilot dependency failure behavior remains isolated and explicitly tested.
+   - Gemini runtime wiring/docs removed from active operator setup paths.
+3. Manual smoke calls against a live `http://localhost:8787/v1/chat/completions` endpoint were not executed in this pass; automated coverage and contract tests were used for completion evidence.
+
 ## Progress Tracking
 
 - [x] Phase A complete
 - [x] Phase B complete
 - [x] Phase C complete
 - [x] Phase D complete
-- [ ] Phase E complete
+- [x] Phase E complete
 
 Current execution state:
 
-- `in_progress`: Phase E (validation + handoff)
-- `completed`: Phase A (runtime contract + settings lock), Phase B (copilot runtime refactor), Phase C (service wiring + dependency behavior), Phase D (tests, dependency, docs)
+- `in_progress`: none
+- `completed`: Phase A (runtime contract + settings lock), Phase B (copilot runtime refactor), Phase C (service wiring + dependency behavior), Phase D (tests, dependency, docs), Phase E (validation + handoff)
 
 ## Plan Maintenance Rules
 

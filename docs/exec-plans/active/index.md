@@ -64,14 +64,15 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-copilot-openai-client-migration.md` (`agent_slot: AI-BE1`, in_progress)
+1. None currently.
 
 ## Post-MVP Status Tracking
 
 - [x] UI Experience Replatform complete
-- [ ] Ontology Copilot OpenAI client migration complete
+- [x] Ontology Copilot OpenAI client migration complete
 
 Current post-MVP execution state:
 
-- `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-copilot-openai-client-migration.md` (Phase A)
+- `in_progress`: none
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md` (all phases complete as of 2026-02-22)
+- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-copilot-openai-client-migration.md` (all phases complete as of 2026-02-23)
