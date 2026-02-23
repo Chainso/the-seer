@@ -475,6 +475,8 @@ export function OntologyExperienceV2() {
         </div>
       </section>
 
+      <OntologyCopilotPanel selectedConcept={focusConcept} />
+
       <section className={styles.workspace} aria-label="Ontology v2 workspace">
         <article className={styles.explorerPanel}>
           <header className={styles.panelHeader}>
@@ -639,7 +641,6 @@ export function OntologyExperienceV2() {
           </div>
         </article>
 
-        <OntologyCopilotPanel selectedConcept={focusConcept} />
       </section>
     </main>
   );
