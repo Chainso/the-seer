@@ -22,6 +22,7 @@ from seer_backend.ontology.errors import (
 from seer_backend.ontology.models import (
     CopilotChatRequest,
     CopilotChatResponse,
+    CopilotStructuredOutput,
     OntologyConceptDetail,
     OntologyConceptSummary,
     OntologyCurrentResponse,
@@ -39,8 +40,8 @@ class _UnavailableModelRuntime:
     def __init__(self, reason: str) -> None:
         self.reason = reason
 
-    async def run_prompt(self, prompt: str) -> str:
-        del prompt
+    async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
+        del messages
         raise OntologyDependencyUnavailableError(self.reason)
 
 

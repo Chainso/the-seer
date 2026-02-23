@@ -18,7 +18,8 @@ from seer_backend.ai.ontology_copilot import (
 from seer_backend.api.ontology import build_ontology_services
 from seer_backend.config.settings import Settings
 from seer_backend.main import create_app
-from seer_backend.ontology.errors import OntologyDependencyUnavailableError
+from seer_backend.ontology.errors import OntologyDependencyUnavailableError, OntologyError
+from seer_backend.ontology.models import CopilotStructuredOutput, CopilotToolCall
 from seer_backend.ontology.repository import InMemoryOntologyRepository
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 from seer_backend.ontology.validation import ShaclValidator
@@ -39,13 +40,13 @@ PROPHET_METAMODEL = REPO_ROOT / "prophet" / "prophet.ttl"
 
 
 class FakeModelRuntime(CopilotModelRuntime):
-    def __init__(self, output_text: str) -> None:
-        self.output_text = output_text
-        self.prompts: list[str] = []
+    def __init__(self, output: CopilotStructuredOutput) -> None:
+        self.output = output
+        self.messages: list[list[dict[str, str]]] = []
 
-    async def run_prompt(self, prompt: str) -> str:
-        self.prompts.append(prompt)
-        return self.output_text
+    async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
+        self.messages.append(messages)
+        return self.output
 
 
 def _build_client_with_runtime(model_runtime: CopilotModelRuntime) -> TestClient:
@@ -64,24 +65,22 @@ def _build_client_with_runtime(model_runtime: CopilotModelRuntime) -> TestClient
     return TestClient(app)
 
 
-def build_client(model_output_text: str) -> TestClient:
-    return _build_client_with_runtime(FakeModelRuntime(model_output_text))
+def build_client(model_output: CopilotStructuredOutput) -> TestClient:
+    return _build_client_with_runtime(FakeModelRuntime(model_output))
 
 
 @pytest.fixture
 def client() -> TestClient:
-    output = json.dumps(
-        {
-            "mode": "direct_answer",
-            "answer": "Ticket is an object model in the ontology.",
-            "evidence": [
-                {
-                    "concept_iri": "http://prophet.platform/local/support_local#Ticket",
-                    "query": "tool:list_concepts",
-                }
-            ],
-            "tool_call": None,
-        }
+    output = CopilotStructuredOutput(
+        mode="direct_answer",
+        answer="Ticket is an object model in the ontology.",
+        evidence=[
+            {
+                "concept_iri": "http://prophet.platform/local/support_local#Ticket",
+                "query": "tool:list_concepts",
+            }
+        ],
+        tool_call=None,
     )
     return build_client(output)
 
@@ -120,7 +119,7 @@ def test_openai_runtime_uses_chat_completions_json_contract() -> None:
                                 "message": type(
                                     "FakeMessage",
                                     (),
-                                    {"content": '{"mode":"direct_answer"}'},
+                                    {"content": "Ticket is an object model in the ontology."},
                                 )()
                             },
                         )()
@@ -138,15 +137,64 @@ def test_openai_runtime_uses_chat_completions_json_contract() -> None:
         timeout_seconds=12.0,
         client=FakeClient(),
     )
-    output = asyncio.run(runtime.run_prompt("Explain Ticket"))
+    output = asyncio.run(
+        runtime.run_messages([{"role": "user", "content": "Explain Ticket"}])
+    )
 
-    assert output == '{"mode":"direct_answer"}'
+    assert output.mode == "direct_answer"
+    assert output.answer == "Ticket is an object model in the ontology."
+    assert output.tool_call is None
     kwargs = captured["kwargs"]
     assert isinstance(kwargs, dict)
     assert kwargs["model"] == "local-model"
     assert kwargs["temperature"] == 0
-    assert kwargs["response_format"] == {"type": "json_object"}
+    assert kwargs["stream"] is False
+    assert kwargs["tool_choice"] == "auto"
+    assert isinstance(kwargs["tools"], list)
     assert kwargs["messages"] == [{"role": "user", "content": "Explain Ticket"}]
+
+
+def test_openai_runtime_supports_native_tool_call_response() -> None:
+    class FakeCompletions:
+        async def create(self, **kwargs: object) -> object:
+            del kwargs
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "sparql_read_only_query",
+                                        "arguments": json.dumps(
+                                            {"query": "SELECT ?s WHERE { ?s ?p ?o }"}
+                                        ),
+                                    }
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        chat = type("FakeChat", (), {"completions": FakeCompletions()})()
+
+    runtime = OpenAiChatCompletionsRuntime(
+        base_url="http://localhost:8787/v1",
+        model="local-model",
+        api_key="test-key",
+        timeout_seconds=12.0,
+        client=FakeClient(),
+    )
+    output = asyncio.run(
+        runtime.run_messages([{"role": "user", "content": "Explain Ticket"}])
+    )
+    assert output.mode == "tool_call"
+    assert output.tool_call is not None
+    assert output.tool_call.tool == "sparql_read_only_query"
+    assert output.tool_call.query == "SELECT ?s WHERE { ?s ?p ?o }"
 
 
 def test_build_services_keeps_ontology_available_when_openai_unconfigured() -> None:
@@ -161,8 +209,8 @@ def test_build_services_keeps_ontology_available_when_openai_unconfigured() -> N
 
 def test_copilot_returns_503_when_model_runtime_is_unavailable() -> None:
     class UnavailableRuntime(CopilotModelRuntime):
-        async def run_prompt(self, prompt: str) -> str:
-            del prompt
+        async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
+            del messages
             raise OntologyDependencyUnavailableError("OpenAI endpoint is unavailable")
 
     client = _build_client_with_runtime(UnavailableRuntime())
@@ -175,6 +223,39 @@ def test_copilot_returns_503_when_model_runtime_is_unavailable() -> None:
 
     assert response.status_code == 503
     assert "unavailable" in response.json()["detail"].lower()
+
+
+def test_copilot_builds_system_and_conversation_messages() -> None:
+    runtime = FakeModelRuntime(
+        CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="ok",
+            evidence=[],
+            tool_call=None,
+        )
+    )
+    client = _build_client_with_runtime(runtime)
+    _ingest_success(client, release_id="phase1-message-roles")
+
+    response = client.post(
+        "/api/v1/ontology/copilot",
+        json={
+            "question": "What is Ticket?",
+            "conversation": [
+                {"role": "user", "content": "First question"},
+                {"role": "assistant", "content": "First answer"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert runtime.messages
+    latest = runtime.messages[-1]
+    assert latest[0]["role"] == "system"
+    assert latest[1]["role"] == "system"
+    assert latest[2] == {"role": "user", "content": "First question"}
+    assert latest[3] == {"role": "assistant", "content": "First answer"}
+    assert latest[4] == {"role": "user", "content": "What is Ticket?"}
 
 
 def test_valid_ingest_sets_current_release_pointer(client: TestClient) -> None:
@@ -305,28 +386,26 @@ INSERT DATA {
 
 
 def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
-    model_output = json.dumps(
-        {
-            "mode": "tool_call",
-            "answer": "I need a read-only query to confirm the ontology description.",
-            "evidence": [
-                {
-                    "concept_iri": "http://prophet.platform/local/support_local#ont_support_local",
-                    "query": "tool:model-tool-call",
-                }
-            ],
-            "tool_call": {
-                "tool": "sparql_read_only_query",
-                "query": (
-                    "PREFIX prophet: <http://prophet.platform/ontology#>\n"
-                    "SELECT ?description\n"
-                    "WHERE {\n"
-                    "  <http://prophet.platform/local/support_local#ont_support_local> "
-                    "prophet:description ?description .\n"
-                    "}"
-                ),
-            },
-        }
+    model_output = CopilotStructuredOutput(
+        mode="tool_call",
+        answer="I need a read-only query to confirm the ontology description.",
+        evidence=[
+            {
+                "concept_iri": "http://prophet.platform/local/support_local#ont_support_local",
+                "query": "tool:model-tool-call",
+            }
+        ],
+        tool_call=CopilotToolCall(
+            tool="sparql_read_only_query",
+            query=(
+                "PREFIX prophet: <http://prophet.platform/ontology#>\n"
+                "SELECT ?description\n"
+                "WHERE {\n"
+                "  <http://prophet.platform/local/support_local#ont_support_local> "
+                "prophet:description ?description .\n"
+                "}"
+            ),
+        ),
     )
     client = build_client(model_output)
     _ingest_success(client, release_id="phase1-copilot-tool")
@@ -352,16 +431,14 @@ def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
 
 
 def test_copilot_rejects_unsafe_tool_call_query() -> None:
-    model_output = json.dumps(
-        {
-            "mode": "tool_call",
-            "answer": "Attempting a tool call.",
-            "evidence": [],
-            "tool_call": {
-                "tool": "sparql_read_only_query",
-                "query": 'INSERT DATA { <urn:test:s> <urn:test:p> "x" . }',
-            },
-        }
+    model_output = CopilotStructuredOutput(
+        mode="tool_call",
+        answer="Attempting a tool call.",
+        evidence=[],
+        tool_call=CopilotToolCall(
+            tool="sparql_read_only_query",
+            query='INSERT DATA { <urn:test:s> <urn:test:p> "x" . }',
+        ),
     )
     client = build_client(model_output)
     _ingest_success(client, release_id="phase1-copilot-unsafe")
@@ -380,9 +457,14 @@ def test_copilot_rejects_unsafe_tool_call_query() -> None:
     assert "not allowed" in body["tool_result"]["error"].lower()
 
 
-def test_copilot_returns_502_on_non_json_model_output() -> None:
-    client = build_client("this is not json")
-    _ingest_success(client, release_id="phase1-copilot-invalid-json")
+def test_copilot_returns_502_on_runtime_error() -> None:
+    class BrokenRuntime(CopilotModelRuntime):
+        async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
+            del messages
+            raise OntologyError("runtime parse failed")
+
+    client = _build_client_with_runtime(BrokenRuntime())
+    _ingest_success(client, release_id="phase1-copilot-runtime-error")
 
     response = client.post(
         "/api/v1/ontology/copilot",
@@ -390,26 +472,4 @@ def test_copilot_returns_502_on_non_json_model_output() -> None:
     )
 
     assert response.status_code == 502
-    assert "not valid json" in response.json()["detail"].lower()
-
-
-def test_copilot_returns_502_on_schema_invalid_model_output() -> None:
-    client = build_client(
-        json.dumps(
-            {
-                "mode": "tool_call",
-                "answer": "Tool call missing payload.",
-                "evidence": [],
-                "tool_call": None,
-            }
-        )
-    )
-    _ingest_success(client, release_id="phase1-copilot-invalid-schema")
-
-    response = client.post(
-        "/api/v1/ontology/copilot",
-        json={"question": "What is Ticket?", "conversation": []},
-    )
-
-    assert response.status_code == 502
-    assert "schema validation" in response.json()["detail"].lower()
+    assert "runtime parse failed" in response.json()["detail"].lower()

@@ -25,49 +25,52 @@ from seer_backend.ontology.models import (
     OntologyConceptDetail,
     OntologyConceptSummary,
     OntologySparqlQueryResponse,
-    format_copilot_output_validation_error,
-    parse_copilot_structured_output,
 )
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
 _SYSTEM_PROMPT = """
 You are Seer's ontology copilot.
-Return only a single JSON object and no markdown.
-Allowed response schemas:
-1) direct answer:
-{
-  "mode": "direct_answer",
-  "answer": "string",
-  "evidence": [{"concept_iri": "string", "query": "string"}],
-  "tool_call": null
-}
-2) single tool call:
-{
-  "mode": "tool_call",
-  "answer": "string",
-  "evidence": [{"concept_iri": "string", "query": "string"}],
-  "tool_call": {
-    "tool": "sparql_read_only_query",
-    "query": "SELECT ... or ASK ..."
-  }
-}
 Rules:
-- Tool call count is at most one.
-- SPARQL must be read-only SELECT or ASK.
-- Do not emit INSERT, DELETE, LOAD, CLEAR, CREATE, DROP, COPY, MOVE, ADD.
-- Do not emit FROM, GRAPH, SERVICE, WITH, or USING.
-- If context is insufficient, return mode=direct_answer with a concise limitation note.
+- Use the available tool only for read-only SPARQL SELECT or ASK queries.
+- Never propose or execute mutating SPARQL.
+- Keep answers concise and grounded in ontology context.
+- If context is insufficient, clearly state the limitation.
 """.strip()
+
+_SPARQL_READ_ONLY_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "sparql_read_only_query",
+        "description": (
+            "Run a read-only SPARQL query against ontology data. "
+            "Only SELECT or ASK queries are allowed."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Read-only SPARQL query text (SELECT or ASK only).",
+                }
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 
 class CopilotModelRuntime(Protocol):
     """Abstract runtime for model completion in tests and production."""
 
-    async def run_prompt(self, prompt: str) -> str: ...
+    async def run_messages(
+        self,
+        messages: list[dict[str, str]],
+    ) -> CopilotStructuredOutput: ...
 
 
 class OpenAiChatCompletionsRuntime:
-    """Executes OpenAI Chat Completions calls and returns raw JSON text."""
+    """Executes OpenAI Chat Completions calls and returns structured copilot output."""
 
     def __init__(
         self,
@@ -86,13 +89,18 @@ class OpenAiChatCompletionsRuntime:
             timeout=timeout_seconds,
         )
 
-    async def run_prompt(self, prompt: str) -> str:
+    async def run_messages(
+        self,
+        messages: list[dict[str, str]],
+    ) -> CopilotStructuredOutput:
         try:
             response = await self._client.chat.completions.create(
                 model=self._model,
-                messages=[{"role": "user", "content": prompt}],
+                messages=messages,
+                stream=False,
                 temperature=0,
-                response_format={"type": "json_object"},
+                tools=[_SPARQL_READ_ONLY_TOOL_SCHEMA],
+                tool_choice="auto",
             )
         except APIConnectionError as exc:
             raise OntologyDependencyUnavailableError(
@@ -105,17 +113,11 @@ class OpenAiChatCompletionsRuntime:
         except APIError as exc:
             raise OntologyError(f"OpenAI chat completion failed: {exc}") from exc
 
-        if not response.choices:
-            raise OntologyError("OpenAI chat completion returned no choices")
-
-        output_text = response.choices[0].message.content
-        if not isinstance(output_text, str) or not output_text.strip():
-            raise OntologyError("OpenAI chat completion returned empty content")
-        return output_text.strip()
+        return _to_structured_output(response)
 
 
 class OntologyCopilotService:
-    """Copilot orchestration with model JSON output and read-only tool execution."""
+    """Copilot orchestration with native tool-calling and read-only tool execution."""
 
     def __init__(
         self,
@@ -134,15 +136,14 @@ class OntologyCopilotService:
     ) -> CopilotChatResponse:
         current = await self._ontology_service.current()
         context = await self._build_context(question)
-        prompt = _build_prompt(
+        messages = _build_messages(
             question=question,
             conversation=conversation or [],
             current_release_id=current.release_id,
             context=context,
         )
 
-        raw_output = await self._model_runtime.run_prompt(prompt)
-        model_output = _parse_model_output(raw_output)
+        model_output = await self._model_runtime.run_messages(messages)
 
         tool_result: CopilotToolResult | None = None
         if model_output.mode == "tool_call" and model_output.tool_call is not None:
@@ -206,41 +207,189 @@ class OntologyCopilotService:
         )
 
 
-def _parse_model_output(raw_output: str) -> CopilotStructuredOutput:
-    try:
-        # Validate raw JSON parse before schema validation for clearer diagnostics.
-        json.loads(raw_output)
-    except json.JSONDecodeError as exc:
-        raise OntologyError(f"Model output is not valid JSON: {exc}") from exc
+def _to_structured_output(response: Any) -> CopilotStructuredOutput:
+    if isinstance(response, str):
+        return _structured_output_from_string_payload(response)
+
+    choices = getattr(response, "choices", None)
+    if choices is None and isinstance(response, dict):
+        choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise OntologyError("OpenAI chat completion returned no choices")
+
+    return _structured_output_from_choice(choices[0])
+
+
+def _structured_output_from_string_payload(payload: str) -> CopilotStructuredOutput:
+    text = payload.strip()
+    if not text:
+        return _direct_answer_output("")
 
     try:
-        return parse_copilot_structured_output(raw_output)
-    except ValidationError as exc:
-        details = format_copilot_output_validation_error(exc)
-        raise OntologyError(f"Model JSON failed schema validation: {details}") from exc
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return _direct_answer_output(text)
+
+    if isinstance(parsed, dict) and isinstance(parsed.get("choices"), list):
+        choices = parsed["choices"]
+        if choices:
+            return _structured_output_from_choice(choices[0])
+
+    if isinstance(parsed, dict):
+        try:
+            return CopilotStructuredOutput.model_validate(parsed)
+        except ValidationError:
+            answer = parsed.get("answer")
+            if isinstance(answer, str):
+                return _direct_answer_output(answer)
+
+    if isinstance(parsed, str):
+        return _direct_answer_output(parsed)
+
+    return _direct_answer_output(text)
 
 
-def _build_prompt(
+def _structured_output_from_choice(choice: Any) -> CopilotStructuredOutput:
+    message = _extract_choice_message(choice)
+    content = _extract_choice_message_content(choice).strip()
+
+    query = _extract_tool_call_query_from_message(message)
+    if query is not None:
+        return CopilotStructuredOutput(
+            mode="tool_call",
+            answer=content or "Running read-only SPARQL query for ontology evidence.",
+            evidence=[],
+            tool_call=CopilotToolCall(tool="sparql_read_only_query", query=query),
+        )
+
+    return _direct_answer_output(content)
+
+
+def _extract_choice_message(choice: Any) -> Any:
+    message = getattr(choice, "message", None)
+    if message is None and isinstance(choice, dict):
+        message = choice.get("message")
+    return message
+
+
+def _extract_choice_message_content(choice: Any) -> str:
+    message = _extract_choice_message(choice)
+    if message is None:
+        return ""
+
+    content = getattr(message, "content", None)
+    if content is None and isinstance(message, dict):
+        content = message.get("content")
+    return _normalize_content(content)
+
+
+def _normalize_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text_value = item.get("text")
+                if isinstance(text_value, str):
+                    parts.append(text_value)
+            else:
+                text_attr = getattr(item, "text", None)
+                if isinstance(text_attr, str):
+                    parts.append(text_attr)
+        return "".join(parts)
+    return ""
+
+
+def _extract_tool_call_query_from_message(message: Any) -> str | None:
+    if message is None:
+        return None
+
+    tool_calls = getattr(message, "tool_calls", None)
+    if tool_calls is None and isinstance(message, dict):
+        tool_calls = message.get("tool_calls")
+    if not isinstance(tool_calls, list) or not tool_calls:
+        return None
+
+    first_tool = tool_calls[0]
+    function_payload = getattr(first_tool, "function", None)
+    if function_payload is None and isinstance(first_tool, dict):
+        function_payload = first_tool.get("function")
+    if function_payload is None:
+        return None
+
+    function_name = getattr(function_payload, "name", None)
+    if function_name is None and isinstance(function_payload, dict):
+        function_name = function_payload.get("name")
+    if function_name != "sparql_read_only_query":
+        return None
+
+    arguments: Any = getattr(function_payload, "arguments", None)
+    if arguments is None and isinstance(function_payload, dict):
+        arguments = function_payload.get("arguments")
+
+    return _extract_tool_query_from_arguments(arguments)
+
+
+def _extract_tool_query_from_arguments(arguments: Any) -> str | None:
+    if isinstance(arguments, dict):
+        query = arguments.get("query")
+        if isinstance(query, str) and query.strip():
+            return query.strip()
+        return None
+
+    if not isinstance(arguments, str):
+        return None
+
+    text = arguments.strip()
+    if not text:
+        return None
+
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return text if len(text) >= 3 else None
+
+    if isinstance(parsed, dict):
+        query = parsed.get("query")
+        if isinstance(query, str) and query.strip():
+            return query.strip()
+
+    return None
+
+
+def _direct_answer_output(answer: str) -> CopilotStructuredOutput:
+    normalized = answer.strip() or "I do not have enough ontology context to answer."
+    return CopilotStructuredOutput(
+        mode="direct_answer",
+        answer=normalized,
+        evidence=[],
+        tool_call=None,
+    )
+
+
+def _build_messages(
     question: str,
     conversation: list[CopilotConversationMessage],
     current_release_id: str | None,
     context: str,
-) -> str:
-    conversation_lines = []
-    for message in conversation:
-        conversation_lines.append(f"{message.role.upper()}: {message.content}")
-    conversation_lines.append(f"USER: {question}")
-    full_conversation = "\n".join(conversation_lines)
-
+) -> list[dict[str, str]]:
     release_text = current_release_id or "none"
-    return (
-        f"{_SYSTEM_PROMPT}\n\n"
-        f"Current ontology release: {release_text}\n\n"
-        "Conversation context:\n"
-        f"{full_conversation}\n\n"
-        "Ontology and evidence context:\n"
-        f"{context}\n"
-    )
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": (
+                f"Current ontology release: {release_text}\n\n"
+                "Ontology and evidence context:\n"
+                f"{context}"
+            ),
+        },
+    ]
+    for message in conversation:
+        messages.append({"role": message.role, "content": message.content})
+    messages.append({"role": "user", "content": question})
+    return messages
 
 
 def _format_context_lines(

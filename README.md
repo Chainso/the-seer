@@ -143,7 +143,7 @@ cd seer-ui && npm ci && npm run dev
 Defaults:
 
 1. `SEER_OPENAI_BASE_URL=http://host.docker.internal:8787/v1`
-2. `SEER_OPENAI_MODEL=gpt-4o-mini`
+2. `SEER_OPENAI_MODEL=gemini-3-flash-preview`
 3. `SEER_OPENAI_API_KEY=` (empty is acceptable for local endpoints that ignore API keys)
 
 If your endpoint differs, override these values in `.env`.
