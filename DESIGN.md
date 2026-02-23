@@ -21,6 +21,7 @@ Capture design-level decisions that sit between product vision and concrete arch
 4. Object-centric process mining is implemented in Python with `pm4py`.
 5. RCA uses a pluggable extraction layer plus ranking methods.
 6. AI UX uses a shared backend gateway with module-scoped permissions and policy-aware evidence/caveat rendering.
+7. Ontology concept discovery for explorer workflows is backend-filtered to user-graph concepts and graph-safe categories only.
 
 ## Design Docs Index
 

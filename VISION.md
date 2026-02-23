@@ -116,6 +116,12 @@ UI supports:
 - ontology graph exploration,
 - ontology search and concept inspection,
 - ontology context in analytics and AI responses.
+- graph-oriented concept discovery sourced from backend-filtered user ontology concepts only.
+
+Ontology explorer constraints:
+- concept lists and search results must exclude Prophet base concepts.
+- graph visualization must be limited to object/action/event/trigger concepts and their relationships.
+- property and custom-type concepts are not shown in ontology graph navigation views.
 
 UI does not support:
 - ontology creation/editing,

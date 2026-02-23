@@ -73,6 +73,7 @@ Expected internal service areas:
    - SHACL validation against Prophet base metamodel
    - Fuseki named-graph upsert
    - read-only SPARQL query service
+   - concept index/list APIs filtered to user graph concepts used by ontology exploration
 2. `history` domain:
    - event parsing and validation
    - writes to `event_history`, `object_history`, `event_object_links`
@@ -156,6 +157,7 @@ Flow:
    - input: Prophet local Turtle files
    - validation: SHACL against Prophet base metamodel
    - storage: URI-identity-driven upsert into Fuseki named graphs
+   - explorer query contract: concept lists exclude Prophet base concepts and non-graph categories
 2. Event history contract:
    - table: `event_history`
    - identity: UUID `event_id`
@@ -200,6 +202,8 @@ The following invariants are deliberate and must hold unless explicitly changed 
 18. Multi-tenant data-layer design is out of current architecture scope.
 19. Heavy reliability subsystems (replay/dead-letter/schema-version governance) are intentionally out of current scope.
 20. Governance/trust-center modules are intentionally out of current scope.
+21. Ontology concept index responses for UI exploration exclude Prophet base concepts and non-graph concept categories.
+22. Ontology graph views are limited to object/action/event/trigger concepts; property and custom-type concepts are excluded from graph navigation.
 
 ## Boundaries and Dependency Direction
 

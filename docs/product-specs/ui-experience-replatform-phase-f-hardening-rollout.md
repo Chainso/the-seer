@@ -2,7 +2,7 @@
 
 **Status:** completed  
 **Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md`  
-**Last updated:** 2026-02-22
+**Last updated:** 2026-02-23
 
 ---
 
@@ -33,7 +33,7 @@ Automated test coverage areas:
 Manual smoke checklist:
 
 1. `/` loads and module navigation links are visible.
-2. `/ontology` allows tab + concept navigation without edit controls.
+2. `/ontology` allows tab + concept navigation without edit controls and excludes Prophet base/property/custom-type concepts from graph-oriented concept navigation.
 3. `/process` supports mining run, selector drill-down, and AI interpret action.
 4. `/root-cause` supports run, evidence lookup, and insight compare interactions.
 5. `/insights` runs guided orchestration and shows stage progression.
