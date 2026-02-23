@@ -216,18 +216,32 @@ Exit criteria:
    - `SEER_OPENAI_API_KEY`
    - `SEER_OPENAI_TIMEOUT_SECONDS`
 
+## Phase D Completion Notes (2026-02-23)
+
+1. Added official OpenAI SDK dependency to `seer-backend/pyproject.toml`.
+2. Updated backend tests in `seer-backend/tests/test_ontology_phase1.py` to:
+   - assert OpenAI `chat.completions` invocation contract,
+   - validate dependency-unavailable copilot behavior (`503`),
+   - preserve structured-output and read-only tool-call regression coverage.
+3. Updated environment templates:
+   - `.env.example` now documents `SEER_OPENAI_*` runtime variables.
+   - `seer-backend/.env.example` now uses OpenAI base URL/model/api key/timeout settings.
+4. Updated runtime/deploy docs and compose:
+   - `docker-compose.yml` now configures OpenAI endpoint settings (with `host.docker.internal` host-gateway mapping).
+   - `README.md` now documents OpenAI endpoint setup instead of host Gemini CLI passthrough.
+
 ## Progress Tracking
 
 - [x] Phase A complete
 - [x] Phase B complete
 - [x] Phase C complete
-- [ ] Phase D complete
+- [x] Phase D complete
 - [ ] Phase E complete
 
 Current execution state:
 
-- `in_progress`: Phase D (tests, dependency, docs)
-- `completed`: Phase A (runtime contract + settings lock), Phase B (copilot runtime refactor), Phase C (service wiring + dependency behavior)
+- `in_progress`: Phase E (validation + handoff)
+- `completed`: Phase A (runtime contract + settings lock), Phase B (copilot runtime refactor), Phase C (service wiring + dependency behavior), Phase D (tests, dependency, docs)
 
 ## Plan Maintenance Rules
 

@@ -16,12 +16,13 @@ services:
       SEER_CLICKHOUSE_HOST: clickhouse
       SEER_CLICKHOUSE_PORT: 8123
       SEER_PROPHET_METAMODEL_PATH: /prophet/prophet.ttl
-      SEER_GEMINI_CLI_BIN: /host-gemini/bin/gemini
-      PATH: /host-gemini/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-http://host.docker.internal:8787/v1}
+      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gpt-4o-mini}
+      SEER_OPENAI_API_KEY: ${SEER_OPENAI_API_KEY:-}
     volumes:
       - ./prophet:/prophet:ro
-      - ${SEER_GEMINI_HOST_NODE_DIR:-${NVM_DIR:-${HOME}/.nvm}/versions/node/${SEER_GEMINI_NODE_VERSION:-v24.10.0}}:/host-gemini:ro
-      - ${SEER_GEMINI_HOST_AUTH_DIR:-${HOME}/.gemini}:/root/.gemini:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - fuseki
       - clickhouse

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from asyncio.subprocess import PIPE
 from pathlib import Path
 
 import pytest
@@ -12,13 +11,14 @@ pytest.importorskip("rdflib")
 pytest.importorskip("pyshacl")
 
 from seer_backend.ai.ontology_copilot import (
-    GeminiCliRuntime,
-    GeminiCliSubprocessRuntime,
+    CopilotModelRuntime,
     OntologyCopilotService,
+    OpenAiChatCompletionsRuntime,
 )
 from seer_backend.api.ontology import build_ontology_services
 from seer_backend.config.settings import Settings
 from seer_backend.main import create_app
+from seer_backend.ontology.errors import OntologyDependencyUnavailableError
 from seer_backend.ontology.repository import InMemoryOntologyRepository
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 from seer_backend.ontology.validation import ShaclValidator
@@ -38,7 +38,7 @@ INVALID_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "ontology_inval
 PROPHET_METAMODEL = REPO_ROOT / "prophet" / "prophet.ttl"
 
 
-class FakeGeminiRuntime(GeminiCliRuntime):
+class FakeModelRuntime(CopilotModelRuntime):
     def __init__(self, output_text: str) -> None:
         self.output_text = output_text
         self.prompts: list[str] = []
@@ -48,21 +48,24 @@ class FakeGeminiRuntime(GeminiCliRuntime):
         return self.output_text
 
 
-def build_client(gemini_output_text: str) -> TestClient:
+def _build_client_with_runtime(model_runtime: CopilotModelRuntime) -> TestClient:
     settings = Settings(prophet_metamodel_path=str(PROPHET_METAMODEL))
     app = create_app(settings=settings)
 
     repository = InMemoryOntologyRepository()
     validator = ShaclValidator(str(PROPHET_METAMODEL))
     ontology_service = OntologyService(repository=repository, validator=validator)
-    gemini_runtime = FakeGeminiRuntime(gemini_output_text)
     app.state.ontology_service = ontology_service
     app.state.ontology_copilot_service = OntologyCopilotService(
         ontology_service=ontology_service,
-        gemini_runtime=gemini_runtime,
+        model_runtime=model_runtime,
         query_row_limit=5,
     )
     return TestClient(app)
+
+
+def build_client(model_output_text: str) -> TestClient:
+    return _build_client_with_runtime(FakeModelRuntime(model_output_text))
 
 
 @pytest.fixture
@@ -99,48 +102,79 @@ def _ingest_success(client: TestClient, release_id: str) -> None:
     assert response.status_code == 200, response.text
 
 
-def test_gemini_subprocess_runtime_uses_headless_json_contract(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_openai_runtime_uses_chat_completions_json_contract() -> None:
     captured: dict[str, object] = {}
 
-    class FakeProcess:
-        returncode = 0
+    class FakeCompletions:
+        async def create(self, **kwargs: object) -> object:
+            captured["kwargs"] = kwargs
+            return type(
+                "FakeResponse",
+                (),
+                {
+                    "choices": [
+                        type(
+                            "FakeChoice",
+                            (),
+                            {
+                                "message": type(
+                                    "FakeMessage",
+                                    (),
+                                    {"content": '{"mode":"direct_answer"}'},
+                                )()
+                            },
+                        )()
+                    ]
+                },
+            )()
 
-        async def communicate(self) -> tuple[bytes, bytes]:
-            return b'{"mode":"direct_answer"}', b""
+    class FakeClient:
+        chat = type("FakeChat", (), {"completions": FakeCompletions()})()
 
-    async def fake_create_subprocess_exec(*args: object, **kwargs: object) -> FakeProcess:
-        captured["args"] = args
-        captured["kwargs"] = kwargs
-        return FakeProcess()
-
-    monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_create_subprocess_exec)
-
-    runtime = GeminiCliSubprocessRuntime(command="gemini", timeout_seconds=12.0)
+    runtime = OpenAiChatCompletionsRuntime(
+        base_url="http://localhost:8787/v1",
+        model="local-model",
+        api_key="test-key",
+        timeout_seconds=12.0,
+        client=FakeClient(),
+    )
     output = asyncio.run(runtime.run_prompt("Explain Ticket"))
 
     assert output == '{"mode":"direct_answer"}'
-    assert captured["args"] == (
-        "gemini",
-        "-p",
-        "Explain Ticket",
-        "--output-format",
-        "json",
-    )
     kwargs = captured["kwargs"]
     assert isinstance(kwargs, dict)
-    assert kwargs["stdout"] is PIPE
-    assert kwargs["stderr"] is PIPE
+    assert kwargs["model"] == "local-model"
+    assert kwargs["temperature"] == 0
+    assert kwargs["response_format"] == {"type": "json_object"}
+    assert kwargs["messages"] == [{"role": "user", "content": "Explain Ticket"}]
 
 
-def test_build_services_keeps_ontology_available_when_gemini_missing() -> None:
+def test_build_services_keeps_ontology_available_when_openai_unconfigured() -> None:
     settings = Settings(
         prophet_metamodel_path=str(PROPHET_METAMODEL),
-        gemini_cli_bin="missing-gemini-cli",
+        openai_base_url="",
+        openai_model="",
     )
     ontology_service, _ = build_ontology_services(settings)
     assert not isinstance(ontology_service, UnavailableOntologyService)
+
+
+def test_copilot_returns_503_when_model_runtime_is_unavailable() -> None:
+    class UnavailableRuntime(CopilotModelRuntime):
+        async def run_prompt(self, prompt: str) -> str:
+            del prompt
+            raise OntologyDependencyUnavailableError("OpenAI endpoint is unavailable")
+
+    client = _build_client_with_runtime(UnavailableRuntime())
+    _ingest_success(client, release_id="phase1-copilot-runtime-unavailable")
+
+    response = client.post(
+        "/api/v1/ontology/copilot",
+        json={"question": "What is Ticket?", "conversation": []},
+    )
+
+    assert response.status_code == 503
+    assert "unavailable" in response.json()["detail"].lower()
 
 
 def test_valid_ingest_sets_current_release_pointer(client: TestClient) -> None:
@@ -271,14 +305,14 @@ INSERT DATA {
 
 
 def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
-    gemini_output = json.dumps(
+    model_output = json.dumps(
         {
             "mode": "tool_call",
             "answer": "I need a read-only query to confirm the ontology description.",
             "evidence": [
                 {
                     "concept_iri": "http://prophet.platform/local/support_local#ont_support_local",
-                    "query": "tool:gemini-tool-call",
+                    "query": "tool:model-tool-call",
                 }
             ],
             "tool_call": {
@@ -294,7 +328,7 @@ def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
             },
         }
     )
-    client = build_client(gemini_output)
+    client = build_client(model_output)
     _ingest_success(client, release_id="phase1-copilot-tool")
 
     response = client.post(
@@ -318,7 +352,7 @@ def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
 
 
 def test_copilot_rejects_unsafe_tool_call_query() -> None:
-    gemini_output = json.dumps(
+    model_output = json.dumps(
         {
             "mode": "tool_call",
             "answer": "Attempting a tool call.",
@@ -329,7 +363,7 @@ def test_copilot_rejects_unsafe_tool_call_query() -> None:
             },
         }
     )
-    client = build_client(gemini_output)
+    client = build_client(model_output)
     _ingest_success(client, release_id="phase1-copilot-unsafe")
 
     response = client.post(
@@ -346,7 +380,7 @@ def test_copilot_rejects_unsafe_tool_call_query() -> None:
     assert "not allowed" in body["tool_result"]["error"].lower()
 
 
-def test_copilot_returns_502_on_non_json_cli_output() -> None:
+def test_copilot_returns_502_on_non_json_model_output() -> None:
     client = build_client("this is not json")
     _ingest_success(client, release_id="phase1-copilot-invalid-json")
 
@@ -359,7 +393,7 @@ def test_copilot_returns_502_on_non_json_cli_output() -> None:
     assert "not valid json" in response.json()["detail"].lower()
 
 
-def test_copilot_returns_502_on_schema_invalid_cli_output() -> None:
+def test_copilot_returns_502_on_schema_invalid_model_output() -> None:
     client = build_client(
         json.dumps(
             {

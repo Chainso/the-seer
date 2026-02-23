@@ -136,15 +136,17 @@ cd seer-backend && uv sync --extra dev && uv run uvicorn seer_backend.main:app -
 cd seer-ui && npm ci && npm run dev
 ```
 
-## Host Gemini CLI In Docker
+## OpenAI Endpoint In Docker
 
-`seer-backend` now uses host Gemini CLI/auth by default in compose.
+`seer-backend` now uses an OpenAI-compatible Chat Completions endpoint for ontology copilot runtime.
 
-If your local paths differ, override:
+Defaults:
 
-1. `SEER_GEMINI_HOST_NODE_DIR` (Node version root containing `bin/` and `lib/`)
-2. `SEER_GEMINI_NODE_VERSION` (used with `${NVM_DIR}`/`${HOME}` defaults)
-3. `SEER_GEMINI_HOST_AUTH_DIR` (typically `~/.gemini`)
+1. `SEER_OPENAI_BASE_URL=http://host.docker.internal:8787/v1`
+2. `SEER_OPENAI_MODEL=gpt-4o-mini`
+3. `SEER_OPENAI_API_KEY=` (empty is acceptable for local endpoints that ignore API keys)
+
+If your endpoint differs, override these values in `.env`.
 
 Then start normally:
 
