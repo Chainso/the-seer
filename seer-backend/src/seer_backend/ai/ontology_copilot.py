@@ -27,7 +27,7 @@ from seer_backend.ontology.models import (
 )
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
-_TOOL_CALL_MAX_ROUNDS = 3
+_TOOL_CALL_MAX_ROUNDS = 20
 
 _BASE_ONTOLOGY_SYSTEM_PROMPT_TEMPLATE = """
 Authoritative Prophet base ontology (verbatim Turtle).
