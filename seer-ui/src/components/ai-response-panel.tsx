@@ -1,6 +1,6 @@
 "use client";
 
-import { type ComponentProps, useMemo } from "react";
+import { type ComponentProps, type ReactNode, useMemo } from "react";
 
 import type { AiEvidenceItem } from "@/lib/backend-ai";
 import { redactAssistantPanelContent } from "@/lib/assistant/redaction";
@@ -9,6 +9,7 @@ export type AiResponsePanelProps = Omit<ComponentProps<"section">, "title"> & {
   title?: string;
   heading?: string;
   summary: string;
+  renderSummary?: (summary: string) => ReactNode;
   evidence: AiEvidenceItem[];
   caveats: string[];
   nextActions: string[];
@@ -21,6 +22,7 @@ export function AiResponsePanel({
   title,
   heading,
   summary,
+  renderSummary,
   evidence,
   caveats,
   nextActions,
@@ -57,7 +59,7 @@ export function AiResponsePanel({
       {...props}
     >
       <h3>{panelHeading}</h3>
-      <p>{panel.value.summary}</p>
+      {renderSummary ? renderSummary(panel.value.summary) : <p>{panel.value.summary}</p>}
 
       {showSafeModeBadge && safeMode && panel.redacted ? (
         <p className="status ok">Safe mode on (redaction active)</p>

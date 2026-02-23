@@ -2,6 +2,9 @@
 
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 
 import { AiResponsePanel } from "@/components/ai-response-panel";
 import { RunState, RunStatePill } from "@/components/run-state-pill";
@@ -38,6 +41,9 @@ const NEIGHBORHOOD_QUERY_ROWS = 180;
 const EDGE_BUDGET_OPTIONS = [16, 32, 48, 80, 120];
 const COPILOT_STORAGE_KEY = "seer_ontology_v2_threads";
 const COPILOT_ACTIVE_THREAD_KEY = "seer_ontology_v2_active_thread_id";
+const COMPOSER_MAX_HEIGHT_PX = 224;
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm];
+const MARKDOWN_REHYPE_PLUGINS = [rehypeSanitize];
 
 type CopilotMessage = {
   id: string;
@@ -847,6 +853,17 @@ function OntologyCopilotPanel({ selectedConcept }: { selectedConcept: OntologyCo
   const [storageLoaded, setStorageLoaded] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const syncComposerHeight = useCallback((): void => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+    textarea.style.height = "auto";
+    const nextHeight = Math.min(textarea.scrollHeight, COMPOSER_MAX_HEIGHT_PX);
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = textarea.scrollHeight > COMPOSER_MAX_HEIGHT_PX ? "auto" : "hidden";
+  }, []);
+
   useEffect(() => {
     let canceled = false;
     const storedThreads = parseStoredThreads(localStorage.getItem(COPILOT_STORAGE_KEY));
@@ -882,6 +899,10 @@ function OntologyCopilotPanel({ selectedConcept }: { selectedConcept: OntologyCo
     }
     localStorage.setItem(COPILOT_ACTIVE_THREAD_KEY, activeThreadId);
   }, [activeThreadId, storageLoaded]);
+
+  useEffect(() => {
+    syncComposerHeight();
+  }, [composer, syncComposerHeight]);
 
   const activeThread = useMemo(
     () => threads.find((thread) => thread.id === activeThreadId) ?? null,
@@ -1055,11 +1076,31 @@ function OntologyCopilotPanel({ selectedConcept }: { selectedConcept: OntologyCo
                     <strong>{message.role === "user" ? "You" : "Copilot"}</strong>
                     <small>{formatLocalTimestamp(message.at)}</small>
                   </header>
-                  <p>{message.text}</p>
+                  {!message.ai ? (
+                    <div className={styles.chatMarkdown}>
+                      <ReactMarkdown
+                        remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+                        rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+                      >
+                        {message.text}
+                      </ReactMarkdown>
+                    </div>
+                  ) : null}
                   {message.ai ? (
                     <AiResponsePanel
+                      className={styles.chatEvidencePanel}
                       title="Evidence"
                       summary={message.ai.summary}
+                      renderSummary={(summary) => (
+                        <div className={styles.chatMarkdown}>
+                          <ReactMarkdown
+                            remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+                            rehypePlugins={MARKDOWN_REHYPE_PLUGINS}
+                          >
+                            {summary}
+                          </ReactMarkdown>
+                        </div>
+                      )}
                       evidence={message.ai.evidence}
                       caveats={message.ai.caveats}
                       nextActions={message.ai.next_actions}
@@ -1074,18 +1115,32 @@ function OntologyCopilotPanel({ selectedConcept }: { selectedConcept: OntologyCo
             <label htmlFor="ontology-copilot-composer" className="field-label">
               Ask copilot
             </label>
-            <textarea
-              ref={textareaRef}
-              id="ontology-copilot-composer"
-              rows={4}
-              value={composer}
-              onChange={(event) => setComposer(event.target.value)}
-              onKeyDown={onComposerKeyDown}
-              placeholder="Enter to send, Shift+Enter for newline."
-            />
-            <button type="submit" disabled={runState === "running" || !composer.trim()}>
-              {runState === "running" ? "Answering..." : "Send question"}
-            </button>
+            <div className={styles.composerRow}>
+              <textarea
+                ref={textareaRef}
+                id="ontology-copilot-composer"
+                className={styles.composerInput}
+                rows={1}
+                value={composer}
+                onChange={(event) => setComposer(event.target.value)}
+                onKeyDown={onComposerKeyDown}
+                placeholder="Enter to send, Shift+Enter for newline."
+              />
+              <button
+                type="submit"
+                className={styles.composerSendButton}
+                disabled={runState === "running" || !composer.trim()}
+                aria-label={runState === "running" ? "Sending message" : "Send message"}
+                title="Send message"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path
+                    d="M3.4 20.2L22 12 3.4 3.8l2.1 7.1L14 12l-8.5 1.1-2.1 7.1z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            </div>
           </form>
         </div>
       </div>
