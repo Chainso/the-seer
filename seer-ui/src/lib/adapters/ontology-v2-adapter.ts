@@ -8,17 +8,16 @@ import type {
 const ONTOLOGY_IRI_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s<>]*$/;
 const PREDICATE_LOCAL_NAME_PATTERN = /^.*[#/]/;
 
-const OBJECT_CATEGORIES = new Set([
-  "ObjectModel",
-  "State",
-  "Transition",
-  "ObjectReference",
-  "CustomType",
-  "StructType",
-  "ListType",
+const OBJECT_CATEGORIES = new Set(["ObjectModel"]);
+const ACTION_CATEGORIES = new Set(["Action", "Process", "Workflow"]);
+const EVENT_CATEGORIES = new Set(["Event", "Signal", "Transition"]);
+const TRIGGER_CATEGORIES = new Set(["EventTrigger"]);
+const GRAPH_ALLOWED_CATEGORIES = new Set([
+  ...OBJECT_CATEGORIES,
+  ...ACTION_CATEGORIES,
+  ...EVENT_CATEGORIES,
+  ...TRIGGER_CATEGORIES,
 ]);
-const ACTION_CATEGORIES = new Set(["Action", "Process", "Workflow", "ActionInput"]);
-const EVENT_CATEGORIES = new Set(["Signal", "Transition", "State"]);
 
 const LIFECYCLE_PREDICATES = new Set([
   "haspossiblestate",
@@ -178,7 +177,7 @@ function isEventLike(text: string): boolean {
 function conceptBelongsToTab(concept: OntologyConceptSummary, tab: OntologyExplorerTab): boolean {
   const category = concept.category;
   if (tab === "overview") {
-    return true;
+    return GRAPH_ALLOWED_CATEGORIES.has(category);
   }
   if (tab === "objects") {
     return OBJECT_CATEGORIES.has(category);
@@ -187,13 +186,9 @@ function conceptBelongsToTab(concept: OntologyConceptSummary, tab: OntologyExplo
     return ACTION_CATEGORIES.has(category);
   }
   if (tab === "events") {
-    return EVENT_CATEGORIES.has(category) || isEventLike(`${concept.label} ${concept.iri}`);
+    return EVENT_CATEGORIES.has(category);
   }
-  return (
-    ACTION_CATEGORIES.has(category) ||
-    EVENT_CATEGORIES.has(category) ||
-    isTriggerLike(`${concept.label} ${concept.iri}`)
-  );
+  return TRIGGER_CATEGORIES.has(category);
 }
 
 export function filterOntologyConceptsForTab(
@@ -303,7 +298,12 @@ function parseNeighborRows(queryResponse: OntologySparqlQueryResponse): Ontology
     .map((binding) => {
       const neighbor = binding.neighbor ?? "";
       const predicate = binding.predicate ?? "";
-      if (!neighbor || !predicate || !isValidOntologyIri(neighbor) || !isValidOntologyIri(predicate)) {
+      if (
+        !neighbor ||
+        !predicate ||
+        !isValidOntologyIri(neighbor) ||
+        !isValidOntologyIri(predicate)
+      ) {
         return null;
       }
       return {
@@ -371,6 +371,17 @@ export function adaptOntologyNeighborhoodGraph(params: {
     degree: 0,
   };
 
+  if (!GRAPH_ALLOWED_CATEGORIES.has(focus.category)) {
+    return {
+      focus_iri: focus.iri,
+      nodes: [focusNode],
+      edges: [],
+      total_edges: 0,
+      truncated: false,
+      meta: buildViewModelMeta(),
+    };
+  }
+
   if (!queryResponse) {
     return {
       focus_iri: focus.iri,
@@ -396,11 +407,15 @@ export function adaptOntologyNeighborhoodGraph(params: {
     }
 
     const fallbackConcept = conceptByIri.get(row.neighbor);
+    const neighborCategory = fallbackConcept?.category ?? row.neighbor_category ?? "Concept";
+    if (!GRAPH_ALLOWED_CATEGORIES.has(neighborCategory)) {
+      continue;
+    }
     if (!nodeByIri.has(row.neighbor)) {
       nodeByIri.set(row.neighbor, {
         iri: row.neighbor,
         label: fallbackConcept?.label ?? row.neighbor_label ?? row.neighbor,
-        category: fallbackConcept?.category ?? row.neighbor_category ?? "Concept",
+        category: neighborCategory,
         is_focus: false,
         degree: 0,
       });

@@ -28,12 +28,26 @@ test("normalizeOntologyTab falls back to overview and tab counts remain determin
     objects: 1,
     actions: 1,
     events: 1,
-    triggers: 2,
+    triggers: 0,
   });
 
   const events = filterOntologyConceptsForTab(concepts, "events");
   assert.equal(events.length, 1);
   assert.equal(events[0]?.label, "Order Delayed");
+});
+
+test("overview concept filter excludes custom/property concepts and keeps graph categories", () => {
+  const mixed: OntologyConceptSummary[] = [
+    ...concepts,
+    { iri: "seer:TypeCurrency", label: "Currency Code", category: "CustomType" },
+    { iri: "seer:TicketIdField", label: "Ticket Id", category: "PropertyDefinition" },
+    { iri: "seer:TicketTrigger", label: "Ticket Trigger", category: "EventTrigger" },
+  ];
+  const overview = filterOntologyConceptsForTab(mixed, "overview");
+  assert.deepEqual(
+    overview.map((entry) => entry.category).sort(),
+    ["Action", "EventTrigger", "ObjectModel", "Signal"].sort()
+  );
 });
 
 test("buildOntologyNeighborhoodQuery validates IRIs and clamps row budget", () => {
@@ -72,6 +86,13 @@ test("adaptOntologyNeighborhoodGraph deduplicates predicates, respects filters, 
         neighbor: "seer:Fulfill",
         neighborLabel: "Fulfill",
         neighborCategory: "Action",
+      },
+      {
+        direction: "outgoing",
+        predicate: "http://prophet.platform/ontology#hasProperty",
+        neighbor: "http://prophet.platform/ontology#PropertyDefinition",
+        neighborLabel: "Property Definition",
+        neighborCategory: "Class",
       },
     ],
     ask_result: null,

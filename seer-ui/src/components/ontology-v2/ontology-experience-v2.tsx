@@ -297,13 +297,14 @@ export function OntologyExperienceV2() {
         if (canceled) {
           return;
         }
+        const tabEligible = filterOntologyConceptsForTab(response, activeTab);
         setConceptState({
           searchKey: debouncedSearch,
           data: response,
           error: null,
         });
-        if (!selectedIri && response.length > 0) {
-          replaceRoute(activeTab, response[0].iri);
+        if (!selectedIri && tabEligible.length > 0) {
+          replaceRoute(activeTab, tabEligible[0].iri);
         }
       })
       .catch((error: Error) => {

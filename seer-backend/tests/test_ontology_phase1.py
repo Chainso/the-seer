@@ -176,6 +176,36 @@ def test_ontology_routes_handle_cors_preflight(client: TestClient) -> None:
     assert concepts.headers.get("access-control-allow-origin") == "http://localhost:3000"
 
 
+def test_concepts_endpoint_returns_user_graph_nodes_only(client: TestClient) -> None:
+    _ingest_success(client, release_id="phase1-concepts-filter")
+
+    response = client.get("/api/v1/ontology/concepts", params={"search": "", "limit": 200})
+    assert response.status_code == 200, response.text
+    concepts = response.json()
+    assert concepts
+
+    allowed_categories = {
+        "ObjectModel",
+        "Action",
+        "Process",
+        "Workflow",
+        "Event",
+        "Signal",
+        "Transition",
+        "EventTrigger",
+    }
+    assert all(concept["category"] in allowed_categories for concept in concepts)
+    assert all(
+        not concept["iri"].startswith("http://prophet.platform/ontology#")
+        for concept in concepts
+    )
+    assert all(
+        not concept["iri"].startswith("http://prophet.platform/standard-types#")
+        for concept in concepts
+    )
+    assert any(concept["iri"].startswith("http://prophet.platform/local/") for concept in concepts)
+
+
 def test_invalid_ingest_returns_shacl_diagnostics(client: TestClient) -> None:
     response = client.post(
         "/api/v1/ontology/ingest",

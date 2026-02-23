@@ -31,25 +31,37 @@ PREFIX owl: <http://www.w3.org/2002/07/owl#>
 PREFIX prophet: <http://prophet.platform/ontology#>
 """.strip()
 
+_BASE_CONCEPT_IRI_PREFIXES = (
+    "http://prophet.platform/ontology#",
+    "http://prophet.platform/standard-types#",
+    "http://www.w3.org/",
+)
+_GRAPH_CONCEPT_CATEGORIES = frozenset(
+    {
+        "ObjectModel",
+        "Action",
+        "Process",
+        "Workflow",
+        "Event",
+        "Signal",
+        "Transition",
+        "EventTrigger",
+    }
+)
+
 _CONCEPT_LIST_QUERY = f"""
 {_PREFIXES}
 SELECT DISTINCT ?concept ?label ?category
 WHERE {{
   VALUES ?categoryIri {{
-    owl:Class
-    owl:ObjectProperty
-    owl:DatatypeProperty
     prophet:ObjectModel
+    prophet:Action
     prophet:Process
+    prophet:Workflow
+    prophet:Event
     prophet:Signal
     prophet:Transition
-    prophet:ActionInput
-    prophet:CustomType
-    prophet:StructType
-    prophet:ListType
-    prophet:ObjectReference
-    prophet:State
-    prophet:LocalOntology
+    prophet:EventTrigger
   }}
   ?concept a ?categoryIri .
   OPTIONAL {{ ?concept prophet:name ?prophetName . }}
@@ -136,6 +148,11 @@ class OntologyService:
             concept_iri = row.get("concept")
             if not concept_iri:
                 continue
+            if not _is_user_concept_iri(concept_iri):
+                continue
+            category = row.get("category", "Concept")
+            if not _is_graph_concept_category(category):
+                continue
             label = row.get("label", concept_iri)
             if normalized_search and normalized_search not in label.lower():
                 continue
@@ -143,7 +160,7 @@ class OntologyService:
                 dedup[concept_iri] = OntologyConceptSummary(
                     iri=concept_iri,
                     label=label,
-                    category=row.get("category", "Concept"),
+                    category=category,
                 )
             if len(dedup) >= limit:
                 break
@@ -267,3 +284,13 @@ class UnavailableOntologyService:
 
     async def health_diagnostic(self) -> ValidationDiagnostic:
         return ValidationDiagnostic(severity="Error", message=self.reason)
+
+
+def _is_user_concept_iri(concept_iri: str) -> bool:
+    return not any(
+        concept_iri.startswith(base_prefix) for base_prefix in _BASE_CONCEPT_IRI_PREFIXES
+    )
+
+
+def _is_graph_concept_category(category: str) -> bool:
+    return category in _GRAPH_CONCEPT_CATEGORIES

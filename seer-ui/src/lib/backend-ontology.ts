@@ -82,7 +82,8 @@ export function fetchOntologyCurrent(): Promise<OntologyCurrent> {
 }
 
 export function fetchOntologyConcepts(search: string): Promise<OntologyConceptSummary[]> {
-  const params = new URLSearchParams({ search, limit: "50" });
+  // Pull a broader page because users can have dense local graphs.
+  const params = new URLSearchParams({ search, limit: "200" });
   return getJson<OntologyConceptSummary[]>(`/api/v1/ontology/concepts?${params.toString()}`);
 }
 
