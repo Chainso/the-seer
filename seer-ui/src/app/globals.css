@@ -32,6 +32,8 @@
   --sidebar-hover-bg: #eaf2f9;
 
   --shadow-soft: 0 8px 28px rgb(19 38 58 / 0.08);
+  --content-max-width: 180rem;
+  --content-gutter-desktop: 0.4rem;
 }
 
 .dark {
@@ -304,11 +306,11 @@ select {
 
 .app-content {
   min-width: 0;
-  padding: 1.35rem;
+  padding: var(--content-gutter-desktop);
 }
 
 .app-content > * {
-  width: min(100%, 74rem);
+  width: min(100%, var(--content-max-width));
   margin-inline: auto;
 }
 
@@ -758,7 +760,7 @@ select {
   }
 
   .app-content {
-    padding: 1rem 0.85rem;
+    padding: 0.8rem 0.55rem;
   }
 }
 
