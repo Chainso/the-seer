@@ -61,6 +61,7 @@ def _build_client_with_runtime(model_runtime: CopilotModelRuntime) -> TestClient
         ontology_service=ontology_service,
         model_runtime=model_runtime,
         query_row_limit=5,
+        base_ontology_turtle=PROPHET_METAMODEL.read_text(encoding="utf-8"),
     )
     return TestClient(app)
 
@@ -150,6 +151,7 @@ def test_openai_runtime_uses_chat_completions_json_contract() -> None:
     assert kwargs["temperature"] == 0
     assert kwargs["stream"] is False
     assert kwargs["tool_choice"] == "auto"
+    assert kwargs["parallel_tool_calls"] is False
     assert isinstance(kwargs["tools"], list)
     assert kwargs["messages"] == [{"role": "user", "content": "Explain Ticket"}]
 
@@ -195,6 +197,60 @@ def test_openai_runtime_supports_native_tool_call_response() -> None:
     assert output.tool_call is not None
     assert output.tool_call.tool == "sparql_read_only_query"
     assert output.tool_call.query == "SELECT ?s WHERE { ?s ?p ?o }"
+
+
+def test_openai_runtime_collects_multiple_tool_calls() -> None:
+    class FakeCompletions:
+        async def create(self, **kwargs: object) -> object:
+            del kwargs
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": "call_1",
+                                    "function": {
+                                        "name": "sparql_read_only_query",
+                                        "arguments": json.dumps(
+                                            {"query": "ASK WHERE { ?s ?p ?o }"}
+                                        ),
+                                    },
+                                },
+                                {
+                                    "id": "call_2",
+                                    "function": {
+                                        "name": "sparql_read_only_query",
+                                        "arguments": json.dumps(
+                                            {"query": "SELECT ?s WHERE { ?s ?p ?o } LIMIT 5"}
+                                        ),
+                                    },
+                                },
+                            ],
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        chat = type("FakeChat", (), {"completions": FakeCompletions()})()
+
+    runtime = OpenAiChatCompletionsRuntime(
+        base_url="http://localhost:8787/v1",
+        model="local-model",
+        api_key="test-key",
+        timeout_seconds=12.0,
+        client=FakeClient(),
+    )
+    output = asyncio.run(
+        runtime.run_messages([{"role": "user", "content": "Explain Ticket"}])
+    )
+    assert output.mode == "tool_call"
+    assert output.tool_call is not None
+    assert output.tool_call.call_id == "call_1"
+    assert len(output.tool_calls) == 2
+    assert output.tool_calls[1].call_id == "call_2"
 
 
 def test_build_services_keeps_ontology_available_when_openai_unconfigured() -> None:
@@ -252,10 +308,13 @@ def test_copilot_builds_system_and_conversation_messages() -> None:
     assert runtime.messages
     latest = runtime.messages[-1]
     assert latest[0]["role"] == "system"
+    assert "http://prophet.platform/ontology#" in latest[0]["content"]
     assert latest[1]["role"] == "system"
-    assert latest[2] == {"role": "user", "content": "First question"}
-    assert latest[3] == {"role": "assistant", "content": "First answer"}
-    assert latest[4] == {"role": "user", "content": "What is Ticket?"}
+    assert "Workflow for each turn" in latest[1]["content"]
+    assert latest[2]["role"] == "system"
+    assert latest[3] == {"role": "user", "content": "First question"}
+    assert latest[4] == {"role": "assistant", "content": "First answer"}
+    assert latest[5] == {"role": "user", "content": "What is Ticket?"}
 
 
 def test_valid_ingest_sets_current_release_pointer(client: TestClient) -> None:
@@ -420,7 +479,8 @@ def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["mode"] == "tool_call"
+    assert body["mode"] == "direct_answer"
+    assert body["answer"].startswith("I ran a read-only SELECT query")
     assert body["tool_call"]["tool"] == "sparql_read_only_query"
     assert body["tool_result"]["query_type"] == "SELECT"
     assert body["tool_result"]["variables"] == ["description"]
@@ -450,7 +510,8 @@ def test_copilot_rejects_unsafe_tool_call_query() -> None:
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["mode"] == "tool_call"
+    assert body["mode"] == "direct_answer"
+    assert body["answer"].startswith("I ran a read-only SPARQL query, but it failed:")
     assert body["tool_result"]["query_type"] is None
     assert body["tool_result"]["row_count"] == 0
     assert body["tool_result"]["error"] is not None

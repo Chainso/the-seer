@@ -109,6 +109,7 @@ class CopilotToolCall(BaseModel):
 
     tool: Literal["sparql_read_only_query"]
     query: str = Field(min_length=3, max_length=20000)
+    call_id: str | None = None
 
 
 class CopilotToolResult(BaseModel):
@@ -131,6 +132,7 @@ class CopilotStructuredOutput(BaseModel):
     answer: str = Field(min_length=1, max_length=6000)
     evidence: list[CopilotEvidence] = Field(default_factory=list)
     tool_call: CopilotToolCall | None = None
+    tool_calls: list[CopilotToolCall] = Field(default_factory=list, exclude=True)
 
     @model_validator(mode="after")
     def validate_mode_fields(self) -> CopilotStructuredOutput:

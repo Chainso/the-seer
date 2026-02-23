@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -40,7 +41,7 @@ class _UnavailableModelRuntime:
     def __init__(self, reason: str) -> None:
         self.reason = reason
 
-    async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
+    async def run_messages(self, messages: list[dict[str, Any]]) -> CopilotStructuredOutput:
         del messages
         raise OntologyDependencyUnavailableError(self.reason)
 
@@ -90,10 +91,12 @@ def build_ontology_services(
             timeout_seconds=settings.openai_timeout_seconds,
         )
 
+    base_ontology_turtle = _load_text_if_available(settings.prophet_metamodel_path)
     copilot_service = OntologyCopilotService(
         ontology_service,
         model_runtime=fallback_runtime,
         query_row_limit=settings.copilot_query_row_limit,
+        base_ontology_turtle=base_ontology_turtle,
     )
     return ontology_service, copilot_service
 
@@ -200,6 +203,13 @@ async def copilot_chat(payload: CopilotChatRequest, request: Request) -> Copilot
 
 def _http_error(status_code: int, detail: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail=detail)
+
+
+def _load_text_if_available(path_value: str) -> str:
+    try:
+        return Path(path_value).read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def inject_ontology_services(app: Any, settings: Settings) -> None:

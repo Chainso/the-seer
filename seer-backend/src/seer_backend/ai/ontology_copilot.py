@@ -8,7 +8,6 @@ import re
 from typing import Any, Protocol
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
-from pydantic import ValidationError
 
 from seer_backend.ontology.errors import (
     OntologyDependencyUnavailableError,
@@ -28,13 +27,100 @@ from seer_backend.ontology.models import (
 )
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
-_SYSTEM_PROMPT = """
+_TOOL_CALL_MAX_ROUNDS = 3
+
+_BASE_ONTOLOGY_SYSTEM_PROMPT_TEMPLATE = """
+Authoritative Prophet base ontology (verbatim Turtle).
+Treat this as immutable metamodel context.
+
+{base_ontology_turtle}
+""".strip()
+
+_COPILOT_WORKFLOW_SYSTEM_PROMPT = """
 You are Seer's ontology copilot.
-Rules:
-- Use the available tool only for read-only SPARQL SELECT or ASK queries.
-- Never propose or execute mutating SPARQL.
-- Keep answers concise and grounded in ontology context.
-- If context is insufficient, clearly state the limitation.
+
+Your job:
+- Help users understand Prophet-modeled ontology semantics and relationships.
+- Stay grounded in the provided ontology context and tool evidence.
+- Use only read-only ontology analysis.
+
+Workflow for each turn:
+1. Read the user question and prior conversation.
+2. Use the ontology context message first (current release + concept/detail snippets).
+3. Decide whether a tool query is needed:
+- Answer directly when context is already sufficient.
+- Use the SPARQL tool when the user asks for exact relationships,
+  counts, validation, or when context is ambiguous.
+4. If using the tool, produce one high-quality query first and keep it bounded.
+5. Return a concise answer that cites what you checked and any limits/uncertainty.
+
+SPARQL query rules:
+- Allowed query forms: SELECT or ASK only.
+- Never use mutating operations (INSERT, DELETE, LOAD, CLEAR, CREATE, DROP, COPY, MOVE, ADD).
+- Never use dataset-scoping clauses (FROM, GRAPH, SERVICE, WITH, USING).
+- Prefer explicit variables over SELECT *.
+- Prefer ASK for yes/no validation questions.
+- For SELECT queries, include ORDER BY when it improves determinism.
+- Include LIMIT unless the user explicitly needs full coverage or the query is an aggregate.
+- Use explicit prefixes whenever possible:
+  PREFIX prophet: <http://prophet.platform/ontology#>
+  PREFIX std: <http://prophet.platform/standard-types#>
+
+Answer style:
+- Be concise and concrete.
+- Distinguish between facts from ontology/tool evidence vs inference.
+- If evidence is insufficient, say exactly what is missing.
+
+Good SPARQL examples (from Prophet Turtle demos):
+
+Example A: support-local object properties
+PREFIX prophet: <http://prophet.platform/ontology#>
+PREFIX support_local: <http://prophet.platform/local/support_local#>
+SELECT ?fieldKey ?valueType
+WHERE {
+  support_local:obj_ticket prophet:hasProperty ?property .
+  ?property prophet:fieldKey ?fieldKey ;
+            prophet:valueType ?valueType .
+}
+ORDER BY ?fieldKey
+LIMIT 50
+
+Example B: support-local trigger wiring check
+PREFIX prophet: <http://prophet.platform/ontology#>
+PREFIX support_local: <http://prophet.platform/local/support_local#>
+ASK WHERE {
+  support_local:trg_on_ticket_created
+    prophet:listensTo support_local:sig_ticket_created ;
+    prophet:invokes support_local:act_triage_ticket .
+}
+
+Example C: small-business SalesOrder transitions
+PREFIX prophet: <http://prophet.platform/ontology#>
+PREFIX artisan_bakery_local: <http://prophet.platform/local/artisan_bakery_local#>
+SELECT ?transition ?fromName ?toName
+WHERE {
+  ?transition a prophet:Transition ;
+              prophet:transitionOf artisan_bakery_local:obj_sales_order ;
+              prophet:fromState ?fromState ;
+              prophet:toState ?toState .
+  ?fromState prophet:name ?fromName .
+  ?toState prophet:name ?toName .
+}
+ORDER BY ?transition
+LIMIT 25
+
+Example D: object reference fields and their target object model
+PREFIX prophet: <http://prophet.platform/ontology#>
+SELECT ?property ?fieldKey ?targetObject
+WHERE {
+  ?property a prophet:PropertyDefinition ;
+            prophet:fieldKey ?fieldKey ;
+            prophet:valueType ?valueType .
+  ?valueType a prophet:ObjectReference ;
+             prophet:referencesObjectModel ?targetObject .
+}
+ORDER BY ?fieldKey
+LIMIT 100
 """.strip()
 
 _SPARQL_READ_ONLY_TOOL_SCHEMA = {
@@ -42,15 +128,22 @@ _SPARQL_READ_ONLY_TOOL_SCHEMA = {
     "function": {
         "name": "sparql_read_only_query",
         "description": (
-            "Run a read-only SPARQL query against ontology data. "
-            "Only SELECT or ASK queries are allowed."
+            "Execute one read-only SPARQL query against the current ontology graph. "
+            "Use this when ontology context is insufficient and exact evidence is needed. "
+            "Allowed: SELECT or ASK only. Disallowed: INSERT/DELETE/LOAD/CLEAR/CREATE/DROP/"
+            "COPY/MOVE/ADD and FROM/GRAPH/SERVICE/WITH/USING clauses. "
+            "Prefer explicit variables and bounded SELECT queries with ORDER BY/LIMIT."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "Read-only SPARQL query text (SELECT or ASK only).",
+                    "description": (
+                        "SPARQL query text. Must be read-only (SELECT or ASK only). "
+                        "Include PREFIX declarations and bound result size with LIMIT "
+                        "for non-aggregate SELECT queries."
+                    ),
                 }
             },
             "required": ["query"],
@@ -65,7 +158,7 @@ class CopilotModelRuntime(Protocol):
 
     async def run_messages(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
     ) -> CopilotStructuredOutput: ...
 
 
@@ -91,7 +184,7 @@ class OpenAiChatCompletionsRuntime:
 
     async def run_messages(
         self,
-        messages: list[dict[str, str]],
+        messages: list[dict[str, Any]],
     ) -> CopilotStructuredOutput:
         try:
             response = await self._client.chat.completions.create(
@@ -101,6 +194,7 @@ class OpenAiChatCompletionsRuntime:
                 temperature=0,
                 tools=[_SPARQL_READ_ONLY_TOOL_SCHEMA],
                 tool_choice="auto",
+                parallel_tool_calls=False,
             )
         except APIConnectionError as exc:
             raise OntologyDependencyUnavailableError(
@@ -124,10 +218,14 @@ class OntologyCopilotService:
         ontology_service: OntologyService | UnavailableOntologyService,
         model_runtime: CopilotModelRuntime,
         query_row_limit: int = 100,
+        base_ontology_turtle: str = "",
     ) -> None:
         self._ontology_service = ontology_service
         self._model_runtime = model_runtime
         self._query_row_limit = query_row_limit
+        self._base_ontology_system_prompt = _build_base_ontology_system_prompt(
+            base_ontology_turtle
+        )
 
     async def answer(
         self,
@@ -141,20 +239,49 @@ class OntologyCopilotService:
             conversation=conversation or [],
             current_release_id=current.release_id,
             context=context,
+            base_ontology_system_prompt=self._base_ontology_system_prompt,
         )
 
-        model_output = await self._model_runtime.run_messages(messages)
-
         tool_result: CopilotToolResult | None = None
-        if model_output.mode == "tool_call" and model_output.tool_call is not None:
-            tool_result = await self._execute_tool_call(model_output.tool_call)
+        tool_call: CopilotToolCall | None = None
+        answer_text = ""
+
+        for round_index in range(_TOOL_CALL_MAX_ROUNDS):
+            model_output = await self._model_runtime.run_messages(messages)
+            answer_text = model_output.answer
+            requested_calls = _requested_tool_calls(model_output)
+            if not requested_calls:
+                return CopilotChatResponse(
+                    mode="direct_answer",
+                    answer=answer_text,
+                    evidence=model_output.evidence,
+                    current_release_id=current.release_id,
+                    tool_call=tool_call,
+                    tool_result=tool_result,
+                )
+
+            for call_index, requested_call in enumerate(requested_calls):
+                resolved_call = requested_call
+                if not resolved_call.call_id:
+                    resolved_call = resolved_call.model_copy(
+                        update={"call_id": f"call_auto_{round_index}_{call_index}"}
+                    )
+                tool_call = resolved_call
+                tool_result = await self._execute_tool_call(tool_call)
+                assistant_message, tool_message = _build_tool_result_messages(
+                    assistant_content=answer_text if call_index == 0 else "",
+                    tool_call=tool_call,
+                    tool_result=tool_result,
+                )
+                messages.append(assistant_message)
+                messages.append(tool_message)
 
         return CopilotChatResponse(
-            mode=model_output.mode,
-            answer=model_output.answer,
-            evidence=model_output.evidence,
+            mode="direct_answer",
+            answer=_summarize_tool_result(tool_result),
+            evidence=[],
             current_release_id=current.release_id,
-            tool_call=model_output.tool_call,
+            tool_call=tool_call,
             tool_result=tool_result,
         )
 
@@ -221,45 +348,23 @@ def _to_structured_output(response: Any) -> CopilotStructuredOutput:
 
 
 def _structured_output_from_string_payload(payload: str) -> CopilotStructuredOutput:
-    text = payload.strip()
-    if not text:
-        return _direct_answer_output("")
-
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        return _direct_answer_output(text)
-
-    if isinstance(parsed, dict) and isinstance(parsed.get("choices"), list):
-        choices = parsed["choices"]
-        if choices:
-            return _structured_output_from_choice(choices[0])
-
-    if isinstance(parsed, dict):
-        try:
-            return CopilotStructuredOutput.model_validate(parsed)
-        except ValidationError:
-            answer = parsed.get("answer")
-            if isinstance(answer, str):
-                return _direct_answer_output(answer)
-
-    if isinstance(parsed, str):
-        return _direct_answer_output(parsed)
-
-    return _direct_answer_output(text)
+    # Legacy structured JSON mode is deprecated under Chat Completions.
+    # String payloads are treated as direct assistant answers.
+    return _direct_answer_output(payload.strip())
 
 
 def _structured_output_from_choice(choice: Any) -> CopilotStructuredOutput:
     message = _extract_choice_message(choice)
     content = _extract_choice_message_content(choice).strip()
 
-    query = _extract_tool_call_query_from_message(message)
-    if query is not None:
+    tool_calls = _extract_tool_calls_from_message(message)
+    if tool_calls:
         return CopilotStructuredOutput(
             mode="tool_call",
             answer=content or "Running read-only SPARQL query for ontology evidence.",
             evidence=[],
-            tool_call=CopilotToolCall(tool="sparql_read_only_query", query=query),
+            tool_call=tool_calls[0],
+            tool_calls=tool_calls,
         )
 
     return _direct_answer_output(content)
@@ -301,34 +406,52 @@ def _normalize_content(content: Any) -> str:
     return ""
 
 
-def _extract_tool_call_query_from_message(message: Any) -> str | None:
+def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
     if message is None:
-        return None
+        return []
 
     tool_calls = getattr(message, "tool_calls", None)
     if tool_calls is None and isinstance(message, dict):
         tool_calls = message.get("tool_calls")
     if not isinstance(tool_calls, list) or not tool_calls:
-        return None
+        return []
 
-    first_tool = tool_calls[0]
-    function_payload = getattr(first_tool, "function", None)
-    if function_payload is None and isinstance(first_tool, dict):
-        function_payload = first_tool.get("function")
-    if function_payload is None:
-        return None
+    parsed_calls: list[CopilotToolCall] = []
+    for tool in tool_calls:
+        function_payload = getattr(tool, "function", None)
+        if function_payload is None and isinstance(tool, dict):
+            function_payload = tool.get("function")
+        if function_payload is None:
+            continue
 
-    function_name = getattr(function_payload, "name", None)
-    if function_name is None and isinstance(function_payload, dict):
-        function_name = function_payload.get("name")
-    if function_name != "sparql_read_only_query":
-        return None
+        function_name = getattr(function_payload, "name", None)
+        if function_name is None and isinstance(function_payload, dict):
+            function_name = function_payload.get("name")
+        if function_name != "sparql_read_only_query":
+            continue
 
-    arguments: Any = getattr(function_payload, "arguments", None)
-    if arguments is None and isinstance(function_payload, dict):
-        arguments = function_payload.get("arguments")
+        arguments: Any = getattr(function_payload, "arguments", None)
+        if arguments is None and isinstance(function_payload, dict):
+            arguments = function_payload.get("arguments")
+        query = _extract_tool_query_from_arguments(arguments)
+        if query is None:
+            continue
 
-    return _extract_tool_query_from_arguments(arguments)
+        call_id = getattr(tool, "id", None)
+        if call_id is None and isinstance(tool, dict):
+            call_id = tool.get("id")
+        if not isinstance(call_id, str) or not call_id.strip():
+            call_id = None
+
+        parsed_calls.append(
+            CopilotToolCall(
+                tool="sparql_read_only_query",
+                query=query,
+                call_id=call_id,
+            )
+        )
+
+    return parsed_calls
 
 
 def _extract_tool_query_from_arguments(arguments: Any) -> str | None:
@@ -373,10 +496,12 @@ def _build_messages(
     conversation: list[CopilotConversationMessage],
     current_release_id: str | None,
     context: str,
-) -> list[dict[str, str]]:
+    base_ontology_system_prompt: str,
+) -> list[dict[str, Any]]:
     release_text = current_release_id or "none"
-    messages: list[dict[str, str]] = [
-        {"role": "system", "content": _SYSTEM_PROMPT},
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": base_ontology_system_prompt},
+        {"role": "system", "content": _COPILOT_WORKFLOW_SYSTEM_PROMPT},
         {
             "role": "system",
             "content": (
@@ -464,3 +589,80 @@ def _infer_variables(
 def _tokenize(value: str) -> list[str]:
     tokens = [token.lower() for token in re.findall(r"[A-Za-z0-9_:-]{3,}", value)]
     return tokens[:5]
+
+
+def _build_base_ontology_system_prompt(base_ontology_turtle: str) -> str:
+    ontology_text = base_ontology_turtle.strip()
+    if not ontology_text:
+        ontology_text = (
+            "Base ontology text unavailable. Continue with provided context and tool evidence."
+        )
+    return _BASE_ONTOLOGY_SYSTEM_PROMPT_TEMPLATE.format(base_ontology_turtle=ontology_text)
+
+
+def _requested_tool_calls(model_output: CopilotStructuredOutput) -> list[CopilotToolCall]:
+    if model_output.mode != "tool_call":
+        return []
+    if model_output.tool_calls:
+        return model_output.tool_calls
+    if model_output.tool_call is not None:
+        return [model_output.tool_call]
+    return []
+
+
+def _build_tool_result_messages(
+    *,
+    assistant_content: str,
+    tool_call: CopilotToolCall,
+    tool_result: CopilotToolResult,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not tool_call.call_id:
+        raise ValueError("tool_call.call_id is required when building tool result messages")
+
+    assistant_message: dict[str, Any] = {
+        "role": "assistant",
+        "content": assistant_content,
+        "tool_calls": [
+            {
+                "id": tool_call.call_id,
+                "type": "function",
+                "function": {
+                    "name": tool_call.tool,
+                    "arguments": json.dumps({"query": tool_call.query}, ensure_ascii=True),
+                },
+            }
+        ],
+    }
+    tool_message: dict[str, Any] = {
+        "role": "tool",
+        "tool_call_id": tool_call.call_id,
+        "content": json.dumps(tool_result.model_dump(mode="json"), ensure_ascii=True),
+    }
+    return assistant_message, tool_message
+
+
+def _summarize_tool_result(tool_result: CopilotToolResult | None) -> str:
+    if tool_result is None:
+        return (
+            "I could not finalize a model response after tool execution, "
+            "but no tool result was available."
+        )
+    if tool_result.error:
+        return f"I ran a read-only SPARQL query, but it failed: {tool_result.error}"
+
+    if tool_result.query_type == "ASK":
+        if tool_result.ask_result is None:
+            return "I ran a read-only ASK query, but the boolean result was unavailable."
+        return (
+            "I ran a read-only ASK query and the result is "
+            f"{str(tool_result.ask_result).lower()}."
+        )
+
+    if tool_result.query_type == "SELECT":
+        truncated_suffix = " (truncated)" if tool_result.truncated else ""
+        return (
+            "I ran a read-only SELECT query and found "
+            f"{tool_result.row_count} rows{truncated_suffix}."
+        )
+
+    return "I ran a read-only SPARQL query and returned the structured results."
