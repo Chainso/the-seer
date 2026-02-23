@@ -1,0 +1,414 @@
+.shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.headerCard {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  background:
+    radial-gradient(
+      30rem 18rem at 12% 6%,
+      color-mix(in srgb, var(--accent-soft) 72%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--panel) 92%, transparent),
+      color-mix(in srgb, var(--panel-muted) 88%, transparent)
+    );
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.headerCard h1 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+.headerCard p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.headerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.inlineMeta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 20rem minmax(0, 1fr) 24rem;
+  gap: 1rem;
+  align-items: start;
+}
+
+.leftRail,
+.centerRail,
+.rightRail {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  box-shadow: var(--shadow-soft);
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.panelHeader {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.panelHeader h2 {
+  margin: 0;
+  font-size: 1.06rem;
+}
+
+.panelHeader h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.panelHeader p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.88rem;
+}
+
+.runForm {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.fieldLabel {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.73rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.fieldHint {
+  margin: 0;
+  font-size: 0.76rem;
+  color: var(--ink-muted);
+}
+
+.panel input,
+.panel button {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.64rem;
+  padding: 0.52rem 0.62rem;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  color: var(--ink);
+}
+
+.panel button {
+  cursor: pointer;
+  margin-top: 0.2rem;
+}
+
+.panel button:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.panel button:focus-visible,
+.panel input:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
+}
+
+.stateRow {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.inlineStatus {
+  margin: 0;
+}
+
+.kpiGrid {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.kpiGrid div {
+  border: 1px solid var(--border);
+  border-radius: 0.7rem;
+  background: color-mix(in srgb, var(--panel-muted) 88%, transparent);
+  padding: 0.5rem 0.55rem;
+}
+
+.kpiGrid dt {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kpiGrid dd {
+  margin: 0.15rem 0 0;
+  font-size: 1rem;
+  font-weight: 640;
+}
+
+.objectTypeBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.38rem;
+}
+
+.objectTypeBadges span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.23rem 0.53rem;
+  background: color-mix(in srgb, var(--panel-muted) 90%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.71rem;
+}
+
+.warningList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.warningList li {
+  margin: 0;
+  border: none;
+}
+
+.emptyState {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.nodeCloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.44rem;
+}
+
+.nodeChip {
+  width: auto !important;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 999px !important;
+  padding-inline: 0.56rem !important;
+  background: color-mix(in srgb, var(--panel-muted) 90%, transparent) !important;
+}
+
+.nodeChip small {
+  font-family: var(--font-mono);
+  color: var(--ink-muted);
+}
+
+.lanes {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.laneCard {
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--panel-muted) 90%, transparent);
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.52rem;
+}
+
+.laneHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.laneHeader h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.laneHeader p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.74rem;
+  font-family: var(--font-mono);
+}
+
+.edgeList,
+.selectorList,
+.traceList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.edgeButton,
+.pathButton,
+.selectorButton {
+  text-align: left;
+  margin: 0 !important;
+}
+
+.edgeButton {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.edgeLabelRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.edgeLabelRow span {
+  font-size: 0.83rem;
+}
+
+.edgeLabelRow strong {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+
+.edgeMeter {
+  display: block;
+  min-inline-size: 10%;
+  block-size: 0.28rem;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.pathStrip {
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.pathButton {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.pathButton small {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+}
+
+.selectorButton {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.selectorButton strong {
+  font-size: 0.82rem;
+}
+
+.selectorButton small {
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.selectorActive {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border)) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 36%, transparent);
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--panel) 30%) !important;
+}
+
+.traceList li {
+  border: 1px solid var(--border);
+  border-radius: 0.74rem;
+  background: color-mix(in srgb, var(--panel-muted) 86%, transparent);
+  padding: 0.56rem 0.6rem;
+  display: grid;
+  gap: 0.28rem;
+}
+
+.traceList li p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+}
+
+.traceTitleRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.traceTitleRow span {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+}
+
+.traceList a {
+  font-size: 0.76rem;
+  color: var(--accent-strong);
+  text-decoration: underline;
+  width: fit-content;
+}
+
+@media (max-width: 1280px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .rightRail {
+    grid-column: span 2;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .rightRail {
+    grid-column: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .fieldGrid,
+  .pathStrip {
+    grid-template-columns: 1fr;
+  }
+}

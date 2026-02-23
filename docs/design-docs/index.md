@@ -7,6 +7,7 @@ Catalog detailed design documents and their status.
 ## Core Docs
 
 1. `core-beliefs.md` - active
+2. `ui-experience-replatform-phase-f-verification-harness.md` - active
 
 ## How to Use
 

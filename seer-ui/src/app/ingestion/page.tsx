@@ -1,12 +1,7 @@
-import { ModuleShell } from "@/components/module-shell";
+import { IngestionObjectExplorerExperienceV2 } from "@/components/ingestion-object-explorer/ingestion-object-explorer-experience-v2";
+
+export const dynamic = "force-dynamic";
 
 export default function IngestionPage() {
-  return (
-    <ModuleShell
-      eyebrow="Module"
-      title="Ingestion Monitor"
-      summary="Event/object history ingestion monitoring shell. Phase 2 adds ingestion pipelines and lifecycle status."
-      phase="MVP Phase 2"
-    />
-  );
+  return <IngestionObjectExplorerExperienceV2 />;
 }

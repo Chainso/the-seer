@@ -11,6 +11,7 @@ Catalog user-facing product specs.
 3. `process-explorer-phase-3.md` - completed
 4. `root-cause-lab-phase-4.md` - completed
 5. `ai-guided-investigation-phase-5.md` - completed
+6. `ui-experience-replatform-phase-f-hardening-rollout.md` - completed
 
 ## Usage
 

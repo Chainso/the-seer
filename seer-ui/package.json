@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --loader ./tests/node-test-loader.mjs --test"
   },
   "dependencies": {
     "next": "16.1.6",

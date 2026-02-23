@@ -20,6 +20,13 @@ export type OntologyConceptDetail = {
   incoming_relations: string[];
 };
 
+export type OntologySparqlQueryResponse = {
+  query_type: "SELECT" | "ASK";
+  bindings: Array<Record<string, string>>;
+  ask_result: boolean | null;
+  graphs: string[];
+};
+
 export type CopilotAnswer = {
   mode: "direct_answer" | "tool_call";
   answer: string;
@@ -82,6 +89,13 @@ export function fetchOntologyConcepts(search: string): Promise<OntologyConceptSu
 export function fetchOntologyConceptDetail(iri: string): Promise<OntologyConceptDetail> {
   const params = new URLSearchParams({ iri });
   return getJson<OntologyConceptDetail>(`/api/v1/ontology/concept-detail?${params.toString()}`);
+}
+
+export function runOntologyReadOnlyQuery(query: string): Promise<OntologySparqlQueryResponse> {
+  return getJson<OntologySparqlQueryResponse>("/api/v1/ontology/query", {
+    method: "POST",
+    body: JSON.stringify({ query }),
+  });
 }
 
 export function askOntologyCopilot(

@@ -1,19 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
+import Script from "next/script";
+
+import { AppShell } from "@/components/layout/app-shell";
+import { themeBootstrapScript } from "@/components/theme/theme-script";
+import { ThemeProvider } from "@/components/theme/theme-provider";
 
 export const metadata: Metadata = {
-  title: "Seer MVP Shell",
-  description: "Foundational route shell for Seer modules",
+  title: "Seer Experience Platform",
+  description: "Operational process intelligence and read-only ontology exploration.",
 };
-
-const navLinks = [
-  { href: "/ontology", label: "Ontology Explorer" },
-  { href: "/ingestion", label: "Ingestion Monitor" },
-  { href: "/process", label: "Process Explorer" },
-  { href: "/root-cause", label: "Root-Cause Lab" },
-  { href: "/insights", label: "Insights Dashboard" },
-];
 
 export default function RootLayout({
   children,
@@ -21,21 +17,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <Script id="seer-theme-bootstrap" strategy="beforeInteractive">
+          {themeBootstrapScript}
+        </Script>
+      </head>
       <body>
-        <div className="page-chrome">
-          <header className="top-nav">
-            <p className="brand">Seer MVP</p>
-            <nav>
-              {navLinks.map((link) => (
-                <Link key={link.href} href={link.href}>
-                  {link.label}
-                </Link>
-              ))}
-            </nav>
-          </header>
-          {children}
-        </div>
+        <ThemeProvider>
+          <AppShell>{children}</AppShell>
+        </ThemeProvider>
       </body>
     </html>
   );

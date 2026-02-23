@@ -1,0 +1,321 @@
+.shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.headerCard {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  background:
+    radial-gradient(
+      34rem 19rem at 84% 8%,
+      color-mix(in srgb, var(--accent-soft) 74%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--panel) 92%, transparent),
+      color-mix(in srgb, var(--panel-muted) 88%, transparent)
+    );
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 0.55rem;
+}
+
+.headerCard h1 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+.headerCard p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.primaryBadge {
+  margin: 0;
+  width: fit-content;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-soft) 75%, var(--panel) 25%);
+  color: var(--accent-strong);
+  padding: 0.25rem 0.55rem;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 22rem minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.leftRail,
+.rightRail {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--panel) 91%, transparent);
+  box-shadow: var(--shadow-soft);
+  padding: 1rem;
+  display: grid;
+  gap: 0.72rem;
+}
+
+.panelHeader {
+  display: grid;
+  gap: 0.24rem;
+}
+
+.panelHeader h2 {
+  margin: 0;
+  font-size: 1.06rem;
+}
+
+.panelHeader p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.87rem;
+}
+
+.form {
+  display: grid;
+  gap: 0.54rem;
+}
+
+.form input,
+.form textarea,
+.form select,
+.form button {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.66rem;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  color: var(--ink);
+  padding: 0.5rem 0.58rem;
+}
+
+.form textarea {
+  resize: vertical;
+}
+
+.form button {
+  cursor: pointer;
+}
+
+.form button:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.stageList,
+.handoffList,
+.actionList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.stageList li {
+  border: 1px solid var(--border);
+  border-radius: 0.78rem;
+  background: color-mix(in srgb, var(--panel-muted) 88%, transparent);
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.24rem;
+}
+
+.stageList li[data-state="queued"] {
+  border-color: color-mix(in srgb, var(--queued-ink) 24%, var(--border));
+}
+
+.stageList li[data-state="running"] {
+  border-color: color-mix(in srgb, var(--running-ink) 30%, var(--border));
+  background: color-mix(in srgb, var(--running-bg) 50%, var(--panel) 50%);
+}
+
+.stageList li[data-state="completed"] {
+  border-color: color-mix(in srgb, var(--ok-ink) 26%, var(--border));
+  background: color-mix(in srgb, var(--ok-bg) 44%, var(--panel) 56%);
+}
+
+.stageList li[data-state="error"] {
+  border-color: color-mix(in srgb, var(--degraded-ink) 26%, var(--border));
+  background: color-mix(in srgb, var(--degraded-bg) 45%, var(--panel) 55%);
+}
+
+.stageLabel {
+  margin: 0;
+  font-weight: 640;
+  font-size: 0.86rem;
+}
+
+.stageSummary,
+.stageDetail {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.handoffList li {
+  border: 1px solid var(--border);
+  border-radius: 0.74rem;
+  background: color-mix(in srgb, var(--panel-muted) 88%, transparent);
+  padding: 0.55rem;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.handoffList li a {
+  font-size: 0.8rem;
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
+.handoffList li p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+}
+
+.kpiGrid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.kpiGrid div {
+  border: 1px solid var(--border);
+  border-radius: 0.68rem;
+  background: color-mix(in srgb, var(--panel-muted) 90%, transparent);
+  padding: 0.5rem;
+}
+
+.kpiGrid dt,
+.scopeGrid dt {
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.kpiGrid dd,
+.scopeGrid dd {
+  margin: 0.16rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 640;
+}
+
+.inlineMeta {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+}
+
+.policyBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.policyBadges span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.18rem 0.45rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+  color: var(--ink-muted);
+}
+
+.actionList li {
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--panel-muted) 88%, transparent);
+  padding: 0.5rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.actionList li span {
+  width: fit-content;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.12rem 0.42rem;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-mono);
+}
+
+.actionList li span[data-owner="ontology"] {
+  border-color: color-mix(in srgb, var(--queued-ink) 24%, var(--border));
+}
+
+.actionList li span[data-owner="process"] {
+  border-color: color-mix(in srgb, var(--running-ink) 24%, var(--border));
+}
+
+.actionList li span[data-owner="root_cause"] {
+  border-color: color-mix(in srgb, var(--ok-ink) 24%, var(--border));
+}
+
+.actionList li p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+}
+
+.scopeGrid {
+  margin: 0;
+  display: grid;
+  gap: 0.46rem;
+}
+
+.scopeGrid div {
+  border: 1px solid var(--border);
+  border-radius: 0.68rem;
+  background: color-mix(in srgb, var(--panel-muted) 90%, transparent);
+  padding: 0.5rem;
+}
+
+.emptyState {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .fieldGrid,
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+}

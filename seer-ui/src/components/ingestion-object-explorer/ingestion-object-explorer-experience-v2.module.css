@@ -1,0 +1,312 @@
+.shell {
+  display: grid;
+  gap: 1rem;
+}
+
+.headerCard {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  background:
+    radial-gradient(
+      30rem 18rem at 12% 7%,
+      color-mix(in srgb, var(--accent-soft) 70%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      138deg,
+      color-mix(in srgb, var(--panel) 92%, transparent),
+      color-mix(in srgb, var(--panel-muted) 88%, transparent)
+    );
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  gap: 0.6rem;
+}
+
+.headerCard h1 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+.headerCard p {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.headerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.inlineMeta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 22rem minmax(0, 1fr) 24rem;
+  gap: 1rem;
+  align-items: start;
+}
+
+.leftRail,
+.centerRail,
+.rightRail {
+  display: grid;
+  gap: 1rem;
+}
+
+.panel {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--panel) 91%, transparent);
+  box-shadow: var(--shadow-soft);
+  padding: 1rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.panelHeader {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.panelHeader h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.panelHeader p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.87rem;
+}
+
+.form {
+  display: grid;
+  gap: 0.56rem;
+}
+
+.form input,
+.form textarea,
+.form button,
+.inlineButton,
+.eventButton {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 0.66rem;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  color: var(--ink);
+  padding: 0.52rem 0.6rem;
+}
+
+.form textarea {
+  resize: vertical;
+  min-height: 5.6rem;
+}
+
+.form button,
+.inlineButton,
+.eventButton {
+  cursor: pointer;
+}
+
+.form button:disabled {
+  opacity: 0.75;
+  cursor: wait;
+}
+
+.form button:focus-visible,
+.form input:focus-visible,
+.form textarea:focus-visible,
+.inlineButton:focus-visible,
+.eventButton:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: 2px;
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.56rem;
+}
+
+.stateRow {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.errorText {
+  margin: 0;
+  color: var(--degraded-ink);
+  font-size: 0.82rem;
+}
+
+.contextGrid,
+.kpiGrid {
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.contextGrid div,
+.kpiGrid div {
+  border: 1px solid var(--border);
+  border-radius: 0.72rem;
+  background: color-mix(in srgb, var(--panel-muted) 90%, transparent);
+  padding: 0.5rem;
+}
+
+.contextGrid dt,
+.kpiGrid dt {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.contextGrid dd,
+.kpiGrid dd {
+  margin: 0.14rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 640;
+  overflow-wrap: anywhere;
+}
+
+.emptyState {
+  margin: 0;
+  color: var(--ink-muted);
+}
+
+.timelineList,
+.relationList,
+.eventList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.52rem;
+}
+
+.timelineItem,
+.relationItem {
+  border: 1px solid var(--border);
+  border-radius: 0.82rem;
+  background: color-mix(in srgb, var(--panel-muted) 88%, transparent);
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.48rem;
+}
+
+.timelineHead,
+.relationHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.timelineHead h3,
+.relationHead h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.itemMeta {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.76rem;
+}
+
+.inlineButton {
+  width: auto;
+  justify-self: start;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.76rem;
+  font-family: var(--font-mono);
+}
+
+.codeBlock {
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 0.66rem;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  padding: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.eventButton {
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+  border-radius: 0.72rem;
+  padding: 0.5rem;
+}
+
+.eventButton strong {
+  font-size: 0.83rem;
+}
+
+.eventButton span,
+.eventButton small {
+  color: var(--ink-muted);
+}
+
+.eventButton[data-active="true"] {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--panel) 28%);
+}
+
+.eventDetailPanel {
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  padding: 0.72rem;
+  background: color-mix(in srgb, var(--panel-muted) 90%, transparent);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.eventDetailPanel h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+@media (width <= 1320px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .rightRail {
+    grid-column: 1 / span 2;
+  }
+}
+
+@media (width <= 920px) {
+  .workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .rightRail {
+    grid-column: auto;
+  }
+
+  .fieldGrid,
+  .contextGrid,
+  .kpiGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .timelineHead,
+  .relationHead {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
