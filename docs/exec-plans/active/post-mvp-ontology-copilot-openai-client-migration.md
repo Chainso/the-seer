@@ -190,10 +190,17 @@ Exit criteria:
 3. Model calls must use OpenAI `chat.completions`, producing `POST /v1/chat/completions`.
 4. Official OpenAI Python SDK is required for model invocation.
 5. Backward compatibility is intentionally not required; optimize for the best target copilot experience while preserving read-only safety.
+6. Target copilot contract for this migration keeps existing response models (`CopilotChatResponse`) while replacing runtime internals; breaking changes remain allowed in future follow-up.
+
+## Phase A Completion Notes (2026-02-23)
+
+1. Locked provider/runtime contract to OpenAI official Python client using `chat.completions`.
+2. Locked endpoint/base URL contract to `SEER_OPENAI_BASE_URL=http://localhost:8787/v1` with resolved target `POST /v1/chat/completions`.
+3. Locked migration approach to keep current copilot response schema in this pass while removing Gemini runtime coupling.
 
 ## Progress Tracking
 
-- [ ] Phase A complete
+- [x] Phase A complete
 - [ ] Phase B complete
 - [ ] Phase C complete
 - [ ] Phase D complete
@@ -201,8 +208,8 @@ Exit criteria:
 
 Current execution state:
 
-- `in_progress`: Phase A (runtime contract + settings lock)
-- `completed`: none
+- `in_progress`: Phase B (copilot runtime refactor)
+- `completed`: Phase A (runtime contract + settings lock)
 
 ## Plan Maintenance Rules
 
