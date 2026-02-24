@@ -13,6 +13,7 @@ dependencies = [
   "rdflib>=7.1.0,<8",
   "xxhash>=3.6.0,<4",
   "uvicorn[standard]>=0.35.0,<1",
+  "pm4py>=2.7.19.8",
 ]
 
 [project.optional-dependencies]
