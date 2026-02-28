@@ -3,7 +3,7 @@
 **Status:** in_progress  
 **Target order:** post-MVP track 3  
 **Agent slot:** DATA-RCA-1  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`  
+**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
 **Successor:** TBD  
 **Last updated:** 2026-02-28
 

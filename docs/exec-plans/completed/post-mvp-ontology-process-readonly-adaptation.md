@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: `seer-ui` Legacy Baseline Adaptation to Canonical Backend
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 2 (pivoted)  
 **Agent slot:** UX-R2  
 **Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md`  
@@ -245,20 +245,19 @@ Exit criteria:
 9. 2026-02-28: Added Inspector `Insights` tab powered by canonical `POST /api/v1/process/mine` with trace-handle drill-down via `GET /api/v1/process/traces`.
 10. 2026-02-28: Consolidated analytics under Inspector `Insights` with `Process Insights` (root-cause) first and `Process Mining` second; legacy `/inspector/analytics` now redirects to `/inspector/insights`.
 11. 2026-02-28: Field/state display consistency handoff completed to `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ontology-driven-field-display-centralization.md`; shared ontology display resolver is now the canonical policy source for inspector label/value rendering.
-12. 2026-02-28: Handoff acknowledged from `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/adaptive-lifecycle-label-display.md` Phase 3 completion: cross-object Ontology Explorer contexts are locked to explicit lifecycle labels, while object-local History inspector contexts remain plain/default lifecycle naming; this preserves read-only history clarity without reintroducing alias rewrite tables.
+12. 2026-02-28: Handoff acknowledged from `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/adaptive-lifecycle-label-display.md` Phase 3 completion: cross-object Ontology Explorer contexts are locked to explicit lifecycle labels, while object-local History inspector contexts remain plain/default lifecycle naming; this preserves read-only history clarity without reintroducing alias rewrite tables.
 
 ## Progress Tracking
 
-- [ ] Phase 1 complete
-- [ ] Phase 2 complete
-- [ ] Phase 3 complete
+- [x] Phase 1 complete
+- [x] Phase 2 complete
+- [x] Phase 3 complete
 - [x] Phase 3A complete
-- [ ] Phase 4 complete
+- [x] Phase 4 complete
 
 Current execution state:
 
-- `in_progress`: Phase 4 hardening + documentation sync
-- `in_progress`: Inspector Insights UX landed with full mine controls, ranked findings, and evidence drill-down.
+- `completed`: Phases 1-4 and 3A complete; plan closed on 2026-02-28.
 - `completed-handoff`: Ontology-driven field display centralization ratified in completed plan doc for cross-inspector labeling policy.
 
 ## Plan Maintenance Rules

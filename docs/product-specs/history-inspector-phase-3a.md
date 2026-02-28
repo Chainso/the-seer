@@ -1,7 +1,7 @@
 # History Inspector Phase 3A Spec
 
 **Status:** in_progress  
-**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`  
+**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
 **Last updated:** 2026-02-28
 
 ---

@@ -8,7 +8,7 @@ It is intentionally stable and coarse-grained. It answers:
 - and which architectural invariants must remain true.
 
 For product direction, see `VISION.md`.  
-For delivery phases and acceptance gates, see `docs/exec-plans/active/mvp-roadmap-2026.md`.
+For delivery phases and acceptance gates, see `docs/exec-plans/completed/mvp-roadmap-2026.md`.
 
 ## Bird's-Eye View
 

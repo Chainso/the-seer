@@ -19,3 +19,6 @@ Each completed plan should preserve:
 7. `ui-experience-replatform-2026.md` - completed (2026-02-22)
 8. `ontology-driven-field-display-centralization.md` - completed (2026-02-28)
 9. `assistant-page-surface-unification.md` - completed (2026-02-28)
+10. `mvp-roadmap-2026.md` - completed (2026-02-22)
+11. `adaptive-lifecycle-label-display.md` - completed (2026-02-28)
+12. `post-mvp-ontology-process-readonly-adaptation.md` - completed (2026-02-28)

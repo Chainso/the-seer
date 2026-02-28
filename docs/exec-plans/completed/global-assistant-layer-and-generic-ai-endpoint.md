@@ -3,7 +3,7 @@
 **Status:** completed  
 **Target order:** post-MVP track 3 (completed out-of-order)  
 **Agent slot:** AI-UX-G1  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`  
+**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
 **Successor:** TBD  
 **Last updated:** 2026-02-28
 
@@ -186,7 +186,7 @@ Exit criteria:
 
 ## Dependencies
 
-1. Completion or stabilization of `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`.
+1. Completion or stabilization of `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`.
 2. OpenAI runtime configuration available in backend environment.
 3. Ontology service and read-only query path healthy in target environment.
 

@@ -468,7 +468,7 @@ MVP is complete when users can:
 
 Detailed MVP execution roadmap is maintained in:
 
-`/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/mvp-roadmap-2026.md`
+`/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-roadmap-2026.md`
 
 This vision document defines strategy and product direction.
 The roadmap document defines execution phases, acceptance gates, and release criteria.
