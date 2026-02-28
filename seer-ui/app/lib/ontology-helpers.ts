@@ -7,11 +7,12 @@ import type {
   StateInput,
 } from '@/app/types/ontology';
 
-type NodeMap = Map<string, OntologyNode>;
-
 const asString = (value: unknown) => (typeof value === 'string' ? value : '');
 
 const asNumber = (value: unknown) => (typeof value === 'number' ? value : undefined);
+
+const displayName = (node: OntologyNode | undefined, fallback = '') =>
+  asString(node?.properties['prophet:name']) || asString(node?.properties.name) || fallback;
 
 const buildNodeMap = (nodes: OntologyNode[]) => new Map(nodes.map((node) => [node.uri, node]));
 
@@ -35,7 +36,7 @@ export const mapPropertyDefinitions = (
     const valueTypeUri = findSingleOutgoing(edges, propUri, 'valueType') || '';
     return {
       uri: propUri,
-      name: asString(node?.properties.name) || propUri,
+      name: displayName(node, propUri),
       description: asString(node?.properties.description) || undefined,
       documentation: asString(node?.properties.documentation) || undefined,
       fieldKey: asString(node?.properties.fieldKey) || '',
@@ -77,7 +78,7 @@ export const mapKeyDefinition = (
 
   return {
     uri: keyUri || undefined,
-    name: asString(keyNode?.properties.name) || relationType,
+    name: displayName(keyNode, relationType),
     description: asString(keyNode?.properties.description) || undefined,
     documentation: asString(keyNode?.properties.documentation) || undefined,
     keyParts,
@@ -94,7 +95,7 @@ export const mapStates = (
     const node = nodeMap.get(stateUri);
     return {
       uri: stateUri,
-      name: asString(node?.properties.name) || stateUri,
+      name: displayName(node, stateUri),
       description: asString(node?.properties.description) || undefined,
       documentation: asString(node?.properties.documentation) || undefined,
     };
@@ -117,7 +118,7 @@ export const mapActionIo = (
   const node = ioUri ? nodeMap.get(ioUri) : undefined;
   return {
     uri: ioUri || undefined,
-    name: asString(node?.properties.name) || '',
+    name: displayName(node),
     description: asString(node?.properties.description) || undefined,
     documentation: asString(node?.properties.documentation) || undefined,
     properties: ioUri ? mapPropertyDefinitions(ioUri, nodes, edges) : [],
@@ -133,7 +134,7 @@ export const mapTransitionDefinition = (
   const node = nodeMap.get(transitionUri);
   return {
     uri: transitionUri,
-    name: asString(node?.properties.name) || transitionUri,
+    name: displayName(node, transitionUri),
     description: asString(node?.properties.description) || undefined,
     documentation: asString(node?.properties.documentation) || undefined,
     transitionOfUri: findSingleOutgoing(edges, transitionUri, 'transitionOf') || '',
@@ -152,7 +153,7 @@ export const mapTriggerDefinition = (
   const node = nodeMap.get(triggerUri);
   return {
     uri: triggerUri,
-    name: asString(node?.properties.name) || triggerUri,
+    name: displayName(node, triggerUri),
     description: asString(node?.properties.description) || undefined,
     documentation: asString(node?.properties.documentation) || undefined,
     listensToUri: findSingleOutgoing(edges, triggerUri, 'listensTo') || '',
@@ -169,7 +170,7 @@ export const mapEventDefinition = (
   const node = nodeMap.get(eventUri);
   return {
     uri: eventUri,
-    name: asString(node?.properties.name) || eventUri,
+    name: displayName(node, eventUri),
     description: asString(node?.properties.description) || undefined,
     documentation: asString(node?.properties.documentation) || undefined,
     properties: mapPropertyDefinitions(eventUri, nodes, edges),

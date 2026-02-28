@@ -992,6 +992,21 @@ export function ProcessInsightsPanel() {
     return ordered;
   }, [evidenceTraceRows]);
 
+  const anchorFieldNameByKey = useMemo(() => {
+    if (!ontologyGraph || !anchorModelUri) {
+      return {} as Record<string, string>;
+    }
+    return mapPropertyDefinitions(anchorModelUri, ontologyGraph.nodes, ontologyGraph.edges).reduce<
+      Record<string, string>
+    >((acc, property) => {
+      if (!property.fieldKey) {
+        return acc;
+      }
+      acc[property.fieldKey] = property.name || property.fieldKey;
+      return acc;
+    }, {});
+  }, [ontologyGraph, anchorModelUri]);
+
   return (
     <div className="space-y-6">
       <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
@@ -1398,7 +1413,9 @@ export function ProcessInsightsPanel() {
                       <Table.ColumnHeaderCell>Object Type</Table.ColumnHeaderCell>
                       {evidenceAnchorColumns.length > 0 ? (
                         evidenceAnchorColumns.map((key) => (
-                          <Table.ColumnHeaderCell key={`anchor-col-${key}`}>{key}</Table.ColumnHeaderCell>
+                          <Table.ColumnHeaderCell key={`anchor-col-${key}`}>
+                            {anchorFieldNameByKey[key] || key}
+                          </Table.ColumnHeaderCell>
                         ))
                       ) : (
                         <Table.ColumnHeaderCell>Reference</Table.ColumnHeaderCell>
