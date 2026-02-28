@@ -151,7 +151,7 @@ def test_openai_runtime_uses_chat_completions_json_contract() -> None:
     assert kwargs["temperature"] == 0
     assert kwargs["stream"] is False
     assert kwargs["tool_choice"] == "auto"
-    assert kwargs["parallel_tool_calls"] is False
+    assert kwargs["parallel_tool_calls"] is True
     assert isinstance(kwargs["tools"], list)
     assert kwargs["messages"] == [{"role": "user", "content": "Explain Ticket"}]
 

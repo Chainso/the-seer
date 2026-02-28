@@ -14,6 +14,7 @@ import {
   type AppendMessage,
   type ThreadMessage,
 } from '@assistant-ui/react';
+import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown';
 import { ArrowUpRight, Bot, Plus, SendHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 
 import type { AssistantChatMessage } from '@/app/lib/api/assistant-chat';
@@ -188,7 +189,9 @@ function AssistantMessageBubble() {
       <div className="max-w-[90%] rounded-2xl rounded-tl-sm border border-border/85 bg-card/95 px-3 py-2 text-sm leading-relaxed shadow-[0_8px_22px_-14px_color-mix(in_oklch,var(--foreground)_18%,transparent)]">
         <MessagePrimitive.Content
           components={{
-            Text: (part) => <p className="whitespace-pre-wrap">{part.text}</p>,
+            Text: () => (
+              <MarkdownTextPrimitive className="space-y-3 [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-muted/70 [&_code]:px-1 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-border/80 [&_pre]:bg-muted/50 [&_pre]:p-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold" />
+            ),
           }}
         />
       </div>
@@ -400,17 +403,7 @@ export function GlobalAssistantLayer() {
           },
         });
 
-        const evidence = response.evidence.slice(0, 2);
-        const caveats = response.caveats.slice(0, 1);
-        let answerText = response.answer.trim();
-        if (evidence.length > 0) {
-          answerText += `\n\nEvidence\n${evidence
-            .map((item) => `- ${item.label}: ${item.detail}`)
-            .join('\n')}`;
-        }
-        if (caveats.length > 0) {
-          answerText += `\n\nCaveat\n- ${caveats[0]}`;
-        }
+        const answerText = response.answer.trim();
 
         const assistantMessage: StoredMessage = {
           id: makeId('msg-assistant'),

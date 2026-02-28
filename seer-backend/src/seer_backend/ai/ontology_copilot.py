@@ -27,7 +27,8 @@ from seer_backend.ontology.models import (
 )
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
-_TOOL_CALL_MAX_ROUNDS = 20
+_TOOL_CALL_MAX_ROUNDS = 6
+_TOOL_CALL_MAX_TOTAL = 8
 
 _BASE_ONTOLOGY_SYSTEM_PROMPT_TEMPLATE = """
 Authoritative Prophet base ontology (verbatim Turtle).
@@ -54,6 +55,11 @@ Workflow for each turn:
 4. If using the tool, produce one high-quality query first and keep it bounded.
 5. Return a concise answer that cites what you checked and any limits/uncertainty.
 
+Tool planning and budget:
+- Prefer batching independent checks in one round instead of serial loops.
+- Keep tool usage small: usually 1 round, at most 2 unless explicitly asked for exhaustive validation.
+- If evidence is still incomplete after limited queries, stop and explain what is missing.
+
 SPARQL query rules:
 - Allowed query forms: SELECT or ASK only.
 - Never use mutating operations (INSERT, DELETE, LOAD, CLEAR, CREATE, DROP, COPY, MOVE, ADD).
@@ -70,6 +76,8 @@ Answer style:
 - Be concise and concrete.
 - Distinguish between facts from ontology/tool evidence vs inference.
 - If evidence is insufficient, say exactly what is missing.
+- Return markdown only (no JSON wrappers).
+- Use short sections only when they improve readability.
 
 Good SPARQL examples (from Prophet Turtle demos):
 
@@ -194,7 +202,7 @@ class OpenAiChatCompletionsRuntime:
                 temperature=0,
                 tools=[_SPARQL_READ_ONLY_TOOL_SCHEMA],
                 tool_choice="auto",
-                parallel_tool_calls=False,
+                parallel_tool_calls=True,
             )
         except APIConnectionError as exc:
             raise OntologyDependencyUnavailableError(
@@ -245,6 +253,7 @@ class OntologyCopilotService:
         tool_result: CopilotToolResult | None = None
         tool_call: CopilotToolCall | None = None
         answer_text = ""
+        total_tool_calls = 0
 
         for round_index in range(_TOOL_CALL_MAX_ROUNDS):
             model_output = await self._model_runtime.run_messages(messages)
@@ -260,18 +269,36 @@ class OntologyCopilotService:
                     tool_result=tool_result,
                 )
 
-            for call_index, requested_call in enumerate(requested_calls):
-                resolved_call = requested_call
-                if not resolved_call.call_id:
-                    resolved_call = resolved_call.model_copy(
+            remaining_budget = _TOOL_CALL_MAX_TOTAL - total_tool_calls
+            if remaining_budget <= 0:
+                break
+
+            bounded_calls = requested_calls[:remaining_budget]
+            resolved_calls: list[CopilotToolCall] = []
+            for call_index, requested_call in enumerate(bounded_calls):
+                if requested_call.call_id:
+                    resolved_calls.append(requested_call)
+                    continue
+                resolved_calls.append(
+                    requested_call.model_copy(
                         update={"call_id": f"call_auto_{round_index}_{call_index}"}
                     )
+                )
+
+            tool_results = await asyncio.gather(
+                *(self._execute_tool_call(resolved_call) for resolved_call in resolved_calls)
+            )
+            total_tool_calls += len(resolved_calls)
+
+            for call_index, (resolved_call, resolved_result) in enumerate(
+                zip(resolved_calls, tool_results, strict=False)
+            ):
                 tool_call = resolved_call
-                tool_result = await self._execute_tool_call(tool_call)
+                tool_result = resolved_result
                 assistant_message, tool_message = _build_tool_result_messages(
                     assistant_content=answer_text if call_index == 0 else "",
-                    tool_call=tool_call,
-                    tool_result=tool_result,
+                    tool_call=resolved_call,
+                    tool_result=resolved_result,
                 )
                 messages.append(assistant_message)
                 messages.append(tool_message)
