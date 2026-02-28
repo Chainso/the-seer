@@ -8,7 +8,7 @@ import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import type { OntologyEdge, OntologyGraph, OntologyNode } from '@/app/types/ontology';
 import { OntologyGraphVisualization } from './ontology-graph';
-import { Search, Network, BookOpen, Activity, ArrowRightLeft } from 'lucide-react';
+import { Search, Network, Activity, ArrowRightLeft } from 'lucide-react';
 
 interface OntologyExplorerTabsProps {
   graphData: OntologyGraph;
@@ -649,10 +649,6 @@ export function OntologyExplorerTabs({
             <TabsTrigger value="events">Events</TabsTrigger>
             <TabsTrigger value="triggers">Triggers</TabsTrigger>
           </TabsList>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <BookOpen className="h-4 w-4" />
-            <span>Read-only by design: author ontology changes in repo PRs, then inspect impact here.</span>
-          </div>
         </div>
       </Card>
 
@@ -730,7 +726,7 @@ export function OntologyExplorerTabs({
                       Focus Selection
                     </Button>
                   </div>
-                  <div className="h-[520px]">
+                  <div className="h-[640px] xl:h-[720px]">
                     <OntologyGraphVisualization
                       data={mapGraphState.graph}
                       allowedLabels={visibleLabelSet}
@@ -756,7 +752,7 @@ export function OntologyExplorerTabs({
                     <div className="mt-4 rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
                       <div className="flex items-center gap-2">
                         <ArrowRightLeft className="h-3.5 w-3.5" />
-                        <span>Change workflow: edit Turtle/SHACL in repo, open PR, then validate semantics in this explorer.</span>
+                        <span>Inspect concept relationships, schema fields, and lifecycle connections across the ontology.</span>
                       </div>
                     </div>
                   </Card>

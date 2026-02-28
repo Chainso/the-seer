@@ -33,7 +33,7 @@ export default function InspectorPage() {
     <Tabs value={activeTab} onValueChange={onTabChange} className="space-y-4">
       <TabsList className="grid w-full max-w-md grid-cols-2">
         <TabsTrigger value="activity">Object Activity</TabsTrigger>
-        <TabsTrigger value="history">History</TabsTrigger>
+        <TabsTrigger value="history">Object Store</TabsTrigger>
       </TabsList>
       <TabsContent value="activity" className="space-y-4">
         <ObjectActivityPanel />

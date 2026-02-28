@@ -8,7 +8,6 @@ Read-first ontology explorer and digital twin interface for Seer.
 - `\/changes`: semantic diff, blast radius, governance scorecard, perf budgets
 - `\/inspector` and `\/inspector/analytics`: runtime/process mining views
 - `\/assistant`: evidence-grounded mission control with redacted audit logging
-- `\/object-store`: object state browsing
 
 ## Local Development
 

@@ -1,6 +1,6 @@
 import { Card } from './components/ui/card';
 import Link from 'next/link';
-import { Network, Activity, Database, ArrowUpRight } from 'lucide-react';
+import { Network, Activity, ArrowUpRight } from 'lucide-react';
 
 export default function Home() {
   return (
@@ -13,7 +13,7 @@ export default function Home() {
         </p>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2">
         <Link href="/ontology/overview">
           <Card className="group h-full cursor-pointer rounded-2xl border border-border bg-card p-6 shadow-sm transition-transform hover:-translate-y-1">
             <div className="flex items-center justify-between">
@@ -40,18 +40,6 @@ export default function Home() {
           </Card>
         </Link>
 
-        <Link href="/object-store">
-          <Card className="group h-full cursor-pointer rounded-2xl border border-border bg-card p-6 shadow-sm transition-transform hover:-translate-y-1">
-            <div className="flex items-center justify-between">
-              <Database className="h-10 w-10 text-amber-600" />
-              <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
-            </div>
-            <h2 className="mt-6 font-display text-xl">Object Store</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Review object instances, their current states, and historical transitions.
-            </p>
-          </Card>
-        </Link>
       </div>
     </div>
   );

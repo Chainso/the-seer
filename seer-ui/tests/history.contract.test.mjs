@@ -18,10 +18,11 @@ test("inspector page exposes history tab with timeline panel", () => {
   const nav = read("app/components/layout/nav-sidebar.tsx");
 
   assert.match(inspectorPage, /TabsTrigger value="history"/);
-  assert.match(historyPanel, /Object History Timeline/);
+  assert.match(inspectorPage, /TabsTrigger value="history">Object Store/);
+  assert.match(historyPanel, /Object Store/);
   assert.match(historyPanel, /Live Objects/);
   assert.match(historyPanel, /Object Event History/);
-  assert.match(nav, /name:\s*'History'/);
+  assert.match(nav, /name:\s*'Object Store'/);
   assert.match(nav, /href:\s*'\/inspector\/history'/);
 });
 

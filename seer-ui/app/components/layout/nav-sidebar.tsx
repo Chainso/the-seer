@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
-import { Home, Network, Activity, Sparkles, Sun, Moon, BarChart3, Database, Bot, GitPullRequest, History } from 'lucide-react';
+import { Home, Network, Activity, Sparkles, Sun, Moon, BarChart3, Database, Bot, GitPullRequest } from 'lucide-react';
 
 const navigation = [
   {
@@ -29,13 +29,8 @@ const navigation = [
     icon: Activity,
   },
   {
-    name: 'History',
-    href: '/inspector/history',
-    icon: History,
-  },
-  {
     name: 'Object Store',
-    href: '/object-store',
+    href: '/inspector/history',
     icon: Database,
   },
   {

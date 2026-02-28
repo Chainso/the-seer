@@ -867,8 +867,8 @@ export function HistoryPanel() {
       <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">History</p>
-            <h1 className="mt-3 font-display text-3xl">Object History Timeline</h1>
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Object Store</p>
+            <h1 className="mt-3 font-display text-3xl">Object Store</h1>
             <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
               Browse the latest snapshot of every object and inspect full event history for the selected identity.
             </p>

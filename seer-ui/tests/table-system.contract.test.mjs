@@ -37,7 +37,6 @@ test("table consumers use namespace primitives and semantic header cells", () =>
   const objectList = read("app/components/ontology/lists/object-list.tsx");
   const triggerList = read("app/components/ontology/lists/trigger-list.tsx");
   const historyPanel = read("app/components/inspector/history-panel.tsx");
-  const objectStorePanel = read("app/components/object-store/object-store-panel.tsx");
 
   for (const fileText of [
     actionList,
@@ -45,7 +44,6 @@ test("table consumers use namespace primitives and semantic header cells", () =>
     objectList,
     triggerList,
     historyPanel,
-    objectStorePanel,
   ]) {
     assert.match(fileText, /<Table\.Root/);
     assert.match(fileText, /<Table\.Header>/);
