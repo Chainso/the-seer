@@ -8,7 +8,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 
 import { getOcpnGraph } from "@/app/lib/api/process-mining";
 import { getOntologyGraph } from "@/app/lib/api/ontology";
@@ -195,12 +195,21 @@ interface FilterPair {
   value: string;
 }
 
+const toDatetimeLocalValue = (date: Date): string => {
+  const withOffset = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return withOffset.toISOString().slice(0, 16);
+};
+
 export function ProcessMiningPanel() {
   const [ontologyGraph, setOntologyGraph] = useState<OntologyGraph | null>(null);
   const [models, setModels] = useState<OntologyNode[]>([]);
   const [modelUri, setModelUri] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>("24h");
+  const [from, setFrom] = useState(() => {
+    const now = new Date();
+    return toDatetimeLocalValue(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  });
+  const [to, setTo] = useState(() => toDatetimeLocalValue(new Date()));
   const [traceId, setTraceId] = useState("");
   const [workflowId, setWorkflowId] = useState("");
   const [minShare, setMinShare] = useState("0");
@@ -276,6 +285,19 @@ export function ProcessMiningPanel() {
       return acc;
     }, {});
   }, [filters]);
+
+  const applyWindowPreset = (preset: Exclude<SharedWindowPreset, "custom">) => {
+    setWindowPreset(preset);
+    const now = new Date();
+    const durationMsByPreset: Record<Exclude<SharedWindowPreset, "custom">, number> = {
+      "24h": 24 * 60 * 60 * 1000,
+      "7d": 7 * 24 * 60 * 60 * 1000,
+      "30d": 30 * 24 * 60 * 60 * 1000,
+    };
+    const start = new Date(now.getTime() - durationMsByPreset[preset]);
+    setFrom(toDatetimeLocalValue(start));
+    setTo(toDatetimeLocalValue(now));
+  };
 
   const loadProcessMining = async () => {
     if (!modelUri) return;
@@ -421,35 +443,28 @@ export function ProcessMiningPanel() {
           Process Filters
         </div>
 
-        <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr_0.6fr]">
-          <div className="space-y-2">
-            <Label htmlFor="model">Object model</Label>
-            <Select value={modelUri} onValueChange={value => setModelUri(value)}>
-              <SelectTrigger id="model">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {modelOptions.map(option => (
-                  <SelectItem key={option.uri} value={option.uri}>
-                    {option.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="from">From</Label>
-            <Input id="from" type="datetime-local" value={from} onChange={e => setFrom(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="to">To</Label>
-            <Input id="to" type="datetime-local" value={to} onChange={e => setTo(e.target.value)} />
-          </div>
-          <div className="flex items-end">
-            <Button className="w-full" onClick={loadProcessMining} disabled={!modelUri || loading}>
-              {loading ? "Loading..." : "Run mining"}
-            </Button>
-          </div>
+        <div className="mt-6">
+          <InspectorScopeFilters
+            windowPreset={windowPreset}
+            onApplyWindowPreset={applyWindowPreset}
+            onCustomWindowChange={() => setWindowPreset("custom")}
+            modelId="mining-model"
+            modelLabel="Object model"
+            modelValue={modelUri}
+            modelOptions={modelOptions.map((option) => ({ value: option.uri, label: option.name }))}
+            onModelChange={setModelUri}
+            fromId="mining-from"
+            fromValue={from}
+            onFromChange={setFrom}
+            toId="mining-to"
+            toValue={to}
+            onToChange={setTo}
+            runLabel="Run mining"
+            runningLabel="Loading..."
+            isRunning={loading}
+            runDisabled={!modelUri || loading}
+            onRun={loadProcessMining}
+          />
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">

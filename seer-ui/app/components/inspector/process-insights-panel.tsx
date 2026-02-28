@@ -11,6 +11,7 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table } from "../ui/table";
+import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 
 import { cn } from "@/app/lib/utils";
 import { getOntologyGraph, queryOntologySelect } from "@/app/lib/api/ontology";
@@ -33,7 +34,6 @@ import type {
 import type { OntologyGraph, OntologyNode } from "@/app/types/ontology";
 
 type RunState = "idle" | "running" | "completed" | "error";
-type WindowPreset = "24h" | "7d" | "30d" | "custom";
 
 interface ModelOption {
   uri: string;
@@ -132,6 +132,74 @@ function toPercent(value: number): string {
   return `${(Math.max(0, value) * 100).toFixed(2)}%`;
 }
 
+function stringifyRefValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "null";
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function parseTraceAnchor(trace: RootCauseEvidenceResponseContract["traces"][number]): {
+  objectType: string;
+  keyParts: Record<string, string>;
+  fallbackRef: string;
+} {
+  const anchorKey = trace.anchor_key || "";
+  const firstSep = anchorKey.indexOf("|");
+  const secondSep = firstSep >= 0 ? anchorKey.indexOf("|", firstSep + 1) : -1;
+
+  const objectTypeFromKey = firstSep > 0 ? anchorKey.slice(0, firstSep) : "";
+  const canonicalFromKey = secondSep > firstSep ? anchorKey.slice(secondSep + 1) : "";
+  const canonicalRaw = (trace.anchor_object_ref_canonical || canonicalFromKey || "").trim();
+
+  const objectType = objectTypeFromKey || trace.anchor_object_type || "—";
+  if (!canonicalRaw) {
+    const fallback = trace.anchor_object_ref_hash ? String(trace.anchor_object_ref_hash) : "—";
+    return {
+      objectType,
+      keyParts: {},
+      fallbackRef: fallback,
+    };
+  }
+
+  try {
+    const parsed = JSON.parse(canonicalRaw) as unknown;
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+      return {
+        objectType,
+        keyParts: {},
+        fallbackRef: stringifyRefValue(parsed),
+      };
+    }
+    const entries = Object.entries(parsed as Record<string, unknown>);
+    if (entries.length === 0) {
+      return {
+        objectType,
+        keyParts: {},
+        fallbackRef: "—",
+      };
+    }
+    const keyParts = entries.reduce<Record<string, string>>((acc, [key, value]) => {
+      acc[key] = stringifyRefValue(value) || "—";
+      return acc;
+    }, {});
+    return { objectType, keyParts, fallbackRef: canonicalRaw };
+  } catch {
+    return {
+      objectType,
+      keyParts: {},
+      fallbackRef: canonicalRaw,
+    };
+  }
+}
+
 function iriLocalName(iri: string): string {
   const hashIndex = iri.lastIndexOf("#");
   if (hashIndex >= 0 && hashIndex < iri.length - 1) {
@@ -181,16 +249,62 @@ function nodeDisplayName(node: OntologyNode): string {
   return ontologyNodeName(node);
 }
 
+function toPascalToken(value: string): string {
+  return value
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean)
+    .map((token) => token[0]?.toUpperCase() + token.slice(1))
+    .join("");
+}
+
+function deriveEventTypeFromLocalName(localName: string): string {
+  if (localName.startsWith("trans_")) {
+    return `${toPascalToken(localName.slice("trans_".length))}Transition`;
+  }
+  if (localName.startsWith("aout_")) {
+    return `${toPascalToken(localName.slice("aout_".length))}Result`;
+  }
+  if (localName.startsWith("ain_")) {
+    return `${toPascalToken(localName.slice("ain_".length))}Command`;
+  }
+  if (localName.startsWith("sig_")) {
+    return toPascalToken(localName.slice("sig_".length));
+  }
+  if (localName.startsWith("evt_")) {
+    return toPascalToken(localName.slice("evt_".length));
+  }
+  return "";
+}
+
 function nodeEventTypeValue(node: OntologyNode): string {
-  const name = nodeDisplayName(node);
-  const local = iriLocalName(node.uri);
-  if (/[._-]/.test(name)) {
-    return name;
+  const canonicalFromField = (value: unknown): string => {
+    if (typeof value !== "string") {
+      return "";
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+    return trimmed.replace(/\s+/g, "");
+  };
+
+  const localName = iriLocalName(node.uri);
+  const localDerived = deriveEventTypeFromLocalName(localName);
+  if (localName.startsWith("trans_") && localDerived) {
+    return localDerived;
   }
-  if (/[._-]/.test(local)) {
-    return local;
+
+  const fromProphetName = canonicalFromField(node.properties?.["prophet:name"]);
+  if (fromProphetName) {
+    return fromProphetName;
   }
-  return name || local;
+
+  const fromName = canonicalFromField(node.properties?.name);
+  if (fromName) {
+    return fromName;
+  }
+
+  return localDerived || localName;
 }
 
 function buildOutcomeOptions(graph: OntologyGraph | null, anchorModelUri: string): OutcomeOption[] {
@@ -516,7 +630,7 @@ export function ProcessInsightsPanel() {
   const [ontologyGraph, setOntologyGraph] = useState<OntologyGraph | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [anchorModelUri, setAnchorModelUri] = useState("");
-  const [windowPreset, setWindowPreset] = useState<WindowPreset>("24h");
+  const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>("24h");
   const [from, setFrom] = useState(() => {
     const now = new Date();
     return toDatetimeLocalValue(new Date(now.getTime() - 24 * 60 * 60 * 1000));
@@ -708,10 +822,10 @@ export function ProcessInsightsPanel() {
     return Math.floor(parsed);
   };
 
-  const applyWindowPreset = (preset: Exclude<WindowPreset, "custom">) => {
+  const applyWindowPreset = (preset: Exclude<SharedWindowPreset, "custom">) => {
     setWindowPreset(preset);
     const now = new Date();
-    const durationMsByPreset: Record<Exclude<WindowPreset, "custom">, number> = {
+    const durationMsByPreset: Record<Exclude<SharedWindowPreset, "custom">, number> = {
       "24h": 24 * 60 * 60 * 1000,
       "7d": 7 * 24 * 60 * 60 * 1000,
       "30d": 30 * 24 * 60 * 60 * 1000,
@@ -859,6 +973,25 @@ export function ProcessInsightsPanel() {
     void loadEvidence(selectedInsight, parseEvidenceLimit(value));
   };
 
+  const evidenceTraceRows = useMemo(
+    () => (evidence?.traces || []).map((trace) => ({ trace, anchor: parseTraceAnchor(trace) })),
+    [evidence]
+  );
+
+  const evidenceAnchorColumns = useMemo(() => {
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    evidenceTraceRows.forEach(({ anchor }) => {
+      Object.keys(anchor.keyParts).forEach((key) => {
+        if (!seen.has(key)) {
+          seen.add(key);
+          ordered.push(key);
+        }
+      });
+    });
+    return ordered;
+  }, [evidenceTraceRows]);
+
   return (
     <div className="space-y-6">
       <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
@@ -879,95 +1012,42 @@ export function ProcessInsightsPanel() {
       </Card>
 
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant={windowPreset === "24h" ? "secondary" : "outline"}
-            onClick={() => applyWindowPreset("24h")}
-          >
-            Last 24h
-          </Button>
-          <Button
-            size="sm"
-            variant={windowPreset === "7d" ? "secondary" : "outline"}
-            onClick={() => applyWindowPreset("7d")}
-          >
-            Last 7d
-          </Button>
-          <Button
-            size="sm"
-            variant={windowPreset === "30d" ? "secondary" : "outline"}
-            onClick={() => applyWindowPreset("30d")}
-          >
-            Last 30d
-          </Button>
-          <Badge variant="outline" className="ml-1">
-            {windowPreset === "custom" ? "Custom window" : `Preset: ${windowPreset}`}
-          </Badge>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr_0.7fr_0.8fr]">
-          <div className="space-y-2">
-            <Label htmlFor="anchor-model">Anchor object model</Label>
-            <Select value={anchorModelUri} onValueChange={setAnchorModelUri}>
-              <SelectTrigger id="anchor-model">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {models.map((model) => (
-                  <SelectItem key={model.uri} value={model.uri}>
-                    {model.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="from">From</Label>
-            <Input
-              id="from"
-              type="datetime-local"
-              value={from}
-              onChange={(event) => {
-                setFrom(event.target.value);
-                setWindowPreset("custom");
-              }}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="to">To</Label>
-            <Input
-              id="to"
-              type="datetime-local"
-              value={to}
-              onChange={(event) => {
-                setTo(event.target.value);
-                setWindowPreset("custom");
-              }}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="depth">Depth</Label>
-            <Select value={depth} onValueChange={setDepth}>
-              <SelectTrigger id="depth">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">1</SelectItem>
-                <SelectItem value="2">2</SelectItem>
-                <SelectItem value="3">3</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-end">
-            <Button className="w-full" onClick={runAnalysis} disabled={runState === "running"}>
-              {runState === "running" ? "Running..." : "Run insights"}
-            </Button>
-          </div>
-        </div>
+        <InspectorScopeFilters
+          windowPreset={windowPreset}
+          onApplyWindowPreset={applyWindowPreset}
+          onCustomWindowChange={() => setWindowPreset("custom")}
+          modelId="anchor-model"
+          modelLabel="Anchor object model"
+          modelValue={anchorModelUri}
+          modelOptions={models.map((model) => ({ value: model.uri, label: model.name }))}
+          onModelChange={setAnchorModelUri}
+          fromId="insights-from"
+          fromValue={from}
+          onFromChange={setFrom}
+          toId="insights-to"
+          toValue={to}
+          onToChange={setTo}
+          runLabel="Run insights"
+          runningLabel="Running..."
+          isRunning={runState === "running"}
+          runDisabled={runState === "running"}
+          onRun={runAnalysis}
+          extraControl={
+            <div className="space-y-2">
+              <Label htmlFor="depth">Depth</Label>
+              <Select value={depth} onValueChange={setDepth}>
+                <SelectTrigger id="depth">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1</SelectItem>
+                  <SelectItem value="2">2</SelectItem>
+                  <SelectItem value="3">3</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          }
+        />
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[1.3fr_auto]">
           <div className="space-y-2">
@@ -1315,40 +1395,63 @@ export function ProcessInsightsPanel() {
                 <Table.Root variant="surface" size="1">
                   <Table.Header>
                     <Table.Row>
-                      <Table.ColumnHeaderCell>Anchor</Table.ColumnHeaderCell>
+                      <Table.ColumnHeaderCell>Object Type</Table.ColumnHeaderCell>
+                      {evidenceAnchorColumns.length > 0 ? (
+                        evidenceAnchorColumns.map((key) => (
+                          <Table.ColumnHeaderCell key={`anchor-col-${key}`}>{key}</Table.ColumnHeaderCell>
+                        ))
+                      ) : (
+                        <Table.ColumnHeaderCell>Reference</Table.ColumnHeaderCell>
+                      )}
                       <Table.ColumnHeaderCell>Outcome</Table.ColumnHeaderCell>
                       <Table.ColumnHeaderCell>Events</Table.ColumnHeaderCell>
                       <Table.ColumnHeaderCell>Window</Table.ColumnHeaderCell>
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {evidence.traces.map((trace) => (
-                      <Table.Row key={`${trace.anchor_key}:${trace.anchor_object_ref_hash}`}>
-                        <Table.RowHeaderCell>
-                          <div>{trace.anchor_key}</div>
-                        </Table.RowHeaderCell>
-                        <Table.Cell>
-                          <Badge variant={trace.outcome ? "default" : "secondary"}>
-                            {trace.outcome ? "Positive" : "Negative"}
-                          </Badge>
-                        </Table.Cell>
-                        <Table.Cell className="max-w-[380px]">
-                          <div className="truncate text-xs">
-                            {summarizeTraceEvents(trace.events, eventTypeDisplayMap)}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground">{trace.events.length} events</div>
-                        </Table.Cell>
-                        <Table.Cell className="text-xs">
-                          <div>{formatDateTime(trace.events[0]?.occurred_at)}</div>
-                          <div className="text-muted-foreground">
-                            {formatDateTime(trace.events[trace.events.length - 1]?.occurred_at)}
-                          </div>
-                        </Table.Cell>
-                      </Table.Row>
-                    ))}
+                    {evidenceTraceRows.map(({ trace, anchor }) => {
+                      return (
+                        <Table.Row key={`${trace.anchor_key}:${trace.anchor_object_ref_hash}`}>
+                          <Table.RowHeaderCell>
+                            <div>{anchor.objectType}</div>
+                          </Table.RowHeaderCell>
+                          {evidenceAnchorColumns.length > 0 ? (
+                            evidenceAnchorColumns.map((key) => (
+                              <Table.Cell key={`${trace.anchor_key}:${key}`} className="max-w-[220px]">
+                                <div className="truncate text-xs font-medium">{anchor.keyParts[key] || "—"}</div>
+                              </Table.Cell>
+                            ))
+                          ) : (
+                            <Table.Cell className="max-w-[260px]">
+                              <div className="truncate text-xs font-medium">{anchor.fallbackRef || "—"}</div>
+                            </Table.Cell>
+                          )}
+                          <Table.Cell>
+                            <Badge variant={trace.outcome ? "default" : "secondary"}>
+                              {trace.outcome ? "Positive" : "Negative"}
+                            </Badge>
+                          </Table.Cell>
+                          <Table.Cell className="max-w-[380px]">
+                            <div className="truncate text-xs">
+                              {summarizeTraceEvents(trace.events, eventTypeDisplayMap)}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">{trace.events.length} events</div>
+                          </Table.Cell>
+                          <Table.Cell className="text-xs">
+                            <div>{formatDateTime(trace.events[0]?.occurred_at)}</div>
+                            <div className="text-muted-foreground">
+                              {formatDateTime(trace.events[trace.events.length - 1]?.occurred_at)}
+                            </div>
+                          </Table.Cell>
+                        </Table.Row>
+                      );
+                    })}
                     {evidence.traces.length === 0 && (
                       <Table.Row>
-                        <Table.Cell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">
+                        <Table.Cell
+                          colSpan={4 + (evidenceAnchorColumns.length > 0 ? evidenceAnchorColumns.length : 1)}
+                          className="py-6 text-center text-sm text-muted-foreground"
+                        >
                           No evidence traces for this insight.
                         </Table.Cell>
                       </Table.Row>

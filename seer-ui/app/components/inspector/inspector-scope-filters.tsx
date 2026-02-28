@@ -1,0 +1,152 @@
+"use client";
+
+import type { ReactNode } from "react";
+
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+
+export type SharedWindowPreset = "24h" | "7d" | "30d" | "custom";
+
+type ScopeModelOption = {
+  value: string;
+  label: string;
+};
+
+type InspectorScopeFiltersProps = {
+  windowPreset: SharedWindowPreset;
+  onApplyWindowPreset: (preset: Exclude<SharedWindowPreset, "custom">) => void;
+  onCustomWindowChange: () => void;
+  modelId: string;
+  modelLabel: string;
+  modelValue: string;
+  modelOptions: ScopeModelOption[];
+  onModelChange: (value: string) => void;
+  fromId: string;
+  fromValue: string;
+  onFromChange: (value: string) => void;
+  toId: string;
+  toValue: string;
+  onToChange: (value: string) => void;
+  runLabel: string;
+  runningLabel: string;
+  isRunning: boolean;
+  runDisabled?: boolean;
+  onRun: () => void;
+  extraControl?: ReactNode;
+};
+
+export function InspectorScopeFilters({
+  windowPreset,
+  onApplyWindowPreset,
+  onCustomWindowChange,
+  modelId,
+  modelLabel,
+  modelValue,
+  modelOptions,
+  onModelChange,
+  fromId,
+  fromValue,
+  onFromChange,
+  toId,
+  toValue,
+  onToChange,
+  runLabel,
+  runningLabel,
+  isRunning,
+  runDisabled = false,
+  onRun,
+  extraControl,
+}: InspectorScopeFiltersProps) {
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={windowPreset === "24h" ? "secondary" : "outline"}
+          onClick={() => onApplyWindowPreset("24h")}
+        >
+          Last 24h
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={windowPreset === "7d" ? "secondary" : "outline"}
+          onClick={() => onApplyWindowPreset("7d")}
+        >
+          Last 7d
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={windowPreset === "30d" ? "secondary" : "outline"}
+          onClick={() => onApplyWindowPreset("30d")}
+        >
+          Last 30d
+        </Button>
+        <Badge variant="outline" className="ml-1">
+          {windowPreset === "custom" ? "Custom window" : `Preset: ${windowPreset}`}
+        </Badge>
+      </div>
+
+      <div
+        className={`grid gap-4 ${
+          extraControl ? "lg:grid-cols-[1.2fr_1fr_1fr_0.7fr_0.8fr]" : "lg:grid-cols-[1.2fr_1fr_1fr_0.8fr]"
+        }`}
+      >
+        <div className="space-y-2">
+          <Label htmlFor={modelId}>{modelLabel}</Label>
+          <Select value={modelValue} onValueChange={onModelChange}>
+            <SelectTrigger id={modelId}>
+              <SelectValue placeholder="Select model" />
+            </SelectTrigger>
+            <SelectContent>
+              {modelOptions.map((model) => (
+                <SelectItem key={model.value} value={model.value}>
+                  {model.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor={fromId}>From</Label>
+          <Input
+            id={fromId}
+            type="datetime-local"
+            value={fromValue}
+            onChange={(event) => {
+              onCustomWindowChange();
+              onFromChange(event.target.value);
+            }}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor={toId}>To</Label>
+          <Input
+            id={toId}
+            type="datetime-local"
+            value={toValue}
+            onChange={(event) => {
+              onCustomWindowChange();
+              onToChange(event.target.value);
+            }}
+          />
+        </div>
+
+        {extraControl}
+
+        <div className="flex items-end">
+          <Button className="w-full" onClick={onRun} disabled={runDisabled}>
+            {isRunning ? runningLabel : runLabel}
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
