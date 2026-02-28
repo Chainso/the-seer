@@ -10,6 +10,7 @@
     "test:contracts": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@assistant-ui/react": "^0.12.14",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",
