@@ -72,6 +72,7 @@ class ClickHouseProcessMiningRepository:
         max_events: int,
         max_relations: int,
     ) -> ExtractedProcessFrames:
+        include_object_types = payload.canonical_include_object_types
         anchor_events_subquery = _anchor_events_subquery(payload)
 
         event_count_rows = await self._select_rows(
@@ -91,7 +92,7 @@ class ClickHouseProcessMiningRepository:
                 "narrow time window or object-type filters"
             )
 
-        relation_filter_clause = _relation_object_type_clause(payload.include_object_types)
+        relation_filter_clause = _relation_object_type_clause(include_object_types)
         relation_count_query = "\n".join(
             [
                 "SELECT count() AS cnt",
@@ -301,7 +302,7 @@ class InMemoryProcessMiningRepository:
 
         anchor_event_ids: set[UUID] = set()
         for relation in self._relations:
-            if relation.object_type != payload.anchor_object_type:
+            if relation.object_type != payload.canonical_anchor_object_type:
                 continue
             event_row = self._events.get(relation.event_id)
             if event_row is None:
@@ -318,7 +319,7 @@ class InMemoryProcessMiningRepository:
         ]
         selected_events.sort(key=lambda row: (_ensure_utc(row.occurred_at), str(row.event_id)))
 
-        object_type_filter = set(payload.include_object_types or [])
+        object_type_filter = set(payload.canonical_include_object_types or [])
         selected_relations = [
             relation
             for relation in self._relations
@@ -378,7 +379,7 @@ def _anchor_events_subquery(payload: ProcessMiningRequest) -> str:
             "FROM event_object_links AS l",
             "INNER JOIN event_history AS e ON e.event_id = l.event_id",
             "WHERE",
-            f"  l.object_type = {_sql_string_literal(payload.anchor_object_type)}",
+            f"  l.object_type = {_sql_string_literal(payload.canonical_anchor_object_type)}",
             f"  AND e.occurred_at >= {_datetime_literal(payload.start_at)}",
             f"  AND e.occurred_at <= {_datetime_literal(payload.end_at)}",
         ]

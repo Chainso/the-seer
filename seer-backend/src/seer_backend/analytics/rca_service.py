@@ -184,7 +184,7 @@ class RootCauseService:
 
         return RootCauseRunResponse(
             run_id=str(uuid4()),
-            anchor_object_type=payload.anchor_object_type,
+            anchor_object_type=payload.canonical_anchor_object_type,
             start_at=_ensure_utc(payload.start_at),
             end_at=_ensure_utc(payload.end_at),
             depth=payload.depth,
@@ -638,14 +638,17 @@ def _evaluate_outcome(
     events_by_id: dict[UUID, RcaEventRow],
     relations_by_event: dict[UUID, list[RcaRelationRow]],
 ) -> int:
+    canonical_event_type = outcome.canonical_event_type
+    canonical_object_type = outcome.canonical_object_type
     for event_id in event_ids:
         event = events_by_id.get(event_id)
-        if event is None or event.event_type != outcome.event_type:
+        if event is None or event.event_type != canonical_event_type:
             continue
-        if outcome.object_type is None:
+        if canonical_object_type is None:
             return 1
         if any(
-            relation.object_type == outcome.object_type for relation in relations_by_event[event_id]
+            relation.object_type == canonical_object_type
+            for relation in relations_by_event[event_id]
         ):
             return 1
     return 0

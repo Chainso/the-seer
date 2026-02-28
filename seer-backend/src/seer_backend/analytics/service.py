@@ -160,11 +160,13 @@ class ProcessMiningService:
         nodes, edges, path_stats, warnings = self._miner.mine(log, pm4py_payload)
 
         run_id = str(uuid4())
+        canonical_anchor_object_type = payload.canonical_anchor_object_type
+        canonical_include_object_types = payload.canonical_include_object_types or []
         context = {
-            "anchor_object_type": payload.anchor_object_type,
+            "anchor_object_type": canonical_anchor_object_type,
             "start_at": _to_iso_utc(payload.start_at),
             "end_at": _to_iso_utc(payload.end_at),
-            "include_object_types": payload.include_object_types or [],
+            "include_object_types": canonical_include_object_types,
         }
 
         for node in nodes:
@@ -206,12 +208,12 @@ class ProcessMiningService:
             )
 
         object_types = sorted({edge.object_type for edge in edges})
-        if payload.anchor_object_type not in object_types:
-            object_types = sorted({*object_types, payload.anchor_object_type})
+        if canonical_anchor_object_type not in object_types:
+            object_types = sorted({*object_types, canonical_anchor_object_type})
 
         return ProcessMiningResponse(
             run_id=run_id,
-            anchor_object_type=payload.anchor_object_type,
+            anchor_object_type=canonical_anchor_object_type,
             start_at=_ensure_utc(payload.start_at),
             end_at=_ensure_utc(payload.end_at),
             nodes=nodes,

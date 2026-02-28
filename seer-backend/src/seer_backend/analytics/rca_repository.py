@@ -158,7 +158,7 @@ class ClickHouseRootCauseRepository:
                 "FROM event_object_links AS l",
                 "INNER JOIN event_history AS e ON e.event_id = l.event_id",
                 "WHERE",
-                f"  l.object_type = {_sql_string_literal(payload.anchor_object_type)}",
+                f"  l.object_type = {_sql_string_literal(payload.canonical_anchor_object_type)}",
                 f"  AND e.occurred_at >= {_datetime_literal(payload.start_at)}",
                 f"  AND e.occurred_at <= {_datetime_literal(payload.end_at)}",
                 "ORDER BY l.object_ref_hash, l.object_ref_canonical",
@@ -422,7 +422,7 @@ class InMemoryRootCauseRepository:
                 )
                 for row in self._relations
                 if row.event_id in window_event_ids
-                and row.object_type == payload.anchor_object_type
+                and row.object_type == payload.canonical_anchor_object_type
             },
             key=lambda row: (row.object_type, row.object_ref_hash, row.object_ref_canonical),
         )

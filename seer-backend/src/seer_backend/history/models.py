@@ -19,9 +19,14 @@ class UpdatedObjectPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     object_type: str = Field(min_length=1, max_length=160)
+    object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
     object_ref: JsonObject
     object_payload: JsonObject = Field(alias="object")
     relation_role: str | None = Field(default=None, max_length=120)
+
+    @property
+    def canonical_object_type(self) -> str:
+        return self.object_type_uri or self.object_type
 
     @model_validator(mode="after")
     def validate_declared_object_type(self) -> UpdatedObjectPayload:
@@ -42,12 +47,17 @@ class EventIngestRequest(BaseModel):
     event_id: UUID
     occurred_at: datetime
     event_type: str = Field(min_length=1, max_length=200)
+    event_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
     source: str = Field(min_length=1, max_length=200)
     payload: JsonObject
     trace_id: str | None = Field(default=None, max_length=200)
     schema_version: str | None = Field(default=None, max_length=120)
     attributes: JsonObject | None = None
     updated_objects: list[UpdatedObjectPayload] | None = None
+
+    @property
+    def canonical_event_type(self) -> str:
+        return self.event_type_uri or self.event_type
 
 
 class IngestedObjectSummary(BaseModel):

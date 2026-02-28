@@ -19,7 +19,17 @@ class OutcomeDefinition(BaseModel):
 
     kind: Literal["event_type"] = "event_type"
     event_type: str = Field(min_length=1, max_length=200)
+    event_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
     object_type: str | None = Field(default=None, min_length=1, max_length=160)
+    object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
+
+    @property
+    def canonical_event_type(self) -> str:
+        return self.event_type_uri or self.event_type
+
+    @property
+    def canonical_object_type(self) -> str | None:
+        return self.object_type_uri or self.object_type
 
 
 class RcaFilterCondition(BaseModel):
@@ -46,6 +56,7 @@ class RootCauseRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     anchor_object_type: str = Field(min_length=1, max_length=160)
+    anchor_object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
     start_at: datetime
     end_at: datetime
     depth: int = Field(default=1, ge=1, le=3)
@@ -56,6 +67,10 @@ class RootCauseRequest(BaseModel):
     min_coverage_ratio: float = Field(default=0.02, ge=0.0, le=1.0)
     mi_cardinality_threshold: int = Field(default=8, ge=2, le=500)
     max_insights: int = Field(default=25, ge=1, le=100)
+
+    @property
+    def canonical_anchor_object_type(self) -> str:
+        return self.anchor_object_type_uri or self.anchor_object_type
 
     @model_validator(mode="after")
     def validate_time_window(self) -> RootCauseRequest:
