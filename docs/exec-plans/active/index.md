@@ -65,21 +65,26 @@ Current execution state:
 ## Post-MVP Active Plans
 
 1. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md` (`agent_slot: UX-R2`, in progress)
-2. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/adaptive-lifecycle-label-display.md` (`agent_slot: UX-R4`, in progress)
+2. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/adaptive-lifecycle-label-display.md` (`agent_slot: UX-R4`, completed)
+3. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/stable-identifiers-uri-migration.md` (`agent_slot: DATA-RCA-1`, in progress)
 
 ## Post-MVP Status Tracking
 
 - [x] UI Experience Replatform complete
 - [x] Ontology Copilot OpenAI client migration complete
 - [ ] Old UI adaptation for read-only ontology + process analytics complete
-- [ ] Adaptive lifecycle label display complete
+- [x] Adaptive lifecycle label display complete
+- [ ] Stable URI identifier migration across history/process/RCA complete
+- [x] Assistant dedicated page rewrite + surface unification complete
 - [x] Ontology-driven field display centralization complete
 - [x] Global assistant shell layer + generic AI assistant endpoint complete
 
 Current post-MVP execution state:
 
 - `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md` (Phase 3A history complete; Phase 4 hardening + docs sync in progress as of 2026-02-28)
-- `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/adaptive-lifecycle-label-display.md` (Phase 1 shared resolver mode complete; Phase 2 explorer integration pending as of 2026-02-28)
+- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/adaptive-lifecycle-label-display.md` (Phases 1-3 complete and validated as of 2026-02-28)
+- `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/stable-identifiers-uri-migration.md` (scope and phased migration plan established as of 2026-02-28)
+- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/assistant-page-surface-unification.md` (all phases complete as of 2026-02-28)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md` (all phases complete as of 2026-02-22)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-copilot-openai-client-migration.md` (all phases complete as of 2026-02-23)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/global-assistant-layer-and-generic-ai-endpoint.md` (all phases complete as of 2026-02-28)

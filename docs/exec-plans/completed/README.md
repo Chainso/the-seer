@@ -18,3 +18,4 @@ Each completed plan should preserve:
 6. `mvp-phase-5-ai-hardening-release.md` - completed (2026-02-22)
 7. `ui-experience-replatform-2026.md` - completed (2026-02-22)
 8. `ontology-driven-field-display-centralization.md` - completed (2026-02-28)
+9. `assistant-page-surface-unification.md` - completed (2026-02-28)

@@ -1,5 +1,5 @@
-import { MissionControlPanel } from '@/app/components/assistant/mission-control-panel';
+import { AssistantPageWorkspace } from '@/app/components/assistant/assistant-page-workspace';
 
 export default function AssistantPage() {
-  return <MissionControlPanel />;
+  return <AssistantPageWorkspace />;
 }

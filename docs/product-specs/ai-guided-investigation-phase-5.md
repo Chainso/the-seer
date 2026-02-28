@@ -41,6 +41,9 @@ Define user-facing behavior for unified AI interactions and the guided ontology 
 3. Process/RCA responses follow `analytical` policy and include evidence + caveats.
 4. Guided flow returns both process and RCA run artifacts without manual DB intervention.
 5. Shared UI run-state semantics (`queued`, `running`, `completed`, `error`) are used across ontology/process/RCA interactions.
+6. Assistant conversations are shared across both assistant surfaces:
+   - shell-level slide-over panel, and
+   - dedicated `/assistant` page workspace.
 
 ## Out of Scope (Phase 5)
 

@@ -48,6 +48,7 @@ Primary responsibilities:
 1. module-level user experiences: ontology explorer, ingestion monitor, process explorer, root-cause lab, insights dashboard.
 2. AI interaction surfaces (chat and guided analysis flows).
 3. visualization and drill-down over backend-provided results.
+4. unified assistant experience across global slide-over panel and dedicated `/assistant` page, backed by one shared frontend runtime/state model.
 
 Expected internal areas:
 1. route/application structure (`app` with Next.js App Router).
