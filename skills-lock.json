@@ -1,10 +1,50 @@
 {
   "version": 1,
   "skills": {
+    "assistant-ui": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "computedHash": "a3fad19a3876a40e065f1add36fc2d24a5aebb0ea7242c74e1ed854d050e4101"
+    },
     "building-components": {
       "source": "vercel/components.build",
       "sourceType": "github",
       "computedHash": "ca96444b70257eb3f4f4c76dfdd4a32312c835fe3c8755d2e3d75ac78d384bfd"
+    },
+    "primitives": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "computedHash": "acdb5ddbdd066abf513a3f729198cee8ad79d03b18ba3329e609658d88bc09ee"
+    },
+    "runtime": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "computedHash": "7aac755d83b8396ef149320fb5a8ad4073a828fafbbc6a759de0da4b78bb99c2"
+    },
+    "setup": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "computedHash": "4b4bed14f1bb62c9a7f13a4e2bae68195c4cada690cd7e2d1689ab6cebad255b"
+    },
+    "streaming": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "computedHash": "31a090f9360343967f1189559c2b24da7eeacbf5b1b1c503c57c98c71106e326"
+    },
+    "thread-list": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "computedHash": "aaa49c0f8c1a3c5cf37498c8019f7e0d4f614053b17728593a27755b663e9d7c"
+    },
+    "tools": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "computedHash": "55a64b569cf4eac3bc8877e216e401af6b40d296e5180eb71174ac80b68d670d"
+    },
+    "update": {
+      "source": "assistant-ui/skills",
+      "sourceType": "github",
+      "computedHash": "d2f2732bfd80f02b539b8bdfea48d64c05f80ad8784cb44c9261fb5b8070e3d8"
     },
     "vercel-composition-patterns": {
       "source": "vercel-labs/agent-skills",

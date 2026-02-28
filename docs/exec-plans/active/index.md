@@ -65,15 +65,18 @@ Current execution state:
 ## Post-MVP Active Plans
 
 1. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md` (`agent_slot: UX-R2`, in progress)
+2. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/global-assistant-layer-and-generic-ai-endpoint.md` (`agent_slot: AI-UX-G1`, planned)
 
 ## Post-MVP Status Tracking
 
 - [x] UI Experience Replatform complete
 - [x] Ontology Copilot OpenAI client migration complete
 - [ ] Old UI adaptation for read-only ontology + process analytics complete
+- [ ] Global assistant shell layer + generic AI assistant endpoint complete
 
 Current post-MVP execution state:
 
 - `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md` (Phase 3A history complete; Phase 4 hardening + docs sync in progress as of 2026-02-28)
+- `queued`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/global-assistant-layer-and-generic-ai-endpoint.md` (awaiting predecessor completion and kickoff as of 2026-02-28)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md` (all phases complete as of 2026-02-22)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-copilot-openai-client-migration.md` (all phases complete as of 2026-02-23)
