@@ -65,7 +65,7 @@ Current execution state:
 ## Post-MVP Active Plans
 
 1. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md` (`agent_slot: UX-R2`, in progress)
-2. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/ontology-driven-field-display-centralization.md` (`agent_slot: UX-R3`, in progress - Phases 1-4 complete)
+2. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/ontology-driven-field-display-centralization.md` (`agent_slot: UX-R3`, in progress - Phases 1-5 complete; Phase 6 pending)
 
 ## Post-MVP Status Tracking
 
@@ -78,7 +78,7 @@ Current execution state:
 Current post-MVP execution state:
 
 - `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md` (Phase 3A history complete; Phase 4 hardening + docs sync in progress as of 2026-02-28)
-- `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/ontology-driven-field-display-centralization.md` (Phases 1-4 complete on 2026-02-28; Phase 5 guardrails not started)
+- `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/ontology-driven-field-display-centralization.md` (Phases 1-5 complete on 2026-02-28; Phase 6 documentation ratification pending)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md` (all phases complete as of 2026-02-22)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-copilot-openai-client-migration.md` (all phases complete as of 2026-02-23)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/global-assistant-layer-and-generic-ai-endpoint.md` (all phases complete as of 2026-02-28)

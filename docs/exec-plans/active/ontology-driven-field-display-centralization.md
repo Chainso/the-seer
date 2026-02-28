@@ -216,7 +216,7 @@ Exit criteria:
 - [x] Phase 2 complete
 - [x] Phase 3 complete
 - [x] Phase 4 complete
-- [ ] Phase 5 complete
+- [x] Phase 5 complete
 - [ ] Phase 6 complete
 
 ## Progress / Decision Log
@@ -268,7 +268,18 @@ Exit criteria:
    - `cd seer-ui && npm run lint`: fails on pre-existing unrelated files (`bpmn-graph.tsx`, ontology editor components), with no new process-mining/object-activity lint errors introduced by Phase 4.
    - `cd seer-ui && npm run build`: fails on pre-existing unrelated TypeScript error in `app/components/inspector/bpmn-graph.tsx` (`ElkEdgeData` vs `EdgeProps` constraint).
 14. Decision: mark Phase 4 complete after inspector resolver alignment + focused contract coverage + required validation evidence; keep Phases 5-6 unchecked.
+15. Delivered Phase 5 regression guardrails to prevent field-display logic re-fragmentation:
+   - added `seer-ui/tests/ontology-display-guardrails.contract.test.mjs` with static contract checks that migrated inspector panels (`history-panel`, `process-insights-panel`, `process-mining-panel`, `object-activity-panel`) continue importing/using shared ontology-display APIs.
+   - added guardrail assertions that local pretty display helper patterns (`prettyEventType`, `prettyFilterField`, `prettyFieldLabel`) are not reintroduced in migrated panels.
+   - added guardrail assertions that cleaned panels (`history-panel`, `process-mining-panel`, `object-activity-panel`) do not reintroduce local `iriLocalName`/`ontologyNodeName` fallback-chain helper definitions.
+16. Extended shared resolver contract vectors in `seer-ui/tests/ontology-display.contract.test.mjs`:
+   - alias rewrite coverage for cross-alias field labels (`sales_order_number`/`order_number`),
+   - state token mapping coverage for canonical and alias-like state values (`state_order_pending`, `order_pending`).
+17. Validation evidence for Phase 5:
+   - `cd seer-ui && node --test tests/ontology-display-guardrails.contract.test.mjs tests/ontology-display.contract.test.mjs`: pass.
+   - `cd seer-ui && npm run test:contracts`: passes `tests/history.contract.test.mjs`, `tests/insights.contract.test.mjs`, `tests/ontology-display-guardrails.contract.test.mjs`, and `tests/ontology-display.contract.test.mjs`; suite still has one unrelated pre-existing failure in `tests/change-intelligence.contract.test.mjs` (`assert.ok(assistantApi.includes("/assistant/generate"))`).
+18. Decision: mark Phase 5 complete after guardrails + resolver contract extensions + required validation evidence; keep Phase 6 unchecked for final documentation ratification.
 
 Current execution state:
 
-- `in_progress`: Phases 1-4 complete; Phase 5 regression guardrails not started.
+- `in_progress`: Phases 1-5 complete; Phase 6 documentation ratification pending.

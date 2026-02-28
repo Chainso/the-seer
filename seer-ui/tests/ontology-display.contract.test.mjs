@@ -117,6 +117,11 @@ function buildFixtureGraph() {
         properties: { fieldKey: "order", "prophet:name": "Order" },
       },
       {
+        uri: "http://example.com/prop_order_number",
+        label: "PropertyDefinition",
+        properties: { fieldKey: "order_number", "prophet:name": "Order Number" },
+      },
+      {
         uri: "http://example.com/prop_quantity",
         label: "PropertyDefinition",
         properties: { fieldKey: "quantity", "prophet:name": "Quantity" },
@@ -140,6 +145,11 @@ function buildFixtureGraph() {
     edges: [
       { fromUri: "http://example.com/obj_order", toUri: "http://example.com/prop_customer", type: "hasProperty" },
       { fromUri: "http://example.com/obj_order", toUri: "http://example.com/prop_order", type: "hasProperty" },
+      {
+        fromUri: "http://example.com/obj_order",
+        toUri: "http://example.com/prop_order_number",
+        type: "hasProperty",
+      },
       { fromUri: "http://example.com/obj_order", toUri: "http://example.com/prop_quantity", type: "hasProperty" },
       { fromUri: "http://example.com/obj_order", toUri: "http://example.com/prop_state", type: "hasProperty" },
       {
@@ -211,6 +221,27 @@ test("resolver centralizes field label, state value, and summary rendering", () 
       { objectType: "order" }
     ),
     "State · Pending Approval | Quantity · 3 | Customer · ACME"
+  );
+});
+
+test("resolver preserves alias rewrites and state token mapping contracts", () => {
+  const resolver = buildResolver();
+
+  assert.equal(
+    resolver.displayFieldLabel("sales_order_number", { objectType: "order" }),
+    "Order Number"
+  );
+  assert.equal(
+    resolver.displayFieldLabel("order_number", { objectType: "sales order" }),
+    "Order Number"
+  );
+  assert.equal(
+    resolver.displayFieldValue("state", "state_order_pending", { objectType: "order" }),
+    "Pending Approval"
+  );
+  assert.equal(
+    resolver.displayFieldValue("from_state", "order_pending", { objectType: "order" }),
+    "Pending Approval"
   );
 });
 
