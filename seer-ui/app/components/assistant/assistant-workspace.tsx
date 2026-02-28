@@ -14,6 +14,7 @@ import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown';
 import { ArrowUpRight, Plus, SendHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 
 import { Button } from '@/app/components/ui/button';
+import { Card } from '@/app/components/ui/card';
 import { formatModuleName } from '@/app/components/assistant/shared-assistant-state';
 import { useSharedAssistantRuntime } from '@/app/components/assistant/use-shared-assistant-runtime';
 
@@ -134,17 +135,24 @@ export function AssistantWorkspace({
     });
   }, [variant, hydrated, normalizedSeedPrompt, runtime]);
 
-  const surfaceFrameClass =
+  const panelFrameClass =
+    'relative flex h-full flex-col overflow-hidden border-l border-border/75 bg-background/94 shadow-[-32px_0_90px_-50px_black] sm:rounded-l-[30px]';
+  const headerClass =
     variant === 'panel'
-      ? 'relative flex h-full flex-col overflow-hidden border-l border-border/75 bg-background/94 shadow-[-32px_0_90px_-50px_black] sm:rounded-l-[30px]'
-      : 'relative flex h-[calc(100vh-4rem)] min-h-[38rem] flex-col overflow-hidden rounded-[30px] border border-border/75 bg-background/96 shadow-[0_26px_80px_-46px_black]';
+      ? 'relative border-b border-border/75 bg-gradient-to-r from-card/95 to-background/90 px-5 py-4'
+      : 'border-b px-6 py-4';
+  const viewportClass =
+    variant === 'panel'
+      ? 'relative min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-5 py-4'
+      : 'min-h-0 flex-1 overflow-y-auto px-6 py-4';
+  const sidebarClass =
+    variant === 'panel'
+      ? 'hidden w-64 shrink-0 border-r border-border/70 bg-card/55 p-3 md:block'
+      : 'hidden w-64 shrink-0 border-r p-3 md:block';
 
-  return (
-    <div className={surfaceFrameClass}>
-      <div className="pointer-events-none absolute -top-20 right-[-5rem] h-60 w-60 rounded-full bg-primary/22 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-[-5rem] left-[-3rem] h-52 w-52 rounded-full bg-accent/28 blur-3xl" />
-
-      <div className="relative border-b border-border/75 bg-gradient-to-r from-card/95 to-background/90 px-5 py-4">
+  const workspaceContent = (
+    <>
+      <div className={headerClass}>
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
@@ -172,7 +180,7 @@ export function AssistantWorkspace({
 
       <AssistantRuntimeProvider runtime={runtime}>
         <div className="flex min-h-0 flex-1">
-          <aside className="hidden w-64 shrink-0 border-r border-border/70 bg-card/55 p-3 md:block">
+          <aside className={sidebarClass}>
             <Button
               type="button"
               onClick={() => runtime.threads.switchToNewThread()}
@@ -212,7 +220,7 @@ export function AssistantWorkspace({
           </aside>
 
           <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
-            <ThreadPrimitive.Viewport className="relative min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-5 py-4">
+            <ThreadPrimitive.Viewport className={viewportClass}>
               <AuiIf condition={({ thread }) => thread.isEmpty}>
                 <div className="mx-auto max-w-lg pt-6">
                   <div className="rounded-2xl border border-border/70 bg-card/70 p-5 shadow-[0_16px_40px_-26px_black]">
@@ -270,6 +278,22 @@ export function AssistantWorkspace({
           </ThreadPrimitive.Root>
         </div>
       </AssistantRuntimeProvider>
+    </>
+  );
+
+  if (variant === 'page') {
+    return (
+      <Card className="h-[calc(100dvh-3rem)] overflow-hidden p-0">
+        {workspaceContent}
+      </Card>
+    );
+  }
+
+  return (
+    <div className={panelFrameClass}>
+      <div className="pointer-events-none absolute -top-20 right-[-5rem] h-60 w-60 rounded-full bg-primary/22 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-[-5rem] left-[-3rem] h-52 w-52 rounded-full bg-accent/28 blur-3xl" />
+      {workspaceContent}
     </div>
   );
 }
