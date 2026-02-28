@@ -94,3 +94,9 @@ These checks should be automated as repository tooling matures:
 4. `docs/design-docs/`
 5. `docs/exec-plans/`
 6. `docs/product-specs/`
+
+## Agent Skills
+
+1. Skills are loaded from `.agent/skills` (symlink to `.agents/skills`).
+2. Use `plan-and-execute` when a request asks to plan work and execute it end-to-end.
+3. For multi-phase execution, pair `plan-and-execute` with execution-plan docs under `docs/exec-plans/active/`.

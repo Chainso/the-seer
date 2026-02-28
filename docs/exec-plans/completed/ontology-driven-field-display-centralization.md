@@ -292,6 +292,7 @@ Exit criteria:
    - markdown/index sanity checks: confirmed moved-plan presence under `docs/exec-plans/completed/`, no remaining `active/ontology-driven-field-display-centralization.md` references, and updated listing/state entries in `docs/exec-plans/active/index.md`, `docs/exec-plans/completed/README.md`, and `docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`.
    - `cd seer-ui && npm run test:contracts`: passes `tests/history.contract.test.mjs`, `tests/insights.contract.test.mjs`, `tests/ontology-display-guardrails.contract.test.mjs`, and `tests/ontology-display.contract.test.mjs`; unchanged pre-existing failure remains in `tests/change-intelligence.contract.test.mjs`.
 22. Decision: mark Phase 6 complete and close this plan after documentation ratification, index synchronization, and final validation evidence capture.
+23. 2026-02-28: Adaptive lifecycle follow-up was completed in `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/adaptive-lifecycle-label-display.md`, locking explicit lifecycle labels in cross-object explorer contexts, plain/default lifecycle labels in object-local history contexts, and removal of hard-coded alias rewrite tables from the shared ontology display catalog.
 
 Current execution state:
 

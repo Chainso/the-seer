@@ -12,5 +12,6 @@ This directory is the canonical location for execution tracking artifacts.
 ## Workflow
 
 1. Create plan in `active/`.
-2. Update plan as work progresses.
-3. Move plan to `completed/` when acceptance criteria are met.
+2. Use the `plan-and-execute` skill (`.agent/skills/plan-and-execute/SKILL.md`) when work needs a plan plus execution in one flow.
+3. Update plan as work progresses.
+4. Move plan to `completed/` when acceptance criteria are met.

@@ -11,6 +11,12 @@ This repository provides a deterministic local runtime for:
 3. Fuseki
 4. ClickHouse
 
+## Agent Workflow
+
+For agent-driven delivery, use the `plan-and-execute` skill from `.agent/skills/plan-and-execute/SKILL.md` whenever work should be planned and then executed end-to-end.
+
+Execution plans remain canonical in `docs/exec-plans/active/` and must be updated during implementation.
+
 ## Startup
 
 Optional runtime overrides:
