@@ -24,6 +24,7 @@ export type OntologyDisplayObjectModel = {
   name: string;
   localName: string;
   fieldLabelByKey: Map<string, string>;
+  canonicalFieldKeys: string[];
   stateLabelByToken: Map<string, string>;
   stateFilterFieldKey: string | null;
   stateFilterOptions: OntologyDisplayStateOption[];
@@ -323,12 +324,16 @@ function buildObjectModelDescriptor(
     stateFieldKeyCandidate && scoreStateFieldKey(stateFieldKeyCandidate) < 99
       ? stateFieldKeyCandidate
       : null;
+  const uniqueCanonicalFieldKeys = Array.from(new Set(canonicalFieldKeys)).sort((a, b) =>
+    a.localeCompare(b)
+  );
 
   return {
     uri: node.uri,
     localName: objectLocalName,
     name: preferredOntologyName(node.properties) || objectLocalName,
     fieldLabelByKey,
+    canonicalFieldKeys: uniqueCanonicalFieldKeys,
     stateLabelByToken,
     stateFilterFieldKey,
     stateFilterOptions: Array.from(stateFilterOptionsByValue.entries())

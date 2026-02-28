@@ -33,3 +33,17 @@ test("history API client targets canonical history endpoints", () => {
   assert.match(historyApi, /property_filters/);
   assert.match(historyApi, /\/history\/objects\/events/);
 });
+
+test("history panel consumes shared ontology display resolver contract", () => {
+  const historyPanel = read("app/components/inspector/history-panel.tsx");
+  assert.match(historyPanel, /useOntologyDisplay/);
+  assert.match(historyPanel, /\.displayObjectType\(/);
+  assert.match(historyPanel, /\.displayEventType\(/);
+  assert.match(historyPanel, /\.displayFieldLabel\(/);
+  assert.match(historyPanel, /\.displayFieldValue\(/);
+  assert.match(historyPanel, /\.summarizeObjectRef\(/);
+  assert.match(historyPanel, /\.summarizePayload\(/);
+  assert.match(historyPanel, /\.fieldKindForKey\(/);
+  assert.match(historyPanel, /\.operatorOptionsForField\(/);
+  assert.match(historyPanel, /profile:\s*"history"/);
+});

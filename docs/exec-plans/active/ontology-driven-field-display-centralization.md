@@ -213,7 +213,7 @@ Exit criteria:
 ## Progress Tracking
 
 - [x] Phase 1 complete
-- [ ] Phase 2 complete
+- [x] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
@@ -236,7 +236,17 @@ Exit criteria:
    - `npm run test:contracts`: `tests/ontology-display.contract.test.mjs` passes; suite currently has one unrelated pre-existing failure in `tests/change-intelligence.contract.test.mjs` (`assert.ok(assistantApi.includes("/assistant/generate"))`).
    - `npm run lint`: no errors in `ontology-display` files; command fails on pre-existing unrelated inspector/ontology files.
 4. Decision: treat Phase 1 as complete because shared resolver APIs and contract tests are implemented and passing; defer panel migrations to Phase 2+.
+5. Delivered Phase 2 history-panel migration to shared ontology display resolver:
+   - `seer-ui/app/components/inspector/history-panel.tsx` now uses `useOntologyDisplay()` for object/event labels, field labels, state value mapping, payload/object-ref summaries, and field-kind/operator normalization (`profile: "history"`).
+   - `seer-ui/app/lib/ontology-display/catalog.ts` now exposes `canonicalFieldKeys` on `OntologyDisplayObjectModel` so history filters can source canonical object properties from the shared display catalog.
+   - `seer-ui/tests/history.contract.test.mjs` adds a targeted contract assertion that history panel consumes shared ontology display resolver APIs.
+6. Validation evidence for Phase 2:
+   - `cd seer-ui && npm run test:contracts`: `tests/history.contract.test.mjs` and `tests/ontology-display.contract.test.mjs` pass; suite still has one unrelated pre-existing failure in `tests/change-intelligence.contract.test.mjs`.
+   - `cd seer-ui && node --test tests/history.contract.test.mjs tests/ontology-display.contract.test.mjs`: pass.
+   - `cd seer-ui && npm run lint`: fails on pre-existing unrelated files (`bpmn-graph.tsx`, `object-activity-panel.tsx`, ontology components), no new history-panel errors.
+   - `cd seer-ui && npm run build`: fails on pre-existing unrelated TypeScript error in `app/components/inspector/bpmn-graph.tsx` (`ElkEdgeData` vs `EdgeProps` constraint).
+7. Decision: mark Phase 2 complete; keep Phase 3+ unchecked and unchanged.
 
 Current execution state:
 
-- `in_progress`: Phase 1 complete; Phase 2 migration work not started.
+- `in_progress`: Phases 1-2 complete; Phase 3 migration not started.
