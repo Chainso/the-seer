@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DataList } from "@radix-ui/themes";
 import { Bot, FlaskConical, Radar, SearchCheck, Sparkles } from "lucide-react";
 
@@ -15,8 +15,12 @@ import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scop
 
 import { cn } from "@/app/lib/utils";
 import { getOntologyGraph, queryOntologySelect } from "@/app/lib/api/ontology";
-import { mapPropertyDefinitions } from "@/app/lib/ontology-helpers";
 import { buildReferenceEdges } from "@/app/components/ontology/graph-reference-edges";
+import {
+  iriLocalName,
+  type OntologyDisplayFieldKind,
+  useOntologyDisplay,
+} from "@/app/lib/ontology-display";
 import {
   assistRootCauseInterpret,
   assistRootCauseSetup,
@@ -60,7 +64,7 @@ interface FilterFieldOption {
   kind: FilterFieldKind;
 }
 
-type FilterFieldKind = "string" | "number" | "count" | "boolean" | "temporal";
+type FilterFieldKind = OntologyDisplayFieldKind;
 
 interface FilterOperatorOption {
   value: RootCauseFilterOperator;
@@ -70,43 +74,6 @@ interface FilterOperatorOption {
 const EVENT_NODE_LABELS = new Set(["Event", "Signal", "Transition"]);
 const OUTCOME_SENTINEL = "__select_outcome__";
 const FILTER_FIELD_SENTINEL = "__select_filter_field__";
-const NUMBER_TOKEN_HINTS = ["int", "integer", "long", "short", "float", "double", "decimal", "number", "numeric"];
-const BOOLEAN_TOKEN_HINTS = ["bool", "boolean"];
-const NUMERIC_TYPE_TOKENS = new Set([
-  "int",
-  "integer",
-  "long",
-  "short",
-  "byte",
-  "double",
-  "float",
-  "decimal",
-  "nonnegativeinteger",
-  "positiveinteger",
-  "negativeinteger",
-  "nonpositiveinteger",
-  "unsignedint",
-  "unsignedlong",
-  "unsignedshort",
-  "unsignedbyte",
-]);
-const BOOLEAN_TYPE_TOKENS = new Set(["boolean", "bool"]);
-const TEMPORAL_TYPE_TOKENS = new Set([
-  "datetime",
-  "date",
-  "duration",
-  "time",
-  "timestamp",
-]);
-const FILTER_OPERATOR_OPTIONS: Record<RootCauseFilterOperator, FilterOperatorOption> = {
-  eq: { value: "eq", label: "Equals" },
-  ne: { value: "ne", label: "Not equals" },
-  contains: { value: "contains", label: "Contains" },
-  gt: { value: "gt", label: "Greater than" },
-  gte: { value: "gte", label: "Greater or equal" },
-  lt: { value: "lt", label: "Less than" },
-  lte: { value: "lte", label: "Less or equal" },
-};
 
 const TYPE_RESOLUTION_QUERY_PREFIX = `
 PREFIX prophet: <http://prophet.platform/ontology#>
@@ -200,18 +167,6 @@ function parseTraceAnchor(trace: RootCauseEvidenceResponseContract["traces"][num
   }
 }
 
-function iriLocalName(iri: string): string {
-  const hashIndex = iri.lastIndexOf("#");
-  if (hashIndex >= 0 && hashIndex < iri.length - 1) {
-    return iri.slice(hashIndex + 1);
-  }
-  const slashIndex = iri.lastIndexOf("/");
-  if (slashIndex >= 0 && slashIndex < iri.length - 1) {
-    return iri.slice(slashIndex + 1);
-  }
-  return iri;
-}
-
 function toAnchorObjectType(name: string, uri: string): string {
   const raw = (name || iriLocalName(uri)).trim();
   if (!raw) {
@@ -222,14 +177,14 @@ function toAnchorObjectType(name: string, uri: string): string {
 
 function summarizeTraceEvents(
   events: RootCauseEvidenceResponseContract["traces"][number]["events"],
-  eventTypeDisplayMap: Record<string, string>
+  displayEventType: (eventType: string) => string
 ): string {
   if (events.length === 0) {
     return "—";
   }
   return events
     .slice(0, 5)
-    .map((event) => prettyEventType(event.event_type, eventTypeDisplayMap))
+    .map((event) => displayEventType(event.event_type))
     .join(" -> ");
 }
 
@@ -243,10 +198,6 @@ function ontologyNodeName(node: OntologyNode): string {
     return name.trim();
   }
   return iriLocalName(node.uri);
-}
-
-function nodeDisplayName(node: OntologyNode): string {
-  return ontologyNodeName(node);
 }
 
 function toPascalToken(value: string): string {
@@ -307,7 +258,11 @@ function nodeEventTypeValue(node: OntologyNode): string {
   return localDerived || localName;
 }
 
-function buildOutcomeOptions(graph: OntologyGraph | null, anchorModelUri: string): OutcomeOption[] {
+function buildOutcomeOptions(
+  graph: OntologyGraph | null,
+  anchorModelUri: string,
+  displayEventType: (eventType: string) => string
+): OutcomeOption[] {
   if (!graph || !anchorModelUri) {
     return [];
   }
@@ -373,11 +328,10 @@ function buildOutcomeOptions(graph: OntologyGraph | null, anchorModelUri: string
     if (!value || byValue.has(value)) {
       return;
     }
-    const name = nodeDisplayName(node);
     const source = node.label === "Transition" ? "Transition" : "Event";
     byValue.set(value, {
       value,
-      label: name,
+      label: displayEventType(value),
       source,
     });
   });
@@ -385,88 +339,10 @@ function buildOutcomeOptions(graph: OntologyGraph | null, anchorModelUri: string
   return Array.from(byValue.values()).sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function buildEventTypeDisplayMap(graph: OntologyGraph | null): Record<string, string> {
-  if (!graph) {
-    return {};
-  }
-
-  const labels: Record<string, string> = {};
-  graph.nodes
-    .filter((node) => EVENT_NODE_LABELS.has(node.label))
-    .forEach((node) => {
-      const display = nodeDisplayName(node);
-      const local = iriLocalName(node.uri);
-      const value = nodeEventTypeValue(node);
-      labels[node.uri] = display;
-      if (local && !(local in labels)) {
-        labels[local] = display;
-      }
-      if (value && !(value in labels)) {
-        labels[value] = display;
-      }
-    });
-  return labels;
-}
-
-function prettyEventType(value: string, eventTypeDisplayMap: Record<string, string>): string {
-  if (!value) {
-    return "";
-  }
-  const mapped = eventTypeDisplayMap[value];
-  if (mapped) {
-    return mapped;
-  }
-  return iriLocalName(value);
-}
-
-function prettyFilterField(field: string, eventTypeDisplayMap: Record<string, string>): string {
-  if (field.startsWith("anchor.")) {
-    return `Anchor • ${iriLocalName(field.slice("anchor.".length))}`;
-  }
-  if (field.startsWith("object_type.count.")) {
-    return `Object count bucket • ${iriLocalName(field.slice("object_type.count.".length))}`;
-  }
-  if (field.startsWith("event.present.")) {
-    return `Event present • ${prettyEventType(field.slice("event.present.".length), eventTypeDisplayMap)}`;
-  }
-  if (field.startsWith("event.count.")) {
-    return `Event count bucket • ${prettyEventType(field.slice("event.count.".length), eventTypeDisplayMap)}`;
-  }
-  return iriLocalName(field);
-}
-
-function kindFromTypeToken(token: string): FilterFieldKind {
-  const normalized = token.trim().toLowerCase();
-  if (!normalized) {
-    return "string";
-  }
-  if (TEMPORAL_TYPE_TOKENS.has(normalized)) {
-    return "temporal";
-  }
-  if (BOOLEAN_TYPE_TOKENS.has(normalized)) {
-    return "boolean";
-  }
-  if (NUMERIC_TYPE_TOKENS.has(normalized)) {
-    return "number";
-  }
-  return "string";
-}
-
-function fieldKindFromTypeHints(hints: Array<string | undefined>): FilterFieldKind {
-  for (const hint of hints) {
-    if (!hint) {
-      continue;
-    }
-    const local = iriLocalName(hint).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-    const inferred = kindFromTypeToken(local);
-    if (inferred !== "string") {
-      return inferred;
-    }
-  }
-  return "string";
-}
-
-async function fetchAnchorPropertyKinds(anchorModelUri: string): Promise<Record<string, FilterFieldKind>> {
+async function fetchAnchorPropertyKinds(
+  anchorModelUri: string,
+  inferFieldKind: (fieldKey: string, hints: Array<string | undefined>) => FilterFieldKind
+): Promise<Record<string, FilterFieldKind>> {
   if (!anchorModelUri || /[<>\s]/.test(anchorModelUri)) {
     return {};
   }
@@ -495,89 +371,20 @@ WHERE {
     if (!fieldKey) {
       return;
     }
-    byFieldKey[fieldKey] = fieldKindFromTypeHints([row.baseName, row.baseType, row.mapsToXsd]);
+    byFieldKey[fieldKey] = inferFieldKind(fieldKey, [row.baseName, row.baseType, row.mapsToXsd]);
   });
 
   return byFieldKey;
 }
 
-function inferPropertyFieldKind(valueTypeUri: string): FilterFieldKind {
-  if (!valueTypeUri) {
-    return "string";
-  }
-  const token = iriLocalName(valueTypeUri).toLowerCase();
-  if (NUMBER_TOKEN_HINTS.some((hint) => token.includes(hint)) || kindFromTypeToken(token) === "number") {
-    return "number";
-  }
-  if (BOOLEAN_TOKEN_HINTS.some((hint) => token.includes(hint)) || kindFromTypeToken(token) === "boolean") {
-    return "boolean";
-  }
-  return "string";
-}
-
-function kindForFilterField(
-  field: string,
-  byField: Map<string, FilterFieldOption>
-): FilterFieldKind {
-  const mappedKind = byField.get(field)?.kind;
-  if (mappedKind) {
-    return mappedKind;
-  }
-  if (field.startsWith("event.present.")) {
-    return "boolean";
-  }
-  if (field.startsWith("event.count.") || field.startsWith("object_type.count.")) {
-    return "count";
-  }
-  return "string";
-}
-
-function operatorOptionsForField(
-  field: string,
-  byField: Map<string, FilterFieldOption>
-): FilterOperatorOption[] {
-  const kind = kindForFilterField(field, byField);
-  const opsByKind: Record<FilterFieldKind, RootCauseFilterOperator[]> = {
-    string: ["eq", "ne", "contains"],
-    number: ["eq", "ne", "contains", "gt", "gte", "lt", "lte"],
-    count: ["eq", "ne", "gt", "gte", "lt", "lte"],
-    boolean: ["eq", "ne"],
-    temporal: ["eq", "ne", "gt", "gte", "lt", "lte"],
-  };
-  return opsByKind[kind].map((op) => FILTER_OPERATOR_OPTIONS[op]);
-}
-
-function defaultOperatorForField(
-  field: string,
-  byField: Map<string, FilterFieldOption>
-): RootCauseFilterOperator {
-  const options = operatorOptionsForField(field, byField);
-  return options[0]?.value || "contains";
-}
-
-function normalizeOperatorForField(
-  field: string,
-  operator: RootCauseFilterOperator,
-  byField: Map<string, FilterFieldOption>
-): RootCauseFilterOperator {
-  const options = operatorOptionsForField(field, byField);
-  if (options.some((option) => option.value === operator)) {
-    return operator;
-  }
-  return options[0]?.value || "contains";
-}
-
 function buildFilterFieldOptions(
-  graph: OntologyGraph | null,
-  anchorModelUri: string,
+  anchorFieldKeys: string[],
   anchorObjectType: string,
   outcomeOptions: OutcomeOption[],
-  anchorFieldKinds: Record<string, FilterFieldKind>
+  anchorFieldKinds: Record<string, FilterFieldKind>,
+  displayFilterFieldLabel: (field: string) => string,
+  resolveAnchorFieldKind: (fieldKey: string) => FilterFieldKind
 ): FilterFieldOption[] {
-  if (!graph || !anchorModelUri) {
-    return [];
-  }
-
   const options = new Map<string, FilterFieldOption>();
   const add = (value: string, label: string, kind: FilterFieldKind) => {
     if (!value || options.has(value)) {
@@ -586,28 +393,25 @@ function buildFilterFieldOptions(
     options.set(value, { value, label, kind });
   };
 
-  mapPropertyDefinitions(anchorModelUri, graph.nodes, graph.edges).forEach((property) => {
-    if (!property.fieldKey) {
-      return;
-    }
+  anchorFieldKeys.forEach((fieldKey) => {
+    const anchorField = `anchor.${fieldKey}`;
     add(
-      `anchor.${property.fieldKey}`,
-      `Anchor • ${property.name}`,
-      anchorFieldKinds[property.fieldKey] || inferPropertyFieldKind(property.valueTypeUri || "")
+      anchorField,
+      displayFilterFieldLabel(anchorField),
+      anchorFieldKinds[fieldKey] || resolveAnchorFieldKind(fieldKey)
     );
   });
 
   if (anchorObjectType) {
-    add(
-      `object_type.count.${anchorObjectType}`,
-      `Object count bucket • ${anchorObjectType}`,
-      "count"
-    );
+    const countField = `object_type.count.${anchorObjectType}`;
+    add(countField, displayFilterFieldLabel(countField), "count");
   }
 
   outcomeOptions.forEach((option) => {
-    add(`event.present.${option.value}`, `Event present • ${option.label}`, "boolean");
-    add(`event.count.${option.value}`, `Event count bucket • ${option.label}`, "count");
+    const presentField = `event.present.${option.value}`;
+    const countField = `event.count.${option.value}`;
+    add(presentField, displayFilterFieldLabel(presentField), "boolean");
+    add(countField, displayFilterFieldLabel(countField), "count");
   });
 
   return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label));
@@ -627,6 +431,7 @@ function suggestedValuesForFilterField(field: string): string[] {
 }
 
 export function ProcessInsightsPanel() {
+  const ontologyDisplay = useOntologyDisplay();
   const [ontologyGraph, setOntologyGraph] = useState<OntologyGraph | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [anchorModelUri, setAnchorModelUri] = useState("");
@@ -662,6 +467,15 @@ export function ProcessInsightsPanel() {
   const [interpretLoading, setInterpretLoading] = useState(false);
   const [interpretError, setInterpretError] = useState<string | null>(null);
   const [anchorFieldKinds, setAnchorFieldKinds] = useState<Record<string, FilterFieldKind>>({});
+
+  const inferAnchorFieldKind = useCallback(
+    (fieldKey: string, hints: Array<string | undefined> = []): FilterFieldKind =>
+      ontologyDisplay.fieldKindForKey(fieldKey, {
+        objectType: anchorModelUri || undefined,
+        valueTypeHints: hints,
+      }),
+    [anchorModelUri, ontologyDisplay]
+  );
 
   useEffect(() => {
     let active = true;
@@ -709,7 +523,7 @@ export function ProcessInsightsPanel() {
     }
 
     setAnchorFieldKinds({});
-    fetchAnchorPropertyKinds(anchorModelUri)
+    fetchAnchorPropertyKinds(anchorModelUri, inferAnchorFieldKind)
       .then((kinds) => {
         if (!active) {
           return;
@@ -726,18 +540,35 @@ export function ProcessInsightsPanel() {
     return () => {
       active = false;
     };
-  }, [anchorModelUri]);
+  }, [anchorModelUri, inferAnchorFieldKind]);
 
   const selectedModel = useMemo(
     () => models.find((model) => model.uri === anchorModelUri) || null,
     [models, anchorModelUri]
   );
-  const anchorObjectType = selectedModel?.objectType || "";
-  const baseOutcomeOptions = useMemo(
-    () => buildOutcomeOptions(ontologyGraph, anchorModelUri),
-    [ontologyGraph, anchorModelUri]
+  const selectedDisplayModel = useMemo(
+    () => ontologyDisplay.resolveObjectModel(anchorModelUri),
+    [anchorModelUri, ontologyDisplay]
   );
-  const eventTypeDisplayMap = useMemo(() => buildEventTypeDisplayMap(ontologyGraph), [ontologyGraph]);
+  const anchorObjectType = selectedModel?.objectType || "";
+  const displayEventType = useCallback(
+    (eventType: string) =>
+      ontologyDisplay.displayEventType(eventType, {
+        fallbackObjectType: anchorObjectType || anchorModelUri || undefined,
+      }),
+    [anchorModelUri, anchorObjectType, ontologyDisplay]
+  );
+  const displayFilterFieldLabel = useCallback(
+    (field: string) =>
+      ontologyDisplay.displayFieldLabel(field, {
+        objectType: anchorModelUri || anchorObjectType || undefined,
+      }),
+    [anchorModelUri, anchorObjectType, ontologyDisplay]
+  );
+  const baseOutcomeOptions = useMemo(
+    () => buildOutcomeOptions(ontologyGraph, anchorModelUri, displayEventType),
+    [displayEventType, ontologyGraph, anchorModelUri]
+  );
   const outcomeOptions = useMemo(() => {
     const merged = new Map<string, OutcomeOption>();
     baseOutcomeOptions.forEach((option) => merged.set(option.value, option));
@@ -748,20 +579,76 @@ export function ProcessInsightsPanel() {
       }
       merged.set(value, {
         value,
-        label: `${prettyEventType(value, eventTypeDisplayMap)} (Suggested)`,
+        label: `${displayEventType(value)} (Suggested)`,
         source: "Suggested",
       });
     });
     return Array.from(merged.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [baseOutcomeOptions, setupSuggestions, eventTypeDisplayMap]);
+  }, [baseOutcomeOptions, displayEventType, setupSuggestions]);
   const selectedOutcomeEventType = useMemo(() => outcomeEventType, [outcomeEventType]);
-  const filterFieldOptions = useMemo(
-    () => buildFilterFieldOptions(ontologyGraph, anchorModelUri, anchorObjectType, outcomeOptions, anchorFieldKinds),
-    [ontologyGraph, anchorModelUri, anchorObjectType, outcomeOptions, anchorFieldKinds]
+  const anchorFieldKeys = useMemo(
+    () => selectedDisplayModel?.canonicalFieldKeys || [],
+    [selectedDisplayModel]
   );
-  const filterFieldOptionsByValue = useMemo(
-    () => new Map(filterFieldOptions.map((option) => [option.value, option])),
+  const resolveAnchorFieldKind = useCallback(
+    (fieldKey: string) =>
+      ontologyDisplay.fieldKindForKey(fieldKey, {
+        objectType: anchorModelUri || undefined,
+      }),
+    [anchorModelUri, ontologyDisplay]
+  );
+  const filterFieldOptions = useMemo(
+    () =>
+      buildFilterFieldOptions(
+        anchorFieldKeys,
+        anchorObjectType,
+        outcomeOptions,
+        anchorFieldKinds,
+        displayFilterFieldLabel,
+        resolveAnchorFieldKind
+      ),
+    [
+      anchorFieldKeys,
+      anchorFieldKinds,
+      anchorObjectType,
+      displayFilterFieldLabel,
+      outcomeOptions,
+      resolveAnchorFieldKind,
+    ]
+  );
+  const filterFieldKindsByValue = useMemo(
+    () => new Map(filterFieldOptions.map((option) => [option.value, option.kind])),
     [filterFieldOptions]
+  );
+  const operatorOptionsForFilterField = useCallback(
+    (field: string): FilterOperatorOption[] =>
+      ontologyDisplay.operatorOptionsForField(field, {
+        objectType: anchorModelUri || undefined,
+        knownFieldKinds: filterFieldKindsByValue,
+        profile: "insights",
+      }).map((option) => ({
+        value: option.value as RootCauseFilterOperator,
+        label: option.label,
+      })),
+    [anchorModelUri, filterFieldKindsByValue, ontologyDisplay]
+  );
+  const defaultOperatorForFilterField = useCallback(
+    (field: string): RootCauseFilterOperator =>
+      ontologyDisplay.defaultOperatorForField(field, {
+        objectType: anchorModelUri || undefined,
+        knownFieldKinds: filterFieldKindsByValue,
+        profile: "insights",
+      }) as RootCauseFilterOperator,
+    [anchorModelUri, filterFieldKindsByValue, ontologyDisplay]
+  );
+  const normalizeOperatorForFilterField = useCallback(
+    (field: string, operator: RootCauseFilterOperator): RootCauseFilterOperator =>
+      ontologyDisplay.normalizeOperatorForField(field, operator, {
+        objectType: anchorModelUri || undefined,
+        knownFieldKinds: filterFieldKindsByValue,
+        profile: "insights",
+      }) as RootCauseFilterOperator,
+    [anchorModelUri, filterFieldKindsByValue, ontologyDisplay]
   );
 
   useEffect(() => {
@@ -784,7 +671,7 @@ export function ProcessInsightsPanel() {
     setFilters((current) => {
       let changed = false;
       const next = current.map((filter) => {
-        const normalizedOp = normalizeOperatorForField(filter.field, filter.op, filterFieldOptionsByValue);
+        const normalizedOp = normalizeOperatorForFilterField(filter.field, filter.op);
         if (normalizedOp !== filter.op) {
           changed = true;
           return { ...filter, op: normalizedOp };
@@ -793,7 +680,7 @@ export function ProcessInsightsPanel() {
       });
       return changed ? next : current;
     });
-  }, [filterFieldOptionsByValue]);
+  }, [normalizeOperatorForFilterField]);
 
   const selectedInsight = useMemo(() => {
     if (!run || !selectedInsightId) {
@@ -808,10 +695,10 @@ export function ProcessInsightsPanel() {
         .filter((filter) => filter.field.trim() && filter.value.trim())
         .map((filter) => ({
           field: filter.field.trim(),
-          op: normalizeOperatorForField(filter.field.trim(), filter.op, filterFieldOptionsByValue),
+          op: normalizeOperatorForFilterField(filter.field.trim(), filter.op),
           value: filter.value.trim(),
         })),
-    [filters, filterFieldOptionsByValue]
+    [filters, normalizeOperatorForFilterField]
   );
 
   const parseEvidenceLimit = (value: string): number => {
@@ -992,21 +879,6 @@ export function ProcessInsightsPanel() {
     return ordered;
   }, [evidenceTraceRows]);
 
-  const anchorFieldNameByKey = useMemo(() => {
-    if (!ontologyGraph || !anchorModelUri) {
-      return {} as Record<string, string>;
-    }
-    return mapPropertyDefinitions(anchorModelUri, ontologyGraph.nodes, ontologyGraph.edges).reduce<
-      Record<string, string>
-    >((acc, property) => {
-      if (!property.fieldKey) {
-        return acc;
-      }
-      acc[property.fieldKey] = property.name || property.fieldKey;
-      return acc;
-    }, {});
-  }, [ontologyGraph, anchorModelUri]);
-
   return (
     <div className="space-y-6">
       <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
@@ -1108,12 +980,8 @@ export function ProcessInsightsPanel() {
           </div>
           <div className="mt-3 space-y-3">
             {filters.map((filter) => {
-              const operatorOptions = operatorOptionsForField(filter.field, filterFieldOptionsByValue);
-              const selectedOperator = normalizeOperatorForField(
-                filter.field,
-                filter.op,
-                filterFieldOptionsByValue
-              );
+              const operatorOptions = operatorOptionsForFilterField(filter.field);
+              const selectedOperator = normalizeOperatorForFilterField(filter.field, filter.op);
               return (
                 <div key={filter.id} className="grid gap-3 lg:grid-cols-[1fr_180px_1fr_auto]">
                 <Select
@@ -1122,7 +990,7 @@ export function ProcessInsightsPanel() {
                     const nextField = value === FILTER_FIELD_SENTINEL ? "" : value;
                     updateFilter(filter.id, {
                       field: nextField,
-                      op: defaultOperatorForField(nextField, filterFieldOptionsByValue),
+                      op: defaultOperatorForFilterField(nextField),
                       value: "",
                     });
                   }}
@@ -1135,7 +1003,7 @@ export function ProcessInsightsPanel() {
                     {filter.field &&
                       !filterFieldOptions.some((option) => option.value === filter.field) && (
                         <SelectItem value={filter.field}>
-                          {`${prettyFilterField(filter.field, eventTypeDisplayMap)} (Current)`}
+                          {`${displayFilterFieldLabel(filter.field)} (Current)`}
                         </SelectItem>
                       )}
                     {filterFieldOptions.map((option) => (
@@ -1220,7 +1088,7 @@ export function ProcessInsightsPanel() {
                 )}
               >
                 <p className="font-medium">
-                  {prettyEventType(suggestion.outcome.event_type, eventTypeDisplayMap)}
+                  {displayEventType(suggestion.outcome.event_type)}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">{suggestion.rationale}</p>
               </button>
@@ -1414,7 +1282,7 @@ export function ProcessInsightsPanel() {
                       {evidenceAnchorColumns.length > 0 ? (
                         evidenceAnchorColumns.map((key) => (
                           <Table.ColumnHeaderCell key={`anchor-col-${key}`}>
-                            {anchorFieldNameByKey[key] || key}
+                            {displayFilterFieldLabel(key)}
                           </Table.ColumnHeaderCell>
                         ))
                       ) : (
@@ -1430,7 +1298,7 @@ export function ProcessInsightsPanel() {
                       return (
                         <Table.Row key={`${trace.anchor_key}:${trace.anchor_object_ref_hash}`}>
                           <Table.RowHeaderCell>
-                            <div>{anchor.objectType}</div>
+                            <div>{ontologyDisplay.displayObjectType(anchor.objectType)}</div>
                           </Table.RowHeaderCell>
                           {evidenceAnchorColumns.length > 0 ? (
                             evidenceAnchorColumns.map((key) => (
@@ -1450,7 +1318,7 @@ export function ProcessInsightsPanel() {
                           </Table.Cell>
                           <Table.Cell className="max-w-[380px]">
                             <div className="truncate text-xs">
-                              {summarizeTraceEvents(trace.events, eventTypeDisplayMap)}
+                              {summarizeTraceEvents(trace.events, displayEventType)}
                             </div>
                             <div className="text-[11px] text-muted-foreground">{trace.events.length} events</div>
                           </Table.Cell>

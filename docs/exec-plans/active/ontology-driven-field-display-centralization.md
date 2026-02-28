@@ -214,7 +214,7 @@ Exit criteria:
 
 - [x] Phase 1 complete
 - [x] Phase 2 complete
-- [ ] Phase 3 complete
+- [x] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
 - [ ] Phase 6 complete
@@ -246,7 +246,19 @@ Exit criteria:
    - `cd seer-ui && npm run lint`: fails on pre-existing unrelated files (`bpmn-graph.tsx`, `object-activity-panel.tsx`, ontology components), no new history-panel errors.
    - `cd seer-ui && npm run build`: fails on pre-existing unrelated TypeScript error in `app/components/inspector/bpmn-graph.tsx` (`ElkEdgeData` vs `EdgeProps` constraint).
 7. Decision: mark Phase 2 complete; keep Phase 3+ unchecked and unchanged.
+8. Delivered Phase 3 process-insights migration to shared ontology display resolver:
+   - `seer-ui/app/components/inspector/process-insights-panel.tsx` now uses `useOntologyDisplay()` for event type labels, filter-field labels (including `anchor.*`, `event.*`, and `object_type.count.*`), filter field-kind/operator compatibility normalization (`profile: "insights"`), and evidence anchor object type labels.
+   - Removed page-local display duplication in process insights (`prettyEventType`, `prettyFilterField`, local field-kind token inference, and local operator compatibility/default/normalization logic) in favor of shared resolver APIs.
+   - Anchor field header labels now resolve through shared ontology field label resolution rather than local property-name mapping.
+9. Added Phase 3 contract coverage:
+   - `seer-ui/tests/insights.contract.test.mjs` now asserts process insights imports and uses the shared ontology display resolver contract methods.
+10. Validation evidence for Phase 3:
+   - `cd seer-ui && npm run test:contracts`: `tests/insights.contract.test.mjs` and `tests/ontology-display.contract.test.mjs` pass; suite still has one unrelated pre-existing failure in `tests/change-intelligence.contract.test.mjs`.
+   - `cd seer-ui && node --test tests/insights.contract.test.mjs tests/ontology-display.contract.test.mjs`: pass.
+   - `cd seer-ui && npm run lint`: fails on pre-existing unrelated files (`bpmn-graph.tsx`, `object-activity-panel.tsx`, ontology components), with no new process-insights or ontology-display lint errors introduced by Phase 3.
+   - `cd seer-ui && npm run build`: fails on pre-existing unrelated TypeScript error in `app/components/inspector/bpmn-graph.tsx` (`ElkEdgeData` vs `EdgeProps` constraint).
+11. Decision: mark Phase 3 complete after resolver migration + contract coverage + required focused validation; keep Phase 4+ unchecked.
 
 Current execution state:
 
-- `in_progress`: Phases 1-2 complete; Phase 3 migration not started.
+- `in_progress`: Phases 1-3 complete; Phase 4 migration not started.

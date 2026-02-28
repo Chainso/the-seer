@@ -53,3 +53,17 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
   assert.match(nav, /href:\s*'\/inspector\/insights'/);
   assert.doesNotMatch(nav, /name:\s*'Process Mining'/);
 });
+
+test("process insights panel consumes shared ontology display resolver contract", () => {
+  const rootCausePanel = read("app/components/inspector/process-insights-panel.tsx");
+
+  assert.match(rootCausePanel, /useOntologyDisplay/);
+  assert.match(rootCausePanel, /\.displayEventType\(/);
+  assert.match(rootCausePanel, /\.displayObjectType\(/);
+  assert.match(rootCausePanel, /\.displayFieldLabel\(/);
+  assert.match(rootCausePanel, /\.fieldKindForKey\(/);
+  assert.match(rootCausePanel, /\.operatorOptionsForField\(/);
+  assert.match(rootCausePanel, /\.defaultOperatorForField\(/);
+  assert.match(rootCausePanel, /\.normalizeOperatorForField\(/);
+  assert.match(rootCausePanel, /profile:\s*"insights"/);
+});
