@@ -92,7 +92,7 @@ Exit criteria:
 Deliverables:
 
 1. Update or add contract tests for adaptive lifecycle mode behavior.
-2. Record completion/progress evidence in this plan and active index.
+2. Record completion/progress evidence in this plan.
 3. Add handoff note in active read-only adaptation plan.
 
 Exit criteria:
@@ -106,11 +106,11 @@ Exit criteria:
 
 - [x] Phase 1 complete
 - [x] Phase 2 complete
-- [ ] Phase 3 complete
+- [x] Phase 3 complete
 
 Current execution state:
 
-- `in_progress`: Phase 3 pending (Phases 1-2 complete and validated on 2026-02-28).
+- `ready_for_completion_transition`: Phases 1-3 complete and validated on 2026-02-28; plan is ready to move to `completed/`.
 
 ## Progress / Decision Log
 
@@ -119,3 +119,4 @@ Current execution state:
 3. 2026-02-28: Decision - keep `plain` lifecycle label mode as default for all existing resolver consumers to preserve current object-local display behavior until Phase 2 integration explicitly opts into qualified lifecycle labels.
 4. 2026-02-28: User-requested plan expansion: remove hard-coded alias rewrite tables from ontology display catalog and migrate to ontology-derived matching behavior; incorporated into Phase 2 scope and exit criteria.
 5. 2026-02-28: Phase 2 completed by wiring Ontology Explorer catalog/inspector/map names to resolver `displayNode`/`displayConcept` with `lifecycleLabelMode: explicit`, adding graph `displayNodeName` callback support, and removing `MODEL_ALIAS_REWRITES`/`FIELD_ALIAS_REWRITES` from `catalog.ts`; validation: `node --test tests/ontology-display.contract.test.mjs` and `npm run test:contracts` both pass in `seer-ui`.
+6. 2026-02-28: Phase 3 completed by adding history-context guardrail coverage in `tests/ontology-display.contract.test.mjs` to lock object-local plain/default lifecycle naming (no explicit lifecycle mode opt-in in `history-panel.tsx`) while retaining explicit lifecycle naming guardrails for explorer contexts. Validation rerun in `seer-ui`: `node --test tests/ontology-display.contract.test.mjs` passed (`pass 1`, `fail 0`), and `npm run test:contracts` passed (`pass 6`, `fail 0`); no pre-existing failures observed in this validation scope.
