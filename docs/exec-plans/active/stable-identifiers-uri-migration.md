@@ -218,3 +218,25 @@ Implemented:
 Scope exclusions honored:
 
 1. No Phase 3 fake-data/fixture/test-migration work included.
+
+### 2026-02-28 - Phase 3 URI-stable fake-data tooling + RCA verification
+
+Status: completed for scoped Phase 3 changes.
+
+Implemented:
+
+1. Migrated fake-data generator identifier semantics to ontology URIs sourced from generated Turtle:
+   - `scripts/generate_fake_event_data.py` now reads `prophet/examples/turtle/prophet_example_turtle_small_business/gen/turtle/ontology.ttl`.
+   - Required event/object concept IDs are resolved to full URIs from ontology prefix + concept local IDs.
+   - Generated events now emit URI values for `event_type`, `updated_objects[].object_type`, and embedded `updated_objects[].object.object_type`.
+2. Migrated RCA fake-data verification tooling to URI anchors/outcomes:
+   - `scripts/verify_fake_data_rca.py` scenarios now submit URI values for anchor and outcome identifiers (including URI-first request fields).
+   - Verification ingestion path canonicalizes legacy fake-data token identifiers to ontology URIs for compatibility.
+3. Migrated backend fake-data RCA regression test to URI flow:
+   - `seer-backend/tests/test_root_cause_fake_data.py` now normalizes loaded fake events to URI event/object identifiers prior to ingest.
+   - RCA requests use URI anchor/outcome identifiers and URI-first fields.
+
+Decisions recorded:
+
+1. Phase 3 resolves identifiers from ontology concept local IDs (`obj_*`, `aout_*`, `sig_*`, `trans_*`) instead of `prophet:name` display labels.
+2. Compatibility handling remains in fake-data verification/test loaders to support legacy tokenized fixture inputs while validating URI-first RCA execution.

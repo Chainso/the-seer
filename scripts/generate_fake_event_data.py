@@ -4,34 +4,79 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
 from uuid import uuid4
 
 
-SALES_EVENT_TYPES: tuple[str, ...] = (
-    "CreateSalesOrderResult",
-    "InvoicePaymentRecorded",
-    "InvoiceMarkPaidTransition",
-    "SalesOrderMarkPaidTransition",
-    "SalesOrderFulfillTransition",
-    "SalesOrderCancelTransition",
-    "InvoiceMarkOverdueTransition",
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SMALL_BUSINESS_ONTOLOGY_PATH = (
+    REPO_ROOT
+    / "prophet"
+    / "examples"
+    / "turtle"
+    / "prophet_example_turtle_small_business"
+    / "gen"
+    / "turtle"
+    / "ontology.ttl"
 )
-OPERATIONS_EVENT_TYPES: tuple[str, ...] = (
-    "LowStockDetected",
-    "CreatePurchaseOrderResult",
-    "PurchaseOrderSubmitTransition",
-    "PurchaseOrderReceiveTransition",
-    "RestockInventoryResult",
-    "PurchaseOrderCloseTransition",
-    "AdjustInventoryResult",
+_PREFIX_PATTERN = re.compile(r"^@prefix\s+([A-Za-z_][\w-]*):\s*<([^>]+)>\s*\.$", re.MULTILINE)
+_CONCEPT_PATTERN = re.compile(
+    r"^([A-Za-z_][\w-]*):([A-Za-z0-9_]+)\s+a\s+prophet:([A-Za-z0-9_]+)\s*;",
+    re.MULTILINE,
 )
-REFERENCE_EVENT_TYPES: tuple[str, ...] = (
-    "RegisterCustomerResult",
-    "SupplierLeadTimeUpdated",
+SALES_EVENT_KEYS: tuple[str, ...] = (
+    "create_sales_order_result",
+    "invoice_payment_recorded",
+    "invoice_mark_paid_transition",
+    "sales_order_mark_paid_transition",
+    "sales_order_fulfill_transition",
+    "sales_order_cancel_transition",
+    "invoice_mark_overdue_transition",
 )
+OPERATIONS_EVENT_KEYS: tuple[str, ...] = (
+    "low_stock_detected",
+    "create_purchase_order_result",
+    "purchase_order_submit_transition",
+    "purchase_order_receive_transition",
+    "restock_inventory_result",
+    "purchase_order_close_transition",
+    "adjust_inventory_result",
+)
+REFERENCE_EVENT_KEYS: tuple[str, ...] = (
+    "register_customer_result",
+    "supplier_lead_time_updated",
+)
+EVENT_LOCAL_NAME_BY_KEY: dict[str, str] = {
+    "adjust_inventory_result": "aout_adjust_inventory",
+    "create_purchase_order_result": "aout_create_purchase_order",
+    "create_sales_order_result": "aout_create_sales_order",
+    "invoice_mark_overdue_transition": "trans_invoice_mark_overdue",
+    "invoice_mark_paid_transition": "trans_invoice_mark_paid",
+    "invoice_payment_recorded": "sig_invoice_payment_recorded",
+    "low_stock_detected": "sig_low_stock_detected",
+    "purchase_order_close_transition": "trans_purchase_order_close",
+    "purchase_order_receive_transition": "trans_purchase_order_receive",
+    "purchase_order_submit_transition": "trans_purchase_order_submit",
+    "register_customer_result": "aout_register_customer",
+    "restock_inventory_result": "aout_restock_inventory",
+    "sales_order_cancel_transition": "trans_sales_order_cancel",
+    "sales_order_fulfill_transition": "trans_sales_order_fulfill",
+    "sales_order_mark_paid_transition": "trans_sales_order_mark_paid",
+    "supplier_lead_time_updated": "sig_supplier_lead_time_updated",
+}
+OBJECT_LOCAL_NAME_BY_KEY: dict[str, str] = {
+    "customer": "obj_customer",
+    "delivery": "obj_delivery",
+    "inventory_item": "obj_inventory_item",
+    "invoice": "obj_invoice",
+    "purchase_order": "obj_purchase_order",
+    "sales_order": "obj_sales_order",
+    "supplier": "obj_supplier",
+}
 
 
 @dataclass(slots=True)
@@ -42,6 +87,85 @@ class EventDraft:
     updated_objects: list[dict[str, object]]
     trace_id: str
     trace_kind: str
+
+
+@dataclass(frozen=True, slots=True)
+class OntologyIdentifierCatalog:
+    event_type_uri_by_key: dict[str, str]
+    object_type_uri_by_key: dict[str, str]
+
+    @property
+    def sales_event_types(self) -> tuple[str, ...]:
+        return tuple(self.event_type_uri_by_key[key] for key in SALES_EVENT_KEYS)
+
+    @property
+    def operations_event_types(self) -> tuple[str, ...]:
+        return tuple(self.event_type_uri_by_key[key] for key in OPERATIONS_EVENT_KEYS)
+
+    @property
+    def reference_event_types(self) -> tuple[str, ...]:
+        return tuple(self.event_type_uri_by_key[key] for key in REFERENCE_EVENT_KEYS)
+
+
+@lru_cache(maxsize=1)
+def _load_small_business_identifier_catalog() -> OntologyIdentifierCatalog:
+    if not SMALL_BUSINESS_ONTOLOGY_PATH.exists():
+        raise ValueError(f"small-business ontology file not found: {SMALL_BUSINESS_ONTOLOGY_PATH}")
+
+    turtle = SMALL_BUSINESS_ONTOLOGY_PATH.read_text(encoding="utf-8")
+    prefix_by_alias = {alias: iri for alias, iri in _PREFIX_PATTERN.findall(turtle)}
+    concept_kinds_by_alias: dict[str, dict[str, str]] = {}
+    for alias, local_name, concept_kind in _CONCEPT_PATTERN.findall(turtle):
+        concept_kinds_by_alias.setdefault(alias, {})[local_name] = concept_kind
+
+    required_local_names = set(EVENT_LOCAL_NAME_BY_KEY.values()) | set(OBJECT_LOCAL_NAME_BY_KEY.values())
+    candidate_aliases = [
+        alias
+        for alias, local_names in concept_kinds_by_alias.items()
+        if required_local_names.issubset(local_names.keys())
+    ]
+    if not candidate_aliases:
+        raise ValueError(
+            "small-business ontology does not contain required local identifiers for fake-data generation"
+        )
+    if len(candidate_aliases) > 1:
+        raise ValueError(
+            f"ambiguous ontology alias resolution for fake-data generation: {sorted(candidate_aliases)!r}"
+        )
+
+    local_alias = candidate_aliases[0]
+    local_base_uri = prefix_by_alias.get(local_alias)
+    if local_base_uri is None:
+        raise ValueError(f"missing prefix IRI for ontology alias: {local_alias}")
+    concept_kind_by_local_name = concept_kinds_by_alias[local_alias]
+
+    def _resolve_uri(local_name: str, expected_kinds: set[str]) -> str:
+        concept_kind = concept_kind_by_local_name.get(local_name)
+        if concept_kind is None:
+            raise ValueError(
+                "required concept local name missing from small-business ontology: "
+                f"{local_alias}:{local_name}"
+            )
+        if concept_kind not in expected_kinds:
+            expected = ", ".join(sorted(expected_kinds))
+            raise ValueError(
+                f"concept {local_alias}:{local_name} has type prophet:{concept_kind}; "
+                f"expected one of prophet:{expected}"
+            )
+        return f"{local_base_uri}{local_name}"
+
+    event_type_uri_by_key = {
+        key: _resolve_uri(local_name, {"Signal", "Transition"})
+        for key, local_name in EVENT_LOCAL_NAME_BY_KEY.items()
+    }
+    object_type_uri_by_key = {
+        key: _resolve_uri(local_name, {"ObjectModel"})
+        for key, local_name in OBJECT_LOCAL_NAME_BY_KEY.items()
+    }
+    return OntologyIdentifierCatalog(
+        event_type_uri_by_key=event_type_uri_by_key,
+        object_type_uri_by_key=object_type_uri_by_key,
+    )
 
 
 def _to_zulu(value: datetime) -> str:
@@ -139,6 +263,7 @@ def _updated_object(
 ) -> dict[str, object]:
     return {
         "object_type": object_type,
+        "object_type_uri": object_type,
         "object_ref": object_ref,
         "object": object_payload,
         "relation_role": relation_role,
@@ -169,6 +294,7 @@ class SmallBusinessGenerator:
     def __init__(self, id_prefix: str, rng: random.Random) -> None:
         self.id_prefix = id_prefix
         self.rng = rng
+        self.identifiers = _load_small_business_identifier_catalog()
         self.customer_seq = 40
         self.sales_order_seq = 1
         self.invoice_seq = 1
@@ -179,6 +305,12 @@ class SmallBusinessGenerator:
         self.suppliers = self._seed_suppliers()
         self.products = self._seed_products()
         self.inventory_items = self._seed_inventory_items()
+
+    def _event_type(self, key: str) -> str:
+        return self.identifiers.event_type_uri_by_key[key]
+
+    def _object_type(self, key: str) -> str:
+        return self.identifiers.object_type_uri_by_key[key]
 
     def _seed_customers(self) -> list[dict[str, object]]:
         customers: list[dict[str, object]] = []
@@ -380,7 +512,7 @@ class SmallBusinessGenerator:
         customer = self._new_customer()
         trace_id = f"trace-customer-{customer['customer_id'].lower()}"
         return EventDraft(
-            event_type="RegisterCustomerResult",
+            event_type=self._event_type("register_customer_result"),
             source="prophet.small_business.crm",
             payload={
                 "customer": {"customer_id": customer["customer_id"]},
@@ -388,9 +520,9 @@ class SmallBusinessGenerator:
             },
             updated_objects=[
                 _updated_object(
-                    "Customer",
+                    self._object_type("customer"),
                     {"customer_id": customer["customer_id"]},
-                    {"object_type": "Customer", **customer},
+                    {"object_type": self._object_type("customer"), **customer},
                     "customer",
                 )
             ],
@@ -402,7 +534,7 @@ class SmallBusinessGenerator:
         supplier = self._pick(self.suppliers)
         trace_id = f"trace-supplier-{supplier['supplier_id'].lower()}"
         return EventDraft(
-            event_type="SupplierLeadTimeUpdated",
+            event_type=self._event_type("supplier_lead_time_updated"),
             source="prophet.small_business.procurement",
             payload={
                 "supplier": {"supplier_id": supplier["supplier_id"]},
@@ -410,9 +542,9 @@ class SmallBusinessGenerator:
             },
             updated_objects=[
                 _updated_object(
-                    "Supplier",
+                    self._object_type("supplier"),
                     {"supplier_id": supplier["supplier_id"]},
-                    {"object_type": "Supplier", **supplier},
+                    {"object_type": self._object_type("supplier"), **supplier},
                     "supplier",
                 )
             ],
@@ -427,7 +559,7 @@ class SmallBusinessGenerator:
         item["quantity_on_hand"] = new_quantity
         trace_id = f"trace-inventory-{item['inventory_item_id'].lower()}"
         return EventDraft(
-            event_type="AdjustInventoryResult",
+            event_type=self._event_type("adjust_inventory_result"),
             source="prophet.small_business.inventory",
             payload={
                 "inventoryItem": {"inventory_item_id": item["inventory_item_id"]},
@@ -435,9 +567,9 @@ class SmallBusinessGenerator:
             },
             updated_objects=[
                 _updated_object(
-                    "InventoryItem",
+                    self._object_type("inventory_item"),
                     {"inventory_item_id": item["inventory_item_id"]},
-                    {"object_type": "InventoryItem", **item},
+                    {"object_type": self._object_type("inventory_item"), **item},
                     "inventory_item",
                 )
             ],
@@ -459,7 +591,7 @@ class SmallBusinessGenerator:
         trace_id = f"trace-sales-{sales_order_id.lower()}"
 
         sales_order = {
-            "object_type": "SalesOrder",
+            "object_type": self._object_type("sales_order"),
             "sales_order_id": sales_order_id,
             "customer": {"customer_id": customer["customer_id"]},
             "created_by": {"employee_id": employee["employee_id"]},
@@ -472,7 +604,7 @@ class SmallBusinessGenerator:
             "state": "pending_payment",
         }
         invoice = {
-            "object_type": "Invoice",
+            "object_type": self._object_type("invoice"),
             "invoice_id": invoice_id,
             "sales_order": {"sales_order_id": sales_order_id},
             "issued_at": _to_zulu(datetime.now(tz=UTC)),
@@ -487,7 +619,7 @@ class SmallBusinessGenerator:
 
         events: list[EventDraft] = [
             EventDraft(
-                event_type="CreateSalesOrderResult",
+                event_type=self._event_type("create_sales_order_result"),
                 source="prophet.small_business.sales",
                 payload={
                     "salesOrder": {"sales_order_id": sales_order_id},
@@ -496,13 +628,13 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "SalesOrder",
+                        self._object_type("sales_order"),
                         {"sales_order_id": sales_order_id},
                         sales_order,
                         "primary",
                     ),
                     _updated_object(
-                        "Invoice",
+                        self._object_type("invoice"),
                         {"invoice_id": invoice_id},
                         invoice,
                         "billing_document",
@@ -524,7 +656,7 @@ class SmallBusinessGenerator:
             sales_order_cancelled = {**sales_order, "state": "cancelled"}
             events.append(
                 EventDraft(
-                    event_type="SalesOrderCancelTransition",
+                    event_type=self._event_type("sales_order_cancel_transition"),
                     source="prophet.small_business.sales",
                     payload={
                         "sales_order_id": sales_order_id,
@@ -541,7 +673,7 @@ class SmallBusinessGenerator:
                     },
                     updated_objects=[
                         _updated_object(
-                            "SalesOrder",
+                            self._object_type("sales_order"),
                             {"sales_order_id": sales_order_id},
                             sales_order_cancelled,
                             "primary",
@@ -557,7 +689,7 @@ class SmallBusinessGenerator:
             invoice_overdue = {**invoice, "state": "overdue"}
             events.append(
                 EventDraft(
-                    event_type="InvoiceMarkOverdueTransition",
+                    event_type=self._event_type("invoice_mark_overdue_transition"),
                     source="prophet.small_business.billing",
                     payload={
                         "invoice_id": invoice_id,
@@ -567,7 +699,7 @@ class SmallBusinessGenerator:
                     },
                     updated_objects=[
                         _updated_object(
-                            "Invoice",
+                            self._object_type("invoice"),
                             {"invoice_id": invoice_id},
                             invoice_overdue,
                             "billing_document",
@@ -581,7 +713,7 @@ class SmallBusinessGenerator:
 
         events.append(
             EventDraft(
-                event_type="InvoicePaymentRecorded",
+                event_type=self._event_type("invoice_payment_recorded"),
                 source="prophet.small_business.billing",
                 payload={
                     "invoice": {"invoice_id": invoice_id},
@@ -594,7 +726,7 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "Invoice",
+                        self._object_type("invoice"),
                         {"invoice_id": invoice_id},
                         invoice,
                         "billing_document",
@@ -608,7 +740,7 @@ class SmallBusinessGenerator:
         invoice_paid = {**invoice, "state": "paid", "balance_due": 0.0}
         events.append(
             EventDraft(
-                event_type="InvoiceMarkPaidTransition",
+                event_type=self._event_type("invoice_mark_paid_transition"),
                 source="prophet.small_business.billing",
                 payload={
                     "invoice_id": invoice_id,
@@ -619,7 +751,7 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "Invoice",
+                        self._object_type("invoice"),
                         {"invoice_id": invoice_id},
                         invoice_paid,
                         "billing_document",
@@ -633,7 +765,7 @@ class SmallBusinessGenerator:
         sales_order_paid = {**sales_order, "state": "paid"}
         events.append(
             EventDraft(
-                event_type="SalesOrderMarkPaidTransition",
+                event_type=self._event_type("sales_order_mark_paid_transition"),
                 source="prophet.small_business.sales",
                 payload={
                     "sales_order_id": sales_order_id,
@@ -644,7 +776,7 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "SalesOrder",
+                        self._object_type("sales_order"),
                         {"sales_order_id": sales_order_id},
                         sales_order_paid,
                         "primary",
@@ -659,7 +791,7 @@ class SmallBusinessGenerator:
         delivery_id = _id("DLV", self.delivery_seq, self.id_prefix)
         self.delivery_seq += 1
         delivery = {
-            "object_type": "Delivery",
+            "object_type": self._object_type("delivery"),
             "delivery_id": delivery_id,
             "sales_order": {"sales_order_id": sales_order_id},
             "destination": customer["shipping_address"],
@@ -671,7 +803,7 @@ class SmallBusinessGenerator:
         sales_order_fulfilled = {**sales_order_paid, "state": "fulfilled"}
         events.append(
             EventDraft(
-                event_type="SalesOrderFulfillTransition",
+                event_type=self._event_type("sales_order_fulfill_transition"),
                 source="prophet.small_business.fulfillment",
                 payload={
                     "sales_order_id": sales_order_id,
@@ -682,13 +814,13 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "SalesOrder",
+                        self._object_type("sales_order"),
                         {"sales_order_id": sales_order_id},
                         sales_order_fulfilled,
                         "primary",
                     ),
                     _updated_object(
-                        "Delivery",
+                        self._object_type("delivery"),
                         {"delivery_id": delivery_id},
                         delivery,
                         "fulfillment",
@@ -719,7 +851,7 @@ class SmallBusinessGenerator:
         lines, estimated_total = self._purchase_order_lines(item)
         now_iso = _to_zulu(datetime.now(tz=UTC))
         purchase_order = {
-            "object_type": "PurchaseOrder",
+            "object_type": self._object_type("purchase_order"),
             "purchase_order_id": purchase_order_id,
             "supplier": {"supplier_id": supplier["supplier_id"]},
             "requested_by": {"employee_id": employee["employee_id"]},
@@ -731,7 +863,7 @@ class SmallBusinessGenerator:
 
         events: list[EventDraft] = [
             EventDraft(
-                event_type="LowStockDetected",
+                event_type=self._event_type("low_stock_detected"),
                 source="prophet.small_business.inventory",
                 payload={
                     "inventory_item": {"inventory_item_id": item["inventory_item_id"]},
@@ -740,9 +872,9 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "InventoryItem",
+                        self._object_type("inventory_item"),
                         {"inventory_item_id": item["inventory_item_id"]},
-                        {"object_type": "InventoryItem", **item},
+                        {"object_type": self._object_type("inventory_item"), **item},
                         "inventory_item",
                     )
                 ],
@@ -750,7 +882,7 @@ class SmallBusinessGenerator:
                 trace_kind="purchase_flow",
             ),
             EventDraft(
-                event_type="CreatePurchaseOrderResult",
+                event_type=self._event_type("create_purchase_order_result"),
                 source="prophet.small_business.procurement",
                 payload={
                     "purchaseOrder": {"purchase_order_id": purchase_order_id},
@@ -758,7 +890,7 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "PurchaseOrder",
+                        self._object_type("purchase_order"),
                         {"purchase_order_id": purchase_order_id},
                         purchase_order,
                         "primary",
@@ -768,7 +900,7 @@ class SmallBusinessGenerator:
                 trace_kind="purchase_flow",
             ),
             EventDraft(
-                event_type="PurchaseOrderSubmitTransition",
+                event_type=self._event_type("purchase_order_submit_transition"),
                 source="prophet.small_business.procurement",
                 payload={
                     "purchase_order_id": purchase_order_id,
@@ -779,7 +911,7 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "PurchaseOrder",
+                        self._object_type("purchase_order"),
                         {"purchase_order_id": purchase_order_id},
                         {
                             **purchase_order,
@@ -793,7 +925,7 @@ class SmallBusinessGenerator:
                 trace_kind="purchase_flow",
             ),
             EventDraft(
-                event_type="PurchaseOrderReceiveTransition",
+                event_type=self._event_type("purchase_order_receive_transition"),
                 source="prophet.small_business.procurement",
                 payload={
                     "purchase_order_id": purchase_order_id,
@@ -804,7 +936,7 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "PurchaseOrder",
+                        self._object_type("purchase_order"),
                         {"purchase_order_id": purchase_order_id},
                         {
                             **purchase_order,
@@ -825,7 +957,7 @@ class SmallBusinessGenerator:
         item["last_restocked_at"] = now_iso
         events.append(
             EventDraft(
-                event_type="RestockInventoryResult",
+                event_type=self._event_type("restock_inventory_result"),
                 source="prophet.small_business.inventory",
                 payload={
                     "updatedItems": [
@@ -834,9 +966,9 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "InventoryItem",
+                        self._object_type("inventory_item"),
                         {"inventory_item_id": item["inventory_item_id"]},
-                        {"object_type": "InventoryItem", **item},
+                        {"object_type": self._object_type("inventory_item"), **item},
                         "restocked_item",
                     )
                 ],
@@ -846,7 +978,7 @@ class SmallBusinessGenerator:
         )
         events.append(
             EventDraft(
-                event_type="PurchaseOrderCloseTransition",
+                event_type=self._event_type("purchase_order_close_transition"),
                 source="prophet.small_business.procurement",
                 payload={
                     "purchase_order_id": purchase_order_id,
@@ -856,7 +988,7 @@ class SmallBusinessGenerator:
                 },
                 updated_objects=[
                     _updated_object(
-                        "PurchaseOrder",
+                        self._object_type("purchase_order"),
                         {"purchase_order_id": purchase_order_id},
                         {
                             **purchase_order,
@@ -874,14 +1006,14 @@ class SmallBusinessGenerator:
         return events
 
     def one_off_event(self) -> EventDraft:
-        event_type = self.rng.choices(
-            REFERENCE_EVENT_TYPES + ("AdjustInventoryResult",),
+        event_key = self.rng.choices(
+            REFERENCE_EVENT_KEYS + ("adjust_inventory_result",),
             weights=(0.25, 0.30, 0.45),
             k=1,
         )[0]
-        if event_type == "RegisterCustomerResult":
+        if event_key == "register_customer_result":
             return self._register_customer_event()
-        if event_type == "SupplierLeadTimeUpdated":
+        if event_key == "supplier_lead_time_updated":
             return self._supplier_lead_time_event()
         return self._adjust_inventory_event()
 
@@ -908,6 +1040,7 @@ def _materialize_event(
         "event_id": str(uuid4()),
         "occurred_at": _to_zulu(occurred_at),
         "event_type": draft.event_type,
+        "event_type_uri": draft.event_type,
         "source": draft.source,
         "payload": draft.payload,
         "trace_id": draft.trace_id,
@@ -961,6 +1094,7 @@ def main() -> int:
         print(f"ERROR: invalid --start-at value: {exc}")
         return 1
     rng = random.Random(args.seed)
+    identifier_catalog = _load_small_business_identifier_catalog()
 
     event_drafts = _build_event_drafts(count=args.count, id_prefix=args.id_prefix, rng=rng)
     occurred_times: list[datetime] = []
@@ -997,9 +1131,9 @@ def main() -> int:
             "seed": args.seed,
             "model": "prophet_example_turtle_small_business",
             "event_families": {
-                "sales": list(SALES_EVENT_TYPES),
-                "operations": list(OPERATIONS_EVENT_TYPES),
-                "reference": list(REFERENCE_EVENT_TYPES),
+                "sales": list(identifier_catalog.sales_event_types),
+                "operations": list(identifier_catalog.operations_event_types),
+                "reference": list(identifier_catalog.reference_event_types),
             },
         },
         "events": events,
