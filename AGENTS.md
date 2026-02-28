@@ -22,6 +22,12 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 3. Keep docs short, cross-linked, and layered for progressive disclosure.
 4. If it is important for future execution, encode it into repository docs.
 
+## Delivery Stance
+
+1. Do not preserve legacy UI or backend behavior for backward compatibility by default.
+2. Optimize for the best current user experience, backend contract clarity, and product correctness, even when that breaks legacy implementation patterns.
+3. Treat legacy behavior as migration context, not a binding constraint.
+
 ## Read Order by Task Type
 
 1. Product scope or priorities: `VISION.md`, then active execution plans.

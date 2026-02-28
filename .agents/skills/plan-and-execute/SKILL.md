@@ -1,6 +1,6 @@
 ---
 name: plan-and-execute
-description: Plan work and execute it end-to-end with clear phases, strict handoffs, validation gates, and documentation updates. Use this whenever a user asks to plan out work and then execute it.
+description: Plan work and execute it end-to-end with clear phases, strict handoffs, validation gates, and documentation updates. Use this whenever a user asks to plan out work and then execute it, prioritizing the best current UI and backend outcomes over legacy compatibility.
 ---
 
 # Plan And Execute
@@ -12,6 +12,12 @@ Use this skill when the user wants:
 3. Worker-agent delegation with controlled sequencing when scope is large.
 4. Strong handoffs, validation gates, and phase-level commits.
 5. Plan/doc updates as part of delivery, not an afterthought.
+
+## Compatibility Stance
+
+1. Default to forward-only delivery: do not preserve legacy implementation behavior unless explicitly requested.
+2. Choose the best current UX, backend contracts, and invariant-aligned behavior, even when it differs from legacy flows.
+3. If a tradeoff is required, document why the new behavior is superior and what legacy behavior is intentionally dropped.
 
 ## Core Workflow
 
