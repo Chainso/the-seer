@@ -107,6 +107,16 @@ function buildFixtureGraph() {
         properties: { "prophet:name": "Pending Approval" },
       },
       {
+        uri: "http://example.com/state_order_approved",
+        label: "State",
+        properties: { "prophet:name": "Approved" },
+      },
+      {
+        uri: "http://example.com/trans_order_approve",
+        label: "Transition",
+        properties: { "prophet:name": "Approve" },
+      },
+      {
         uri: "http://example.com/prop_customer",
         label: "PropertyDefinition",
         properties: { fieldKey: "customer", "prophet:name": "Customer" },
@@ -156,6 +166,26 @@ function buildFixtureGraph() {
         fromUri: "http://example.com/obj_order",
         toUri: "http://example.com/state_order_pending",
         type: "hasPossibleState",
+      },
+      {
+        fromUri: "http://example.com/obj_order",
+        toUri: "http://example.com/state_order_approved",
+        type: "hasPossibleState",
+      },
+      {
+        fromUri: "http://example.com/trans_order_approve",
+        toUri: "http://example.com/obj_order",
+        type: "transitionOf",
+      },
+      {
+        fromUri: "http://example.com/trans_order_approve",
+        toUri: "http://example.com/state_order_pending",
+        type: "fromState",
+      },
+      {
+        fromUri: "http://example.com/trans_order_approve",
+        toUri: "http://example.com/state_order_approved",
+        type: "toState",
       },
       {
         fromUri: "http://example.com/prop_quantity",
@@ -241,6 +271,68 @@ test("resolver preserves alias rewrites and state token mapping contracts", () =
   );
   assert.equal(
     resolver.displayFieldValue("from_state", "order_pending", { objectType: "order" }),
+    "Pending Approval"
+  );
+});
+
+test("resolver formats lifecycle concept labels in explicit mode", () => {
+  const resolver = buildResolver();
+
+  assert.equal(
+    resolver.displayConcept("http://example.com/state_order_pending", {
+      conceptKind: "State",
+      lifecycleLabelMode: "explicit",
+    }),
+    "Order Pending Approval"
+  );
+  assert.equal(
+    resolver.displayConcept("http://example.com/trans_order_approve", {
+      conceptKind: "Transition",
+      lifecycleLabelMode: "explicit",
+    }),
+    "Approve Order"
+  );
+  assert.equal(
+    resolver.displayNode(
+      {
+        uri: "http://example.com/state_order_pending",
+        label: "State",
+        properties: { "prophet:name": "Pending Approval" },
+      },
+      { lifecycleLabelMode: "explicit" }
+    ),
+    "Order Pending Approval"
+  );
+  assert.equal(
+    resolver.displayNode(
+      {
+        uri: "http://example.com/trans_order_approve",
+        label: "Transition",
+        properties: { "prophet:name": "Approve" },
+      },
+      { lifecycleLabelMode: "explicit" }
+    ),
+    "Approve Order"
+  );
+});
+
+test("resolver keeps lifecycle concept labels plain by default", () => {
+  const resolver = buildResolver();
+
+  assert.equal(
+    resolver.displayConcept("http://example.com/state_order_pending", { conceptKind: "State" }),
+    "Pending Approval"
+  );
+  assert.equal(
+    resolver.displayConcept("http://example.com/trans_order_approve", { conceptKind: "Transition" }),
+    "Approve"
+  );
+  assert.equal(
+    resolver.displayNode({
+      uri: "http://example.com/state_order_pending",
+      label: "State",
+      properties: { "prophet:name": "Pending Approval" },
+    }),
     "Pending Approval"
   );
 });

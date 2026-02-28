@@ -35,6 +35,10 @@ export type OntologyDisplayCatalog = {
   objectModels: OntologyDisplayObjectModel[];
   objectModelByUri: Map<string, OntologyDisplayObjectModel>;
   objectModelByToken: Map<string, OntologyDisplayObjectModel>;
+  stateOwnerObjectByUri: Map<string, OntologyDisplayObjectModel>;
+  stateOwnerObjectByToken: Map<string, OntologyDisplayObjectModel>;
+  transitionOwnerObjectByUri: Map<string, OntologyDisplayObjectModel>;
+  transitionOwnerObjectByToken: Map<string, OntologyDisplayObjectModel>;
   conceptLabelByToken: Map<string, string>;
   conceptFieldLabelsByToken: Map<string, Map<string, string>>;
   globalFieldLabelByKey: Map<string, string>;
@@ -351,12 +355,43 @@ function setLookupIfMissing<T>(lookup: Map<string, T>, tokens: string[], value: 
   }
 }
 
+function setOwnerLookupIfMissing(
+  ownerByUri: Map<string, OntologyDisplayObjectModel>,
+  ownerByToken: Map<string, OntologyDisplayObjectModel>,
+  conceptUri: string,
+  owner: OntologyDisplayObjectModel,
+  nodesByUri: Map<string, OntologyNode>
+): void {
+  if (!conceptUri || !conceptUri.trim()) {
+    return;
+  }
+  if (!ownerByUri.has(conceptUri)) {
+    ownerByUri.set(conceptUri, owner);
+  }
+
+  const conceptNode = nodesByUri.get(conceptUri);
+  const conceptName = preferredOntologyName(conceptNode?.properties);
+  const tokenInputs = [conceptUri, iriLocalName(conceptUri)];
+  if (conceptName) {
+    tokenInputs.push(conceptName);
+  }
+  setLookupIfMissing(
+    ownerByToken,
+    tokenInputs.flatMap((value) => tokenVariants(value)),
+    owner
+  );
+}
+
 export function buildOntologyDisplayCatalog(graph: OntologyGraph | null): OntologyDisplayCatalog {
   if (!graph) {
     return {
       objectModels: [],
       objectModelByUri: new Map(),
       objectModelByToken: new Map(),
+      stateOwnerObjectByUri: new Map(),
+      stateOwnerObjectByToken: new Map(),
+      transitionOwnerObjectByUri: new Map(),
+      transitionOwnerObjectByToken: new Map(),
       conceptLabelByToken: new Map(),
       conceptFieldLabelsByToken: new Map(),
       globalFieldLabelByKey: new Map(),
@@ -381,6 +416,100 @@ export function buildOntologyDisplayCatalog(graph: OntologyGraph | null): Ontolo
         .concat(tokenVariants(model.name))
         .concat(tokenVariants(model.localName)),
       model
+    );
+  }
+
+  const stateOwnerObjectByUri = new Map<string, OntologyDisplayObjectModel>();
+  const stateOwnerObjectByToken = new Map<string, OntologyDisplayObjectModel>();
+  const transitionOwnerObjectByUri = new Map<string, OntologyDisplayObjectModel>();
+  const transitionOwnerObjectByToken = new Map<string, OntologyDisplayObjectModel>();
+
+  for (const edge of edges) {
+    if (edge.type === "hasPossibleState") {
+      const owner = objectModelByUri.get(edge.fromUri);
+      if (owner) {
+        setOwnerLookupIfMissing(
+          stateOwnerObjectByUri,
+          stateOwnerObjectByToken,
+          edge.toUri,
+          owner,
+          nodesByUri
+        );
+      }
+      continue;
+    }
+    if (edge.type === "isStateOf") {
+      const owner = objectModelByUri.get(edge.toUri);
+      if (owner) {
+        setOwnerLookupIfMissing(
+          stateOwnerObjectByUri,
+          stateOwnerObjectByToken,
+          edge.fromUri,
+          owner,
+          nodesByUri
+        );
+      }
+      continue;
+    }
+    if (edge.type === "transitionOf") {
+      const owner = objectModelByUri.get(edge.toUri);
+      if (owner) {
+        setOwnerLookupIfMissing(
+          transitionOwnerObjectByUri,
+          transitionOwnerObjectByToken,
+          edge.fromUri,
+          owner,
+          nodesByUri
+        );
+      }
+      continue;
+    }
+    if (edge.type === "hasPossibleTransition") {
+      const owner = objectModelByUri.get(edge.fromUri);
+      if (owner) {
+        setOwnerLookupIfMissing(
+          transitionOwnerObjectByUri,
+          transitionOwnerObjectByToken,
+          edge.toUri,
+          owner,
+          nodesByUri
+        );
+      }
+    }
+  }
+
+  const inferredTransitionOwners = new Map<string, OntologyDisplayObjectModel>();
+  const ambiguousTransitionUris = new Set<string>();
+  for (const edge of edges) {
+    if (edge.type !== "fromState" && edge.type !== "toState") {
+      continue;
+    }
+    if (transitionOwnerObjectByUri.has(edge.fromUri)) {
+      continue;
+    }
+    const owner = stateOwnerObjectByUri.get(edge.toUri);
+    if (!owner) {
+      continue;
+    }
+    const currentOwner = inferredTransitionOwners.get(edge.fromUri);
+    if (!currentOwner) {
+      inferredTransitionOwners.set(edge.fromUri, owner);
+      continue;
+    }
+    if (currentOwner.uri !== owner.uri) {
+      ambiguousTransitionUris.add(edge.fromUri);
+    }
+  }
+  for (const [transitionUri, owner] of inferredTransitionOwners.entries()) {
+    if (ambiguousTransitionUris.has(transitionUri)) {
+      continue;
+    }
+    setOwnerLookupIfMissing(
+      transitionOwnerObjectByUri,
+      transitionOwnerObjectByToken,
+      transitionUri,
+      owner,
+      nodesByUri
     );
   }
 
@@ -442,6 +571,10 @@ export function buildOntologyDisplayCatalog(graph: OntologyGraph | null): Ontolo
     objectModels,
     objectModelByUri,
     objectModelByToken,
+    stateOwnerObjectByUri,
+    stateOwnerObjectByToken,
+    transitionOwnerObjectByUri,
+    transitionOwnerObjectByToken,
     conceptLabelByToken,
     conceptFieldLabelsByToken,
     globalFieldLabelByKey,

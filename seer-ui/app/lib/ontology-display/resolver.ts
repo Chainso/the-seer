@@ -3,6 +3,7 @@ import {
   iriLocalName,
   normalizeComparableToken,
   normalizeToken,
+  preferredOntologyName,
   tokenVariants,
 } from "./catalog";
 
@@ -31,6 +32,23 @@ export type OntologyDisplayOperatorContext = OntologyDisplayFieldKindContext & {
   profile?: OntologyDisplayOperatorProfile;
 };
 
+export type OntologyDisplayLifecycleLabelMode = "plain" | "explicit";
+
+export type OntologyDisplayLifecycleOptions = {
+  lifecycleLabelMode?: OntologyDisplayLifecycleLabelMode;
+};
+
+export type OntologyDisplayConceptContext = OntologyDisplayLifecycleOptions & {
+  conceptKind?: string | null;
+  conceptLabel?: string | null;
+};
+
+export type OntologyDisplayNodeLike = {
+  uri: string;
+  label?: string | null;
+  properties?: Record<string, unknown> | null;
+};
+
 export type OntologyDisplayResolver = {
   catalog: OntologyDisplayCatalog;
   resolveObjectModel: (objectType: string | null | undefined) => OntologyDisplayObjectModel | null;
@@ -39,6 +57,11 @@ export type OntologyDisplayResolver = {
     eventType: string | null | undefined,
     options?: { fallbackObjectType?: string }
   ) => string;
+  displayConcept: (
+    conceptType: string | null | undefined,
+    options?: OntologyDisplayConceptContext
+  ) => string;
+  displayNode: (node: OntologyDisplayNodeLike | null | undefined, options?: OntologyDisplayLifecycleOptions) => string;
   fieldLabelsForObjectType: (objectType: string | null | undefined) => Map<string, string> | undefined;
   fieldLabelsForEventType: (eventType: string | null | undefined) => Map<string, string> | undefined;
   mergedFieldLabels: (context?: OntologyDisplayResolveContext) => Map<string, string>;
@@ -190,6 +213,120 @@ function lookupConceptLabel(catalog: OntologyDisplayCatalog, value: string): str
     }
   }
   return null;
+}
+
+function resolveOwnerObjectByConcept(
+  conceptType: string,
+  ownerByUri: Map<string, OntologyDisplayObjectModel>,
+  ownerByToken: Map<string, OntologyDisplayObjectModel>
+): OntologyDisplayObjectModel | null {
+  const byUri = ownerByUri.get(conceptType);
+  if (byUri) {
+    return byUri;
+  }
+  for (const token of tokenVariants(conceptType)) {
+    const mapped = ownerByToken.get(token);
+    if (mapped) {
+      return mapped;
+    }
+  }
+  return null;
+}
+
+function resolveStateOwnerObject(
+  catalog: OntologyDisplayCatalog,
+  conceptType: string
+): OntologyDisplayObjectModel | null {
+  return resolveOwnerObjectByConcept(
+    conceptType,
+    catalog.stateOwnerObjectByUri,
+    catalog.stateOwnerObjectByToken
+  );
+}
+
+function resolveTransitionOwnerObject(
+  catalog: OntologyDisplayCatalog,
+  conceptType: string
+): OntologyDisplayObjectModel | null {
+  return resolveOwnerObjectByConcept(
+    conceptType,
+    catalog.transitionOwnerObjectByUri,
+    catalog.transitionOwnerObjectByToken
+  );
+}
+
+function lifecycleLabelMode(options?: OntologyDisplayLifecycleOptions): OntologyDisplayLifecycleLabelMode {
+  return options?.lifecycleLabelMode === "explicit" ? "explicit" : "plain";
+}
+
+function resolveConceptLabel(
+  catalog: OntologyDisplayCatalog,
+  conceptType: string,
+  conceptLabel?: string | null
+): string {
+  if (typeof conceptLabel === "string" && conceptLabel.trim()) {
+    return conceptLabel.trim();
+  }
+  const ontologyLabel = lookupConceptLabel(catalog, conceptType);
+  if (ontologyLabel) {
+    return ontologyLabel;
+  }
+  return iriLocalName(conceptType);
+}
+
+function displayConcept(
+  catalog: OntologyDisplayCatalog,
+  conceptType: string | null | undefined,
+  options?: OntologyDisplayConceptContext
+): string {
+  if (!conceptType || !conceptType.trim()) {
+    return "—";
+  }
+
+  const baseLabel = resolveConceptLabel(catalog, conceptType, options?.conceptLabel);
+  if (lifecycleLabelMode(options) !== "explicit") {
+    return baseLabel;
+  }
+
+  const normalizedKind = normalizeComparableToken(options?.conceptKind || "");
+  if (normalizedKind && normalizedKind !== "state" && normalizedKind !== "transition") {
+    return baseLabel;
+  }
+
+  if (normalizedKind === "state") {
+    const owner = resolveStateOwnerObject(catalog, conceptType);
+    return owner ? `${owner.name} ${baseLabel}` : baseLabel;
+  }
+  if (normalizedKind === "transition") {
+    const owner = resolveTransitionOwnerObject(catalog, conceptType);
+    return owner ? `${baseLabel} ${owner.name}` : baseLabel;
+  }
+
+  const stateOwner = resolveStateOwnerObject(catalog, conceptType);
+  if (stateOwner) {
+    return `${stateOwner.name} ${baseLabel}`;
+  }
+  const transitionOwner = resolveTransitionOwnerObject(catalog, conceptType);
+  if (transitionOwner) {
+    return `${baseLabel} ${transitionOwner.name}`;
+  }
+  return baseLabel;
+}
+
+function displayNode(
+  catalog: OntologyDisplayCatalog,
+  node: OntologyDisplayNodeLike | null | undefined,
+  options?: OntologyDisplayLifecycleOptions
+): string {
+  if (!node?.uri || !node.uri.trim()) {
+    return "—";
+  }
+  const conceptLabel = preferredOntologyName(node.properties || undefined);
+  return displayConcept(catalog, node.uri, {
+    conceptKind: node.label || null,
+    conceptLabel,
+    lifecycleLabelMode: options?.lifecycleLabelMode,
+  });
 }
 
 function displayObjectType(catalog: OntologyDisplayCatalog, objectType: string | null | undefined): string {
@@ -608,6 +745,8 @@ export function createOntologyDisplayResolver(catalog: OntologyDisplayCatalog): 
     resolveObjectModel: (objectType) => resolveObjectModel(catalog, objectType),
     displayObjectType: (objectType) => displayObjectType(catalog, objectType),
     displayEventType: (eventType, options) => displayEventType(catalog, eventType, options),
+    displayConcept: (conceptType, options) => displayConcept(catalog, conceptType, options),
+    displayNode: (node, options) => displayNode(catalog, node, options),
     fieldLabelsForObjectType: (objectType) => fieldLabelsForObjectType(catalog, objectType),
     fieldLabelsForEventType: (eventType) => fieldLabelsForEventType(catalog, eventType),
     mergedFieldLabels: (context) => mergedFieldLabels(catalog, context),
