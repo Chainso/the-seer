@@ -99,9 +99,6 @@ export default function OntologyTabPage() {
             Explore local ontologies, object lifecycles, action contracts, event semantics, and trigger networks
             through a graph-first, read-optimized interface built for repository-driven ontology evolution.
           </p>
-          <p className="text-xs text-muted-foreground">
-            Author changes in repo Turtle/SHACL files, review via pull request, then use this explorer to inspect semantic impact.
-          </p>
         </div>
       </div>
       {graph && (

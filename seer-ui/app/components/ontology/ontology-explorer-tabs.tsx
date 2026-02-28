@@ -408,9 +408,9 @@ export function OntologyExplorerTabs({
     structure: true,
     lifecycle: true,
     automation: true,
-    reference: false,
+    reference: true,
   });
-  const [focusNeighborhoodOnly, setFocusNeighborhoodOnly] = useState(true);
+  const [focusNeighborhoodOnly, setFocusNeighborhoodOnly] = useState(false);
 
   const currentTab = (activeTab || internalTab || 'overview') as ExplorerTab;
   const tabConfig = TAB_CONFIG[currentTab] || TAB_CONFIG.overview;
@@ -423,7 +423,7 @@ export function OntologyExplorerTabs({
       structure: true,
       lifecycle: true,
       automation: true,
-      reference: false,
+      reference: true,
     });
     if (onTabChange) {
       onTabChange(value);
@@ -455,12 +455,15 @@ export function OntologyExplorerTabs({
   }, [scopedGraph.edges]);
 
   const sortedCatalog = useMemo(() => {
-    const nodes = scopedGraph.nodes
-      .filter((node) => !isStandardTypeNode(node))
-      .slice();
-    nodes.sort((a, b) => displayName(a).localeCompare(displayName(b)));
-    return nodes;
-  }, [scopedGraph.nodes]);
+    const nodes = graphData.nodes.filter(
+      (node) => allowedLabels.has(node.label) && isAuthoringConceptNode(node) && !isStandardTypeNode(node)
+    );
+    const queryLower = query.trim().toLowerCase();
+    const filtered = queryLower.length > 0
+      ? nodes.filter((node) => toSearchText(node).includes(queryLower))
+      : nodes;
+    return filtered.slice().sort((a, b) => displayName(a).localeCompare(displayName(b)));
+  }, [graphData.nodes, allowedLabels, query]);
 
   const deepLinkedUri =
     initialConceptUri && scopedGraph.nodes.some((node) => node.uri === initialConceptUri)
@@ -512,15 +515,12 @@ export function OntologyExplorerTabs({
         <h3 className="font-display text-base">Concept Catalog</h3>
         <Badge variant="secondary">{sortedCatalog.length}</Badge>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Authoring view only: object/type/struct/action/signal/trigger concepts and lifecycle edges.
-      </p>
       <div className="relative mt-3">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search by name, URI, or description..."
+          placeholder="Search by name, label, or description..."
           className="pl-9"
         />
       </div>
@@ -541,7 +541,6 @@ export function OntologyExplorerTabs({
                     {node.label}
                   </Badge>
                 </div>
-                <p className="mt-1 truncate text-xs text-muted-foreground">{node.uri}</p>
               </div>
             </Button>
           );

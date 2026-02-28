@@ -5,14 +5,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
-import { Home, Network, Activity, Sparkles, Sun, Moon, Database, Bot, GitPullRequest } from 'lucide-react';
+import { Network, Activity, Sparkles, Sun, Moon, Database, Bot, GitPullRequest } from 'lucide-react';
 
 const navigation = [
-  {
-    name: 'Dashboard',
-    href: '/',
-    icon: Home,
-  },
   {
     name: 'Ontology Explorer',
     href: '/ontology/overview',
