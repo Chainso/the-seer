@@ -60,6 +60,12 @@ python3 scripts/generate_fake_event_data.py --output /tmp/seer-fake-events.json 
 python3 scripts/ingest_history_events.py --input /tmp/seer-fake-events.json
 ```
 
+4. Verify RCA returns high-signal results on fake data:
+
+```bash
+python3 scripts/verify_fake_data_rca.py --input fake-data.json --ingest
+```
+
 All scripts accept `--api-base-url` and `--api-prefix` when your backend is not using
 `http://localhost:8000/api/v1`.
 
