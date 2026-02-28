@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { OntologyGraph } from '@/app/types/ontology';
+import type { OntologyGraph, OntologyNode as OntologyGraphNode } from '@/app/types/ontology';
 import { OntologyNode, OntologyNodeData } from './ontology-node';
 import { OntologyToolbar } from './ontology-toolbar';
 import ELK from 'elkjs/lib/elk.bundled.js';
@@ -26,6 +26,7 @@ interface OntologyGraphVisualizationProps {
   data: OntologyGraph;
   allowedLabels?: string[];
   onNodeSelect?: (nodeUri: string) => void;
+  displayNodeName?: (node: OntologyGraphNode) => string;
 }
 
 interface ElkEdgePoint {
@@ -88,7 +89,8 @@ function fallbackGridLayout(nodes: Node<OntologyNodeData>[]) {
 
 async function layoutNodes(
   data: OntologyGraph,
-  allowedLabelsOverride?: string[]
+  allowedLabelsOverride?: string[],
+  displayNodeName?: (node: OntologyGraphNode) => string
 ): Promise<{ nodes: Node<OntologyNodeData>[]; edges: Edge[] }> {
   const edgeColors = {
     default: 'var(--graph-edge-default)',
@@ -123,7 +125,9 @@ async function layoutNodes(
       data: {
         label: node.label,
         uri: node.uri,
-        name: node.properties.name as string,
+        name:
+          displayNodeName?.(node) ||
+          (typeof node.properties.name === 'string' ? node.properties.name : node.uri),
         description: node.properties.description as string,
       },
     });
@@ -277,7 +281,12 @@ async function applyElkLayout(nodes: Node<OntologyNodeData>[], edges: Edge[]) {
   return { nodes: layoutedNodes, edgePoints };
 }
 
-function OntologyGraphVisualizationInner({ data, allowedLabels, onNodeSelect }: OntologyGraphVisualizationProps) {
+function OntologyGraphVisualizationInner({
+  data,
+  allowedLabels,
+  onNodeSelect,
+  displayNodeName,
+}: OntologyGraphVisualizationProps) {
   const [nodes, setNodes] = useState<Node<OntologyNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
@@ -298,7 +307,11 @@ function OntologyGraphVisualizationInner({ data, allowedLabels, onNodeSelect }: 
   useEffect(() => {
     let canceled = false;
     const runLayout = async () => {
-      const { nodes: layoutedNodes, edges: layoutedEdges } = await layoutNodes(data, allowedLabels);
+      const { nodes: layoutedNodes, edges: layoutedEdges } = await layoutNodes(
+        data,
+        allowedLabels,
+        displayNodeName
+      );
       if (!canceled) {
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
@@ -308,7 +321,7 @@ function OntologyGraphVisualizationInner({ data, allowedLabels, onNodeSelect }: 
     return () => {
       canceled = true;
     };
-  }, [data, allowedLabels]);
+  }, [data, allowedLabels, displayNodeName]);
 
   return (
     <div className="w-full h-full relative">
@@ -331,13 +344,19 @@ function OntologyGraphVisualizationInner({ data, allowedLabels, onNodeSelect }: 
   );
 }
 
-export function OntologyGraphVisualization({ data, allowedLabels, onNodeSelect }: OntologyGraphVisualizationProps) {
+export function OntologyGraphVisualization({
+  data,
+  allowedLabels,
+  onNodeSelect,
+  displayNodeName,
+}: OntologyGraphVisualizationProps) {
   return (
     <ReactFlowProvider>
       <OntologyGraphVisualizationInner
         data={data}
         allowedLabels={allowedLabels}
         onNodeSelect={onNodeSelect}
+        displayNodeName={displayNodeName}
       />
     </ReactFlowProvider>
   );

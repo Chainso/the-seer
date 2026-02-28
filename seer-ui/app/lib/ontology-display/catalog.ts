@@ -3,20 +3,6 @@ import type { OntologyEdge, OntologyGraph, OntologyNode } from "../../types/onto
 
 const EVENT_NODE_LABELS = new Set(["Event", "Signal", "Transition"]);
 
-const MODEL_ALIAS_REWRITES: Array<[RegExp, string]> = [
-  [/^shipment$/i, "delivery"],
-  [/^delivery$/i, "shipment"],
-  [/^order$/i, "sales order"],
-  [/^sales order$/i, "order"],
-];
-
-const FIELD_ALIAS_REWRITES: Array<[RegExp, string]> = [
-  [/^sales_order_(.+)$/i, "order_$1"],
-  [/^order_(.+)$/i, "sales_order_$1"],
-  [/^delivery_(.+)$/i, "shipment_$1"],
-  [/^shipment_(.+)$/i, "delivery_$1"],
-];
-
 export type OntologyDisplayStateOption = { value: string; label: string };
 
 export type OntologyDisplayObjectModel = {
@@ -77,25 +63,9 @@ export function preferredOntologyName(properties: Record<string, unknown> | unde
   return null;
 }
 
-function applyAliasRewrites(value: string, rules: Array<[RegExp, string]>): string[] {
-  const variants = new Set<string>([value]);
-  for (const [pattern, replacement] of rules) {
-    if (pattern.test(value)) {
-      variants.add(value.replace(pattern, replacement));
-    }
-  }
-  return Array.from(variants);
-}
-
 export function tokenVariants(value: string): string[] {
   const local = iriLocalName(value);
   const baseCandidates = new Set<string>([value, local]);
-
-  for (const candidate of [value, local]) {
-    applyAliasRewrites(candidate, MODEL_ALIAS_REWRITES).forEach((alias) =>
-      baseCandidates.add(alias)
-    );
-  }
 
   const tokens = new Set<string>();
   for (const candidate of baseCandidates) {
@@ -120,13 +90,9 @@ function registerPropertyAliases(
     if (!alias || !alias.trim()) {
       continue;
     }
-    const base = alias.trim();
-    const candidates = new Set<string>([base]);
-    applyAliasRewrites(base, FIELD_ALIAS_REWRITES).forEach((nextAlias) => candidates.add(nextAlias));
-    for (const candidate of candidates) {
-      if (!labelMap.has(candidate)) {
-        labelMap.set(candidate, label);
-      }
+    const normalized = alias.trim();
+    if (!labelMap.has(normalized)) {
+      labelMap.set(normalized, label);
     }
   }
 }

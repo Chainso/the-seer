@@ -86,7 +86,7 @@ function loadTsModule(modulePath) {
 const catalogModule = loadTsModule(path.join(root, "app/lib/ontology-display/catalog.ts"));
 const resolverModule = loadTsModule(path.join(root, "app/lib/ontology-display/resolver.ts"));
 
-const { buildOntologyDisplayCatalog } = catalogModule;
+const { buildOntologyDisplayCatalog, tokenVariants } = catalogModule;
 const { createOntologyDisplayResolver } = resolverModule;
 
 function read(relativePath) {
@@ -216,10 +216,10 @@ test("ontology display module exposes phase-1 entrypoints", () => {
 test("resolver applies ontology-first object and event display labels", () => {
   const resolver = buildResolver();
 
-  assert.equal(resolver.displayObjectType("sales order"), "Order");
+  assert.equal(resolver.displayObjectType("order"), "Order");
   assert.equal(resolver.displayEventType("OrderCreated"), "Order Created");
   assert.equal(
-    resolver.displayEventType("order.cancelled", { fallbackObjectType: "sales order" }),
+    resolver.displayEventType("order.cancelled", { fallbackObjectType: "order" }),
     "Order cancelled"
   );
 });
@@ -254,16 +254,13 @@ test("resolver centralizes field label, state value, and summary rendering", () 
   );
 });
 
-test("resolver preserves alias rewrites and state token mapping contracts", () => {
+test("resolver removes hard-coded alias rewrites and keeps state token mapping contracts", () => {
   const resolver = buildResolver();
 
+  assert.equal(resolver.displayObjectType("sales order"), "sales order");
   assert.equal(
     resolver.displayFieldLabel("sales_order_number", { objectType: "order" }),
-    "Order Number"
-  );
-  assert.equal(
-    resolver.displayFieldLabel("order_number", { objectType: "sales order" }),
-    "Order Number"
+    "sales_order_number"
   );
   assert.equal(
     resolver.displayFieldValue("state", "state_order_pending", { objectType: "order" }),
@@ -273,6 +270,26 @@ test("resolver preserves alias rewrites and state token mapping contracts", () =
     resolver.displayFieldValue("from_state", "order_pending", { objectType: "order" }),
     "Pending Approval"
   );
+  assert.ok(!tokenVariants("order").includes("salesorder"));
+  assert.ok(!tokenVariants("sales_order_total").includes("order_total"));
+});
+
+test("catalog omits legacy alias rewrite tables", () => {
+  const catalogSource = read("app/lib/ontology-display/catalog.ts");
+
+  assert.doesNotMatch(catalogSource, /MODEL_ALIAS_REWRITES/);
+  assert.doesNotMatch(catalogSource, /FIELD_ALIAS_REWRITES/);
+});
+
+test("explorer opts into explicit lifecycle naming in catalog, inspector, and graph map", () => {
+  const explorerSource = read("app/components/ontology/ontology-explorer-tabs.tsx");
+  const graphSource = read("app/components/ontology/ontology-graph.tsx");
+
+  assert.match(explorerSource, /displayNode\(\s*node,\s*\{\s*lifecycleLabelMode:\s*'explicit'\s*\}\s*\)/);
+  assert.match(explorerSource, /displayConcept\(\s*uri,\s*\{\s*lifecycleLabelMode:\s*'explicit'\s*\}\s*\)/);
+  assert.match(explorerSource, /displayNodeName=\{displayNameForNode\}/);
+  assert.match(graphSource, /displayNodeName\?:\s*\(node:\s*OntologyGraphNode\)\s*=>\s*string/);
+  assert.match(graphSource, /displayNodeName\?\.\(node\)/);
 });
 
 test("resolver formats lifecycle concept labels in explicit mode", () => {

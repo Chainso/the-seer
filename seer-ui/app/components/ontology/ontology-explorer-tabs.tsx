@@ -7,6 +7,8 @@ import { Badge } from '@/app/components/ui/badge';
 import { Input } from '@/app/components/ui/input';
 import { Button } from '@/app/components/ui/button';
 import type { OntologyEdge, OntologyGraph, OntologyNode } from '@/app/types/ontology';
+import { buildOntologyDisplayCatalog } from '@/app/lib/ontology-display/catalog';
+import { createOntologyDisplayResolver } from '@/app/lib/ontology-display/resolver';
 import { OntologyGraphVisualization } from './ontology-graph';
 import { Search, Network, Activity, ArrowRightLeft } from 'lucide-react';
 
@@ -63,16 +65,11 @@ const TAB_CONFIG: Record<ExplorerTab, { title: string; labels: string[] }> = {
   },
 };
 
-function toSearchText(node: OntologyNode) {
+function toSearchText(node: OntologyNode, nodeDisplayName: string) {
   const props = node.properties ?? {};
-  const name = typeof props.name === 'string' ? props.name : '';
+  const name = typeof props.name === 'string' ? props.name : nodeDisplayName;
   const description = typeof props.description === 'string' ? props.description : '';
-  return `${node.uri} ${node.label} ${name} ${description}`.toLowerCase();
-}
-
-function displayName(node: OntologyNode) {
-  const raw = node.properties?.name;
-  return typeof raw === 'string' && raw.trim().length > 0 ? raw : node.uri;
+  return `${node.uri} ${node.label} ${nodeDisplayName} ${name} ${description}`.toLowerCase();
 }
 
 function isStandardTypeNode(node: OntologyNode) {
@@ -154,7 +151,8 @@ function applyGraphControls(
 function buildVisibleGraph(
   graphData: OntologyGraph,
   labels: Set<string>,
-  query: string
+  query: string,
+  displayNameForNode: (node: OntologyNode) => string
 ): OntologyGraph {
   const baseNodes = graphData.nodes.filter(
     (node) => labels.has(node.label) && isAuthoringConceptNode(node) && !isStandardTypeNode(node)
@@ -166,7 +164,9 @@ function buildVisibleGraph(
   }
 
   const queryLower = query.toLowerCase();
-  const matched = baseNodes.filter((node) => toSearchText(node).includes(queryLower));
+  const matched = baseNodes.filter((node) =>
+    toSearchText(node, displayNameForNode(node)).includes(queryLower)
+  );
   const visibleUris = new Set(matched.map((node) => node.uri));
 
   // Keep one-hop neighborhood for context around matched concepts.
@@ -435,10 +435,39 @@ export function OntologyExplorerTabs({
   };
 
   const allowedLabels = useMemo(() => new Set(tabConfig.labels), [tabConfig.labels]);
+  const ontologyDisplayCatalog = useMemo(
+    () => buildOntologyDisplayCatalog(graphData),
+    [graphData]
+  );
+  const ontologyDisplayResolver = useMemo(
+    () => createOntologyDisplayResolver(ontologyDisplayCatalog),
+    [ontologyDisplayCatalog]
+  );
+  const nodeByUri = useMemo(
+    () => new Map(graphData.nodes.map((node) => [node.uri, node])),
+    [graphData.nodes]
+  );
+  const displayNameForNode = useMemo(
+    () =>
+      (node: OntologyNode) =>
+        ontologyDisplayResolver.displayNode(node, { lifecycleLabelMode: 'explicit' }),
+    [ontologyDisplayResolver]
+  );
+  const displayNameForUri = useMemo(
+    () =>
+      (uri: string) => {
+        const node = nodeByUri.get(uri);
+        if (node) {
+          return displayNameForNode(node);
+        }
+        return ontologyDisplayResolver.displayConcept(uri, { lifecycleLabelMode: 'explicit' });
+      },
+    [displayNameForNode, nodeByUri, ontologyDisplayResolver]
+  );
 
   const scopedGraph = useMemo(
-    () => buildVisibleGraph(graphData, allowedLabels, query),
-    [graphData, allowedLabels, query]
+    () => buildVisibleGraph(graphData, allowedLabels, query, displayNameForNode),
+    [graphData, allowedLabels, query, displayNameForNode]
   );
 
   const relationshipScopeCounts = useMemo(() => {
@@ -460,10 +489,12 @@ export function OntologyExplorerTabs({
     );
     const queryLower = query.trim().toLowerCase();
     const filtered = queryLower.length > 0
-      ? nodes.filter((node) => toSearchText(node).includes(queryLower))
+      ? nodes.filter((node) => toSearchText(node, displayNameForNode(node)).includes(queryLower))
       : nodes;
-    return filtered.slice().sort((a, b) => displayName(a).localeCompare(displayName(b)));
-  }, [graphData.nodes, allowedLabels, query]);
+    return filtered
+      .slice()
+      .sort((a, b) => displayNameForNode(a).localeCompare(displayNameForNode(b)));
+  }, [graphData.nodes, allowedLabels, query, displayNameForNode]);
 
   const deepLinkedUri =
     initialConceptUri && scopedGraph.nodes.some((node) => node.uri === initialConceptUri)
@@ -536,7 +567,7 @@ export function OntologyExplorerTabs({
             >
               <div className="w-full">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium">{displayName(node)}</span>
+                  <span className="truncate text-sm font-medium">{displayNameForNode(node)}</span>
                   <Badge variant="outline" className="text-[10px]">
                     {node.label}
                   </Badge>
@@ -568,7 +599,7 @@ export function OntologyExplorerTabs({
       {selectedNode && (
         <div className="mt-3 space-y-4">
           <div>
-            <p className="font-display text-lg">{displayName(selectedNode)}</p>
+            <p className="font-display text-lg">{displayNameForNode(selectedNode)}</p>
             <p className="mt-1 break-all text-xs text-muted-foreground">{selectedNode.uri}</p>
             {typeof selectedNode.properties.description === 'string' && (
               <p className="mt-2 text-sm text-muted-foreground">{selectedNode.properties.description}</p>
@@ -587,7 +618,7 @@ export function OntologyExplorerTabs({
                   >
                     <span className="truncate text-xs">{edge.type}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {displayName(graphData.nodes.find((node) => node.uri === edge.toUri) || { uri: edge.toUri, label: '', properties: {} })}
+                      {displayNameForUri(edge.toUri)}
                     </span>
                   </button>
                 ))}
@@ -607,7 +638,7 @@ export function OntologyExplorerTabs({
                   >
                     <span className="truncate text-xs">{edge.type}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {displayName(graphData.nodes.find((node) => node.uri === edge.fromUri) || { uri: edge.fromUri, label: '', properties: {} })}
+                      {displayNameForUri(edge.fromUri)}
                     </span>
                   </button>
                 ))}
@@ -729,6 +760,7 @@ export function OntologyExplorerTabs({
                     <OntologyGraphVisualization
                       data={mapGraphState.graph}
                       allowedLabels={visibleLabelSet}
+                      displayNodeName={displayNameForNode}
                       onNodeSelect={(nodeUri) => setSelectedUri(nodeUri)}
                     />
                   </div>
