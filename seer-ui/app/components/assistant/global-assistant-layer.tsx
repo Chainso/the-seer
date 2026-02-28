@@ -9,6 +9,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAui,
+  useMessage,
   useExternalStoreRuntime,
   type AppendMessage,
   type ThreadMessage,
@@ -175,6 +176,13 @@ function UserMessageBubble() {
 }
 
 function AssistantMessageBubble() {
+  const hasRenderableText = useMessage((state) =>
+    state.content.some((part) => part.type === 'text' && part.text.trim().length > 0)
+  );
+  if (!hasRenderableText) {
+    return null;
+  }
+
   return (
     <MessagePrimitive.Root className="mb-3 flex justify-start">
       <div className="max-w-[90%] rounded-2xl rounded-tl-sm border border-border/85 bg-card/95 px-3 py-2 text-sm leading-relaxed shadow-[0_8px_22px_-14px_color-mix(in_oklch,var(--foreground)_18%,transparent)]">
