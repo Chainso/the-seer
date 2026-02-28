@@ -67,3 +67,25 @@ test("process insights panel consumes shared ontology display resolver contract"
   assert.match(rootCausePanel, /\.normalizeOperatorForField\(/);
   assert.match(rootCausePanel, /profile:\s*"insights"/);
 });
+
+test("process mining panel consumes shared ontology display resolver contract", () => {
+  const processMiningPanel = read("app/components/inspector/process-mining-panel.tsx");
+
+  assert.match(processMiningPanel, /useOntologyDisplay/);
+  assert.match(processMiningPanel, /\.displayObjectType\(/);
+  assert.match(processMiningPanel, /\.displayEventType\(/);
+  assert.match(processMiningPanel, /catalog\.objectModels/);
+  assert.doesNotMatch(processMiningPanel, /const iriLocalName =/);
+  assert.doesNotMatch(processMiningPanel, /const ontologyNodeName =/);
+});
+
+test("object activity panel consumes shared ontology display resolver contract", () => {
+  const objectActivityPanel = read("app/components/inspector/object-activity-panel.tsx");
+
+  assert.match(objectActivityPanel, /useOntologyDisplay/);
+  assert.match(objectActivityPanel, /\.displayObjectType\(/);
+  assert.match(objectActivityPanel, /\.displayEventType\(/);
+  assert.match(objectActivityPanel, /catalog\.objectModels/);
+  assert.doesNotMatch(objectActivityPanel, /const resolveActivityName =/);
+  assert.doesNotMatch(objectActivityPanel, /getNodesByLabel/);
+});

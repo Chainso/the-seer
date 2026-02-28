@@ -11,9 +11,8 @@ import { Label } from "../ui/label";
 import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 
 import { getOcpnGraph } from "@/app/lib/api/process-mining";
-import { getOntologyGraph } from "@/app/lib/api/ontology";
+import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import type { OcpnGraph } from "@/app/types/process-mining";
-import type { OntologyGraph, OntologyNode } from "@/app/types/ontology";
 import { OcpnGraph as OcpnGraphView } from "./ocpn-graph";
 import { BpmnGraph as BpmnGraphView } from "./bpmn-graph";
 
@@ -61,30 +60,6 @@ type Pm4jsGlobal = typeof globalThis & {
   InductiveMiner?: { applyDfg: (dfg: unknown, threshold?: number, removeNoise?: boolean) => ProcessTreeNode };
   ProcessTreeToPetriNetConverter?: { apply: (tree: ProcessTreeNode) => unknown };
   WfNetToBpmnConverter?: { apply: (net: unknown) => BpmnGraph };
-};
-
-const iriLocalName = (value: string): string => {
-  const hashIndex = value.lastIndexOf("#");
-  if (hashIndex >= 0 && hashIndex < value.length - 1) {
-    return value.slice(hashIndex + 1);
-  }
-  const slashIndex = value.lastIndexOf("/");
-  if (slashIndex >= 0 && slashIndex < value.length - 1) {
-    return value.slice(slashIndex + 1);
-  }
-  return value;
-};
-
-const ontologyNodeName = (node: OntologyNode): string => {
-  const prophetName = node.properties?.["prophet:name"];
-  if (typeof prophetName === "string" && prophetName.trim()) {
-    return prophetName.trim();
-  }
-  const name = node.properties?.name;
-  if (typeof name === "string" && name.trim()) {
-    return name.trim();
-  }
-  return iriLocalName(node.uri);
 };
 
 const ensurePm4js = async (): Promise<Pm4jsGlobal> => {
@@ -201,8 +176,7 @@ const toDatetimeLocalValue = (date: Date): string => {
 };
 
 export function ProcessMiningPanel() {
-  const [ontologyGraph, setOntologyGraph] = useState<OntologyGraph | null>(null);
-  const [models, setModels] = useState<OntologyNode[]>([]);
+  const ontologyDisplay = useOntologyDisplay();
   const [modelUri, setModelUri] = useState("");
   const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>("24h");
   const [from, setFrom] = useState(() => {
@@ -225,33 +199,20 @@ export function ProcessMiningPanel() {
   const [bpmnGraph, setBpmnGraph] = useState<BpmnGraph | null>(null);
   const [bpmnError, setBpmnError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    getOntologyGraph()
-      .then(data => {
-        if (!active) return;
-        setOntologyGraph(data);
-        const modelNodes = data.nodes.filter(node => node.label === "ObjectModel");
-        setModels(modelNodes);
-        if (!modelUri && modelNodes.length > 0) {
-          setModelUri(modelNodes[0].uri);
-        }
-      })
-      .catch(() => {
-        if (!active) return;
-        setOntologyGraph(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, [modelUri]);
-
   const modelOptions = useMemo(() => {
-    return models.map(node => ({
-      uri: node.uri,
-      name: ontologyNodeName(node),
-    }));
-  }, [models]);
+    return [...ontologyDisplay.catalog.objectModels]
+      .map((model) => ({
+        uri: model.uri,
+        name: ontologyDisplay.displayObjectType(model.uri),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [ontologyDisplay]);
+
+  useEffect(() => {
+    if (!modelUri && modelOptions.length > 0) {
+      setModelUri(modelOptions[0].uri);
+    }
+  }, [modelOptions, modelUri]);
 
   const modelLabels = useMemo(() => {
     return modelOptions.reduce<Record<string, string>>((acc, option) => {
@@ -261,18 +222,23 @@ export function ProcessMiningPanel() {
   }, [modelOptions]);
 
   const eventLabels = useMemo(() => {
-    return (ontologyGraph?.nodes || [])
-      .filter(node => ["Event", "Transition", "Signal"].includes(node.label))
-      .reduce<Record<string, string>>((acc, node) => {
-        const name = ontologyNodeName(node);
-        const local = iriLocalName(node.uri);
-        acc[node.uri] = name;
-        if (!(local in acc)) {
-          acc[local] = name;
-        }
+    if (!graph) {
+      return {};
+    }
+    return graph.nodes.reduce<Record<string, string>>((acc, node) => {
+      if (node.type !== "TRANSITION") {
         return acc;
-      }, {});
-  }, [ontologyGraph]);
+      }
+      const label = ontologyDisplay.displayEventType(node.eventUri ?? node.label ?? node.id);
+      if (node.eventUri) {
+        acc[node.eventUri] = label;
+      }
+      if (node.label) {
+        acc[node.label] = label;
+      }
+      return acc;
+    }, {});
+  }, [graph, ontologyDisplay]);
 
   const resolvedFrom = from ? new Date(from).toISOString() : undefined;
   const resolvedTo = to ? new Date(to).toISOString() : undefined;
@@ -402,10 +368,10 @@ export function ProcessMiningPanel() {
     });
     return Array.from(active).sort().map(uri => ({
       uri,
-      name: modelLabels[uri] ?? iriLocalName(uri),
+      name: modelLabels[uri] ?? ontologyDisplay.displayObjectType(uri),
       color: colorForModel(uri),
     }));
-  }, [graph, modelLabels]);
+  }, [graph, modelLabels, ontologyDisplay]);
 
   const updateFilter = (id: string, updates: Partial<FilterPair>) => {
     setFilters(prev => prev.map(item => (item.id === id ? { ...item, ...updates } : item)));
@@ -578,8 +544,8 @@ export function ProcessMiningPanel() {
                 <div className="mt-3 space-y-3 text-sm">
                   <div className="font-display text-lg">
                     {selectedNode.type === "PLACE"
-                      ? modelLabels[selectedNode.modelUri ?? ""] || iriLocalName(selectedNode.label ?? "")
-                      : eventLabels?.[selectedNode.eventUri ?? ""] || iriLocalName(selectedNode.label ?? "")}
+                      ? ontologyDisplay.displayObjectType(selectedNode.modelUri ?? selectedNode.label ?? null)
+                      : ontologyDisplay.displayEventType(selectedNode.eventUri ?? selectedNode.label ?? null)}
                   </div>
                   <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                     {selectedNode.type === "PLACE" ? "Object type" : "Event"}

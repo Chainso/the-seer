@@ -11,24 +11,16 @@ import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 import type { ActivityStreamEntry, ObjectGraphResponse } from "@/app/types/activity";
-import type { OntologyNode } from "@/app/types/ontology";
 import type { ObjectInstance } from "@/app/types/object";
 import { getObjectGraph, getObjectTimeline } from "@/app/lib/api/object-activity";
 import { listObjectsByModel } from "@/app/lib/api/objects";
-import { getNodesByLabel } from "@/app/lib/api/ontology";
+import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import { ObjectActivityGraph } from "./object-activity-graph";
 
 const ACTIVITY_TYPES = ["event", "action"];
 
-const resolveActivityName = (typeUri: string, lookup: Record<string, string>) => {
-  if (lookup[typeUri]) return lookup[typeUri];
-  const normalized = typeUri.split("#").pop() ?? typeUri;
-  return normalized.split("/").pop() ?? typeUri;
-};
-
 export function ObjectActivityPanel() {
-  const [models, setModels] = useState<OntologyNode[]>([]);
-  const [activityNodes, setActivityNodes] = useState<OntologyNode[]>([]);
+  const ontologyDisplay = useOntologyDisplay();
   const [model, setModel] = useState("");
   const [objectId, setObjectId] = useState("");
   const [objectSearch, setObjectSearch] = useState("");
@@ -54,35 +46,20 @@ export function ObjectActivityPanel() {
 
   const canLoad = model.trim() !== "" && objectId.trim() !== "";
 
+  const modelOptions = useMemo(() => {
+    return [...ontologyDisplay.catalog.objectModels]
+      .map((node) => ({
+        uri: node.uri,
+        name: ontologyDisplay.displayObjectType(node.uri),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [ontologyDisplay]);
+
   useEffect(() => {
-    let active = true;
-    getNodesByLabel("ObjectModel")
-      .then(nodes => {
-        if (!active) return;
-        setModels(nodes);
-        if (!model && nodes.length > 0) {
-          setModel(nodes[0].uri);
-        }
-      })
-      .catch(() => {
-        if (!active) return;
-        setModels([]);
-      });
-
-    getNodesByLabel(["Action", "Process", "Workflow", "Signal", "Transition"])
-      .then(nodes => {
-        if (!active) return;
-        setActivityNodes(nodes);
-      })
-      .catch(() => {
-        if (!active) return;
-        setActivityNodes([]);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (!model && modelOptions.length > 0) {
+      setModel(modelOptions[0].uri);
+    }
+  }, [model, modelOptions]);
 
   useEffect(() => {
     if (!model) return;
@@ -145,20 +122,29 @@ export function ObjectActivityPanel() {
   };
 
   const modelLookup = useMemo(() => {
-    return models.reduce<Record<string, string>>((acc, item) => {
-      const name = (item.properties?.name as string) || item.uri;
-      acc[item.uri] = name;
+    return modelOptions.reduce<Record<string, string>>((acc, item) => {
+      acc[item.uri] = item.name;
       return acc;
     }, {});
-  }, [models]);
+  }, [modelOptions]);
 
   const activityLookup = useMemo(() => {
-    return activityNodes.reduce<Record<string, string>>((acc, item) => {
-      const name = (item.properties?.name as string) || item.uri;
-      acc[item.uri] = name;
+    const typeUris = new Set<string>();
+    timeline.forEach((entry) => {
+      if (entry.typeUri) {
+        typeUris.add(entry.typeUri);
+      }
+    });
+    graph?.activities.forEach((activity) => {
+      if (activity.typeUri) {
+        typeUris.add(activity.typeUri);
+      }
+    });
+    return Array.from(typeUris).reduce<Record<string, string>>((acc, typeUri) => {
+      acc[typeUri] = ontologyDisplay.displayEventType(typeUri);
       return acc;
     }, {});
-  }, [activityNodes]);
+  }, [graph, ontologyDisplay, timeline]);
 
   const timelineBuckets = useMemo(() => {
     return [...timeline]
@@ -167,17 +153,10 @@ export function ObjectActivityPanel() {
         ...entry,
         time: new Date(entry.activityTime).toLocaleString(),
         shortId: entry.activityId.slice(0, 8),
-        modelName: modelLookup[entry.modelUri] ?? "Unknown model",
-        activityName: resolveActivityName(entry.typeUri, activityLookup),
+        modelName: entry.modelUri ? ontologyDisplay.displayObjectType(entry.modelUri) : "Unknown model",
+        activityName: ontologyDisplay.displayEventType(entry.typeUri),
       }));
-  }, [timeline, modelLookup, activityLookup]);
-
-  const modelOptions = useMemo(() => {
-    return models.map(node => ({
-      uri: node.uri,
-      name: (node.properties?.name as string) || node.uri,
-    }));
-  }, [models]);
+  }, [ontologyDisplay, timeline]);
 
   const filteredObjects = useMemo(() => {
     if (!objectSearch) return objects;
