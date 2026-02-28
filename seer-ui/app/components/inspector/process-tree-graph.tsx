@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import {
   Background,
+  BackgroundVariant,
   Controls,
   Edge,
   Handle,
@@ -78,7 +79,7 @@ const buildLayout = (root: ProcessTreeNode, eventLabels?: Record<string, string>
   const ySpacing = 150;
   let nextX = 0;
 
-  const layout = (node: ProcessTreeNode, depth: number) => {
+  const layout = (node: ProcessTreeNode, depth: number): number => {
     if (!node.children || node.children.length === 0) {
       const x = nextX * xSpacing;
       positions.set(node.id, { x, y: depth * ySpacing });
@@ -141,7 +142,7 @@ function ProcessTreeGraphInner({ processTree, eventLabels }: ProcessTreeGraphPro
         nodesDraggable
         nodesConnectable={false}
       >
-        <Background variant="dots" gap={18} size={1} />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
         <Controls />
       </ReactFlow>
     </div>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Background,
+  BackgroundVariant,
   Controls,
   Edge,
   EdgeLabelRenderer,
@@ -37,8 +38,19 @@ interface ElkEdgePoint {
   y: number;
 }
 
-interface ElkEdgeData {
+interface ElkEdgeData extends Record<string, unknown> {
   points?: ElkEdgePoint[];
+}
+
+interface ElkLayoutEdgeSection {
+  startPoint?: ElkEdgePoint;
+  bendPoints?: ElkEdgePoint[];
+  endPoint?: ElkEdgePoint;
+}
+
+interface ElkLayoutEdge {
+  id: string;
+  sections?: ElkLayoutEdgeSection[];
 }
 
 function iriLocalName(value: string): string {
@@ -69,7 +81,7 @@ function buildPolylinePath(points: ElkEdgePoint[]) {
     .join(' ');
 }
 
-function ElkEdge(props: EdgeProps<ElkEdgeData>) {
+function ElkEdge(props: EdgeProps<Edge<ElkEdgeData>>) {
   const { data, style, markerEnd, label, labelStyle } = props;
   const points = data?.points;
   if (!points || points.length < 2) {
@@ -300,7 +312,7 @@ function OcpnGraphInner({
         }}
         onEdgeMouseLeave={() => setEdgeTooltip(null)}
       >
-        <Background variant="dots" gap={18} size={1} />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
         <Controls />
         <MiniMap />
       </ReactFlow>
@@ -405,7 +417,8 @@ async function applyElkLayout(
     (layout.children || []).map((child) => [child.id, { x: child.x || 0, y: child.y || 0 }])
   );
   const edgePoints = new Map<string, ElkEdgePoint[]>();
-  (layout.edges || []).forEach((edge) => {
+  const layoutEdges = (layout.edges || []) as ElkLayoutEdge[];
+  layoutEdges.forEach((edge) => {
     const section = edge.sections?.[0];
     if (!section) {
       return;

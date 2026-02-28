@@ -1,6 +1,5 @@
 export type PerformanceMetricKey =
   | "ontology_graph_load_ms"
-  | "semantic_diff_load_ms"
   | "runtime_overlay_load_ms";
 
 export interface PerformanceBudgetDefinition {
@@ -37,11 +36,6 @@ export const PERFORMANCE_BUDGETS: Record<PerformanceMetricKey, PerformanceBudget
     key: "ontology_graph_load_ms",
     label: "Ontology Graph Load",
     budgetMs: 800,
-  },
-  semantic_diff_load_ms: {
-    key: "semantic_diff_load_ms",
-    label: "Semantic Diff Load",
-    budgetMs: 600,
   },
   runtime_overlay_load_ms: {
     key: "runtime_overlay_load_ms",

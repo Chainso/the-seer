@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   Node,
@@ -50,9 +51,20 @@ interface ElkEdgePoint {
   y: number;
 }
 
-interface ElkEdgeData {
+interface ElkEdgeData extends Record<string, unknown> {
   transitionUri?: string;
   points?: ElkEdgePoint[];
+}
+
+interface ElkLayoutEdgeSection {
+  startPoint?: ElkEdgePoint;
+  bendPoints?: ElkEdgePoint[];
+  endPoint?: ElkEdgePoint;
+}
+
+interface ElkLayoutEdge {
+  id: string;
+  sections?: ElkLayoutEdgeSection[];
 }
 
 function buildPolylinePath(points: ElkEdgePoint[]) {
@@ -64,7 +76,7 @@ function buildPolylinePath(points: ElkEdgePoint[]) {
     .join(' ');
 }
 
-function ElkEdge({ data, style, markerEnd }: EdgeProps<ElkEdgeData>) {
+function ElkEdge({ data, style, markerEnd }: EdgeProps<Edge<ElkEdgeData>>) {
   const points = data?.points;
   if (!points || points.length < 2) {
     return null;
@@ -330,7 +342,7 @@ function ObjectStateGraphInner({
           }
         }}
       >
-        <Background variant="dots" gap={18} size={1} />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
         <Controls />
         <MiniMap />
       </ReactFlow>
@@ -417,7 +429,8 @@ async function applyElkLayout(
     (layout.children || []).map((child) => [child.id, { x: child.x || 0, y: child.y || 0 }])
   );
   const edgePoints = new Map<string, ElkEdgePoint[]>();
-  (layout.edges || []).forEach((edge) => {
+  const layoutEdges = (layout.edges || []) as ElkLayoutEdge[];
+  layoutEdges.forEach((edge) => {
     const section = edge.sections?.[0];
     if (!section) {
       return;

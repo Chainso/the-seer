@@ -5,7 +5,6 @@ Read-first ontology explorer and digital twin interface for Seer.
 ## Product Surfaces
 
 - `\/ontology/[tab]`: ontology explorer (graph-first, deep-linkable)
-- `\/changes`: semantic diff, blast radius, governance scorecard, perf budgets
 - `\/inspector` and `\/inspector/analytics`: runtime/process mining views
 - global shell assistant: bottom-right launcher + panel powered by assistant-ui
 - `\/assistant`: evidence-grounded mission control fallback route
@@ -60,9 +59,8 @@ Implementation note: this is a local compatibility layer matching Radix Themes t
 
 ## Performance Budget Notes
 
-Budgeted load metrics are tracked in browser local storage and surfaced on `\/changes`:
+Budgeted load metrics are tracked in browser local storage:
 - `ontology_graph_load_ms`
-- `semantic_diff_load_ms`
 - `runtime_overlay_load_ms`
 
 Implementation is in `app/lib/performance-budget.ts`.

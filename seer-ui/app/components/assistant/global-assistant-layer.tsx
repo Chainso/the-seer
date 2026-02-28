@@ -58,7 +58,6 @@ function inferModuleFromPath(pathname: string): string {
   if (pathname.startsWith('/ontology')) return 'ontology';
   if (pathname.startsWith('/inspector/history')) return 'history';
   if (pathname.startsWith('/inspector')) return 'process';
-  if (pathname.startsWith('/changes')) return 'changes';
   return 'general';
 }
 

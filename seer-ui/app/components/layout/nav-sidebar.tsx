@@ -5,18 +5,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
-import { Network, Activity, Sparkles, Sun, Moon, Database, Bot, GitPullRequest } from 'lucide-react';
+import { Network, Activity, Sparkles, Sun, Moon, Database, Bot } from 'lucide-react';
 
 const navigation = [
   {
     name: 'Ontology Explorer',
     href: '/ontology/overview',
     icon: Network,
-  },
-  {
-    name: 'Change Intelligence',
-    href: '/changes',
-    icon: GitPullRequest,
   },
   {
     name: 'Process Inspector',
@@ -98,13 +93,7 @@ export function NavSidebar() {
         })}
       </nav>
       <div className="px-5 pb-6">
-        <div className="rounded-2xl border border-sidebar-border bg-card p-4">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Tip</p>
-          <p className="mt-2 text-sm">
-            Navigate ontology concepts as a connected system and verify model intent before shipping repo changes.
-          </p>
-        </div>
-        <div className="mt-4 rounded-2xl border border-sidebar-border bg-card px-4 py-3">
+        <div className="rounded-2xl border border-sidebar-border bg-card px-4 py-3">
           <Button
             variant="ghost"
             className="w-full justify-between"

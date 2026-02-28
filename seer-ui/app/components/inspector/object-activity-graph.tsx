@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import {
   Background,
+  BackgroundVariant,
   Controls,
   Edge,
   MarkerType,
@@ -123,7 +124,7 @@ function ObjectActivityGraphInner({ objects, activities, edges, modelLookup, act
         minZoom={0.2}
         maxZoom={1.6}
       >
-        <Background variant="dots" gap={18} size={1} />
+        <Background variant={BackgroundVariant.Dots} gap={18} size={1} />
         <Controls />
         <MiniMap />
       </ReactFlow>
