@@ -37,6 +37,8 @@ class OntologyRepository(Protocol):
 
     async def get_current_release(self) -> CurrentReleasePointer | None: ...
 
+    async def get_graph_turtle(self, graph_iri: str) -> str: ...
+
     async def select(
         self,
         query: str,
@@ -141,6 +143,15 @@ LIMIT 1
             updated_at=datetime.fromisoformat(updated_at_text.replace("Z", "+00:00")),
         )
 
+    async def get_graph_turtle(self, graph_iri: str) -> str:
+        async with self._client() as client:
+            response = await client.get(
+                f"{self._graph_store_url}?graph={quote(graph_iri, safe='')}",
+                headers={"Accept": "text/turtle"},
+            )
+        self._raise_for_status(response, "read named graph")
+        return response.text
+
     async def select(
         self, query: str, default_graph_uris: Sequence[str] | None = None
     ) -> list[dict[str, str]]:
@@ -238,6 +249,13 @@ class InMemoryOntologyRepository:
 
     async def get_current_release(self) -> CurrentReleasePointer | None:
         return self._current_pointer
+
+    async def get_graph_turtle(self, graph_iri: str) -> str:
+        target_graph = self._dataset.graph(URIRef(graph_iri))
+        serialized = target_graph.serialize(format="turtle")
+        if isinstance(serialized, bytes):
+            return serialized.decode("utf-8")
+        return str(serialized)
 
     async def select(
         self, query: str, default_graph_uris: Sequence[str] | None = None

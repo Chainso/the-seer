@@ -444,6 +444,41 @@ INSERT DATA {
     assert "not allowed" in response.json()["detail"].lower()
 
 
+def test_query_endpoint_allows_dataset_keyword_in_variable_name(client: TestClient) -> None:
+    _ingest_success(client, release_id="phase1-read-only-variable-name")
+
+    query = """
+PREFIX prophet: <http://prophet.platform/ontology#>
+SELECT ?from
+WHERE {
+  <http://prophet.platform/local/support_local#ont_support_local> prophet:description ?from .
+}
+""".strip()
+    response = client.post("/api/v1/ontology/query", json={"query": query})
+
+    assert response.status_code == 200, response.text
+    bindings = response.json()["bindings"]
+    assert len(bindings) >= 1
+    assert "from" in bindings[0]
+
+
+def test_graph_endpoint_returns_current_release_named_graph_only(client: TestClient) -> None:
+    release_id = "phase1-graph-only-current-release"
+    _ingest_success(client, release_id=release_id)
+
+    response = client.get("/api/v1/ontology/graph")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["release_id"] == release_id
+    assert body["graph_iri"] == f"urn:seer:ontology:release:{release_id}"
+    assert len(body["nodes"]) > 0
+
+    node_iris = [node["iri"] for node in body["nodes"]]
+    assert all(not iri.startswith("http://prophet.platform/ontology#") for iri in node_iris)
+    assert all(not iri.startswith("http://prophet.platform/standard-types#") for iri in node_iris)
+    assert all(not iri.startswith("http://www.w3.org/") for iri in node_iris)
+
+
 def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
     model_output = CopilotStructuredOutput(
         mode="tool_call",

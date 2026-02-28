@@ -27,6 +27,7 @@ from seer_backend.ontology.models import (
     OntologyConceptDetail,
     OntologyConceptSummary,
     OntologyCurrentResponse,
+    OntologyGraphResponse,
     OntologyIngestRequest,
     OntologyIngestResponse,
     OntologySparqlQueryRequest,
@@ -164,6 +165,17 @@ async def concept_detail(
         return await service.concept_detail(iri=iri)
     except ValueError as exc:
         raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    except OntologyDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except OntologyNotReadyError as exc:
+        raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
+@router.get("/graph", response_model=OntologyGraphResponse)
+async def ontology_graph(request: Request) -> OntologyGraphResponse:
+    service = get_ontology_service(request)
+    try:
+        return await service.graph()
     except OntologyDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except OntologyNotReadyError as exc:

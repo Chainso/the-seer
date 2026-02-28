@@ -233,6 +233,203 @@ def test_event_timeline_uses_occurred_at_ordering() -> None:
     assert [item["event_id"] for item in items] == [older_event_id, newer_event_id]
 
 
+def test_latest_objects_returns_latest_snapshot_per_identity_with_pagination() -> None:
+    client = build_client()
+
+    order_created = _ingest_event(
+        client,
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T10:00:00Z",
+            "event_type": "order.created",
+            "source": "erp",
+            "payload": {"order_id": "O-100", "status": "created"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"tenant": "acme", "order_id": "O-100"},
+                    "object": {"object_type": "Order", "status": "created", "amount": 40},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+    _ingest_event(
+        client,
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T11:00:00Z",
+            "event_type": "order.approved",
+            "source": "erp",
+            "payload": {"order_id": "O-100", "status": "approved"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"order_id": "O-100", "tenant": "acme"},
+                    "object": {"object_type": "Order", "status": "approved", "amount": 85},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+    _ingest_event(
+        client,
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T10:30:00Z",
+            "event_type": "order.created",
+            "source": "erp",
+            "payload": {"order_id": "O-200", "status": "created"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"tenant": "acme", "order_id": "O-200"},
+                    "object": {"object_type": "Order", "status": "created", "amount": 120},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+    _ingest_event(
+        client,
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T09:45:00Z",
+            "event_type": "invoice.created",
+            "source": "billing",
+            "payload": {"invoice_id": "INV-1", "status": "open"},
+            "updated_objects": [
+                {
+                    "object_type": "Invoice",
+                    "object_ref": {"tenant": "acme", "invoice_id": "INV-1"},
+                    "object": {"object_type": "Invoice", "status": "open", "amount": 120},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+
+    latest_page = client.post(
+        "/api/v1/history/objects/latest/search",
+        json={"page": 0, "size": 2},
+    )
+    assert latest_page.status_code == 200, latest_page.text
+    body = latest_page.json()
+    assert body["total"] == 3
+    assert body["total_pages"] == 2
+    assert len(body["items"]) == 2
+    assert body["items"][0]["recorded_at"] >= body["items"][1]["recorded_at"]
+    assert body["items"][0]["object_payload"]["status"] == "approved"
+
+    order_hash = order_created["linked_objects"][0]["object_ref_hash"]
+    filtered = client.post(
+        "/api/v1/history/objects/latest/search",
+        json={
+            "object_type": "Order",
+            "property_filters": [
+                {"key": "status", "op": "eq", "value": "approved"},
+                {"key": "amount", "op": "gte", "value": "80"},
+            ],
+            "page": 0,
+            "size": 10,
+        },
+    )
+    assert filtered.status_code == 200, filtered.text
+    filtered_body = filtered.json()
+    assert filtered_body["total"] == 1
+    assert len(filtered_body["items"]) == 1
+    assert filtered_body["items"][0]["object_type"] == "Order"
+    assert filtered_body["items"][0]["object_ref_hash"] == order_hash
+    assert filtered_body["items"][0]["object_payload"]["status"] == "approved"
+
+
+def test_latest_objects_rejects_invalid_property_filter_value() -> None:
+    client = build_client()
+
+    response = client.post(
+        "/api/v1/history/objects/latest/search",
+        json={
+            "property_filters": [
+                {"key": "status", "op": "gte", "value": "approved"},
+            ]
+        },
+    )
+    assert response.status_code == 422
+    assert "numeric value" in response.json()["detail"]
+
+
+def test_object_events_returns_desc_timeline_with_pagination() -> None:
+    client = build_client()
+
+    first = _ingest_event(
+        client,
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T10:00:00Z",
+            "event_type": "order.created",
+            "source": "erp",
+            "payload": {"order_id": "O-100", "status": "created"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"tenant": "acme", "order_id": "O-100"},
+                    "object": {"object_type": "Order", "status": "created"},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+    _ingest_event(
+        client,
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T11:30:00Z",
+            "event_type": "order.fulfilled",
+            "source": "erp",
+            "payload": {"order_id": "O-100", "status": "fulfilled"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"order_id": "O-100", "tenant": "acme"},
+                    "object": {"object_type": "Order", "status": "fulfilled"},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+
+    object_ref_hash = first["linked_objects"][0]["object_ref_hash"]
+    object_ref_canonical = first["linked_objects"][0]["object_ref_canonical"]
+    events_page = client.get(
+        "/api/v1/history/objects/events",
+        params={
+            "object_type": "Order",
+            "object_ref_hash": object_ref_hash,
+            "page": 0,
+            "size": 1,
+        },
+    )
+    assert events_page.status_code == 200, events_page.text
+    body = events_page.json()
+    assert body["total"] == 2
+    assert body["total_pages"] == 2
+    assert len(body["items"]) == 1
+    assert body["items"][0]["event_type"] == "order.fulfilled"
+
+    events_by_canonical = client.get(
+        "/api/v1/history/objects/events",
+        params={
+            "object_type": "Order",
+            "object_ref_canonical": object_ref_canonical,
+            "page": 0,
+            "size": 10,
+        },
+    )
+    assert events_by_canonical.status_code == 200, events_by_canonical.text
+    canonical_body = events_by_canonical.json()
+    assert canonical_body["total"] == 2
+
+
 def test_relation_row_parser_accepts_qualified_join_keys() -> None:
     event_id = uuid4()
     object_history_id = uuid4()

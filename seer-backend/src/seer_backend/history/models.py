@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 JsonObject = dict[str, Any]
+PropertyFilterOperator = Literal["eq", "contains", "gt", "gte", "lt", "lte"]
 
 
 class UpdatedObjectPayload(BaseModel):
@@ -94,6 +95,48 @@ class ObjectTimelineResponse(BaseModel):
     items: list[ObjectHistoryItem] = Field(default_factory=list)
 
 
+class LatestObjectItem(BaseModel):
+    object_history_id: UUID
+    object_type: str
+    object_ref: JsonObject
+    object_ref_canonical: str
+    object_ref_hash: int
+    object_payload: JsonObject
+    recorded_at: datetime
+    source_event_id: UUID | None = None
+
+
+class LatestObjectsResponse(BaseModel):
+    items: list[LatestObjectItem] = Field(default_factory=list)
+    page: int
+    size: int
+    total: int
+    total_pages: int
+
+
+class ObjectEventItem(BaseModel):
+    event_id: UUID
+    occurred_at: datetime | None = None
+    event_type: str | None = None
+    source: str | None = None
+    trace_id: str | None = None
+    payload: JsonObject | None = None
+    attributes: JsonObject | None = None
+    relation_role: str | None = None
+    linked_at: datetime
+    object_history_id: UUID
+    recorded_at: datetime | None = None
+    object_payload: JsonObject | None = None
+
+
+class ObjectEventsResponse(BaseModel):
+    items: list[ObjectEventItem] = Field(default_factory=list)
+    page: int
+    size: int
+    total: int
+    total_pages: int
+
+
 class EventObjectRelationItem(BaseModel):
     event_id: UUID
     object_history_id: UUID
@@ -112,6 +155,26 @@ class EventObjectRelationItem(BaseModel):
 
 class EventObjectRelationsResponse(BaseModel):
     items: list[EventObjectRelationItem] = Field(default_factory=list)
+
+
+class ObjectPropertyFilterRequest(BaseModel):
+    key: str = Field(min_length=1, max_length=200)
+    op: PropertyFilterOperator
+    value: str = Field(min_length=1, max_length=1000)
+
+
+class LatestObjectsSearchRequest(BaseModel):
+    object_type: str | None = Field(default=None, min_length=1, max_length=160)
+    page: int = Field(default=0, ge=0)
+    size: int = Field(default=50, ge=1, le=200)
+    property_filters: list[ObjectPropertyFilterRequest] = Field(default_factory=list)
+
+
+@dataclass(slots=True)
+class ObjectPropertyFilter:
+    key: str
+    op: PropertyFilterOperator
+    value: str
 
 
 @dataclass(slots=True)
@@ -165,3 +228,31 @@ class EventObjectRelationRecord:
     source: str | None
     object_payload: JsonObject | None
     recorded_at: datetime | None
+
+
+@dataclass(slots=True)
+class LatestObjectRecord:
+    object_history_id: UUID
+    object_type: str
+    object_ref: JsonObject
+    object_ref_canonical: str
+    object_ref_hash: int
+    object_payload: JsonObject
+    recorded_at: datetime
+    source_event_id: UUID | None
+
+
+@dataclass(slots=True)
+class ObjectEventRecord:
+    event_id: UUID
+    occurred_at: datetime | None
+    event_type: str | None
+    source: str | None
+    trace_id: str | None
+    payload: JsonObject | None
+    attributes: JsonObject | None
+    relation_role: str | None
+    linked_at: datetime
+    object_history_id: UUID
+    recorded_at: datetime | None
+    object_payload: JsonObject | None

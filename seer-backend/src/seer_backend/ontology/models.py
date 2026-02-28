@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from json import loads
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
@@ -76,6 +76,27 @@ class OntologyConceptDetail(BaseModel):
     comment: str | None
     outgoing_relations: list[str]
     incoming_relations: list[str]
+
+
+class OntologyGraphNode(BaseModel):
+    iri: str
+    label: str
+    category: str
+    comment: str | None = None
+    properties: dict[str, Any] = Field(default_factory=dict)
+
+
+class OntologyGraphEdge(BaseModel):
+    from_iri: str
+    to_iri: str
+    predicate: str
+
+
+class OntologyGraphResponse(BaseModel):
+    release_id: str
+    graph_iri: str
+    nodes: list[OntologyGraphNode] = Field(default_factory=list)
+    edges: list[OntologyGraphEdge] = Field(default_factory=list)
 
 
 class OntologySparqlQueryRequest(BaseModel):

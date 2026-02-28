@@ -14,6 +14,9 @@ from seer_backend.ontology.models import (
     OntologyConceptDetail,
     OntologyConceptSummary,
     OntologyCurrentResponse,
+    OntologyGraphEdge,
+    OntologyGraphNode,
+    OntologyGraphResponse,
     OntologyIngestResponse,
     OntologySparqlQueryResponse,
     ValidationDiagnostic,
@@ -23,6 +26,15 @@ from seer_backend.ontology.models import (
 from seer_backend.ontology.query_guard import enforce_read_only_query
 from seer_backend.ontology.repository import OntologyRepository
 from seer_backend.ontology.validation import ShaclValidator
+
+try:
+    from rdflib import RDF, RDFS, URIRef
+    from rdflib import Graph as RdfGraph
+except ImportError:  # pragma: no cover - covered by dependency checks
+    RdfGraph = None
+    RDF = None
+    RDFS = None
+    URIRef = None
 
 _PREFIXES = """
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -71,6 +83,7 @@ WHERE {{
 }}
 LIMIT 300
 """.strip()
+_PROPHET_NS = "http://prophet.platform/ontology#"
 
 
 class OntologyService:
@@ -223,6 +236,125 @@ LIMIT 50
             ],
         )
 
+    async def graph(self) -> OntologyGraphResponse:
+        if RdfGraph is None or RDF is None or RDFS is None or URIRef is None:
+            raise OntologyDependencyUnavailableError(
+                "rdflib is required for ontology graph loading"
+            )
+        pointer = await self._current_pointer_or_raise()
+        turtle = await self._repository.get_graph_turtle(pointer.graph_iri)
+        dataset_graph = RdfGraph()
+        if turtle.strip():
+            dataset_graph.parse(data=turtle, format="turtle")
+
+        prophet_name_predicate = URIRef(f"{_PROPHET_NS}name")
+        nodes_by_iri: dict[str, OntologyGraphNode] = {}
+
+        def ensure_node(iri: str) -> OntologyGraphNode:
+            existing = nodes_by_iri.get(iri)
+            if existing is not None:
+                return existing
+            node = OntologyGraphNode(
+                iri=iri,
+                label=_iri_local_name(iri),
+                category="Concept",
+                comment=None,
+                properties={"name": _iri_local_name(iri)},
+            )
+            nodes_by_iri[iri] = node
+            return node
+
+        for subject, predicate, obj in dataset_graph:
+            if not isinstance(subject, URIRef):
+                continue
+            subject_iri = str(subject)
+            if not _is_user_concept_iri(subject_iri):
+                continue
+
+            subject_node = ensure_node(subject_iri)
+
+            if predicate == RDF.type and isinstance(obj, URIRef):
+                category_iri = str(obj)
+                if category_iri.startswith(_PROPHET_NS):
+                    subject_node.category = _iri_local_name(category_iri)
+                    subject_node.properties["category"] = subject_node.category
+                continue
+
+            if predicate == prophet_name_predicate:
+                name_value = str(obj).strip()
+                if name_value:
+                    subject_node.label = name_value
+                    subject_node.properties["name"] = name_value
+                continue
+
+            if predicate == RDFS.label and not subject_node.label:
+                label_value = str(obj).strip()
+                if label_value:
+                    subject_node.label = label_value
+                    subject_node.properties["name"] = label_value
+                continue
+
+            if predicate == RDFS.comment and subject_node.comment is None:
+                subject_node.comment = str(obj)
+                subject_node.properties["description"] = subject_node.comment
+                subject_node.properties["documentation"] = subject_node.comment
+                continue
+
+            predicate_iri = str(predicate)
+            if not predicate_iri.startswith(_PROPHET_NS):
+                continue
+            property_key = _iri_local_name(predicate_iri)
+            if isinstance(obj, URIRef):
+                continue
+            literal_value = str(obj).strip()
+            if not literal_value:
+                continue
+            existing_value = subject_node.properties.get(property_key)
+            if existing_value is None:
+                subject_node.properties[property_key] = literal_value
+                continue
+            if isinstance(existing_value, list):
+                if literal_value not in existing_value:
+                    existing_value.append(literal_value)
+                continue
+            if existing_value != literal_value:
+                subject_node.properties[property_key] = [existing_value, literal_value]
+
+        edge_keys: set[tuple[str, str, str]] = set()
+        edges: list[OntologyGraphEdge] = []
+        for subject, predicate, obj in dataset_graph:
+            if not isinstance(subject, URIRef) or not isinstance(obj, URIRef):
+                continue
+            source_iri = str(subject)
+            target_iri = str(obj)
+            predicate_iri = str(predicate)
+            if not _is_user_concept_iri(source_iri) or not _is_user_concept_iri(target_iri):
+                continue
+            if not predicate_iri.startswith(_PROPHET_NS):
+                continue
+            ensure_node(source_iri)
+            ensure_node(target_iri)
+            key = (source_iri, predicate_iri, target_iri)
+            if key in edge_keys:
+                continue
+            edge_keys.add(key)
+            edges.append(
+                OntologyGraphEdge(
+                    from_iri=source_iri,
+                    to_iri=target_iri,
+                    predicate=predicate_iri,
+                )
+            )
+
+        nodes = sorted(nodes_by_iri.values(), key=lambda node: node.iri)
+        edges = sorted(edges, key=lambda edge: (edge.from_iri, edge.predicate, edge.to_iri))
+        return OntologyGraphResponse(
+            release_id=pointer.release_id,
+            graph_iri=pointer.graph_iri,
+            nodes=nodes,
+            edges=edges,
+        )
+
     async def run_read_only_query(self, query: str) -> OntologySparqlQueryResponse:
         query_type = enforce_read_only_query(query)
         graphs = await self._scoped_graphs()
@@ -246,10 +378,18 @@ LIMIT 50
         graphs = await self._scoped_graphs()
         return await self._repository.select(query, default_graph_uris=graphs)
 
-    async def _scoped_graphs(self) -> list[str]:
+    async def _select_release_scoped(self, query: str) -> list[dict[str, str]]:
+        pointer = await self._current_pointer_or_raise()
+        return await self._repository.select(query, default_graph_uris=[pointer.graph_iri])
+
+    async def _current_pointer_or_raise(self) -> CurrentReleasePointer:
         pointer = await self._repository.get_current_release()
         if pointer is None:
             raise OntologyNotReadyError("No current ontology release has been ingested")
+        return pointer
+
+    async def _scoped_graphs(self) -> list[str]:
+        pointer = await self._current_pointer_or_raise()
         return [self._base_graph_iri, pointer.graph_iri]
 
 
@@ -278,6 +418,9 @@ class UnavailableOntologyService:
         del iri
         raise OntologyDependencyUnavailableError(self.reason)
 
+    async def graph(self) -> OntologyGraphResponse:
+        raise OntologyDependencyUnavailableError(self.reason)
+
     async def run_read_only_query(self, query: str) -> OntologySparqlQueryResponse:
         del query
         raise OntologyDependencyUnavailableError(self.reason)
@@ -294,3 +437,13 @@ def _is_user_concept_iri(concept_iri: str) -> bool:
 
 def _is_graph_concept_category(category: str) -> bool:
     return category in _GRAPH_CONCEPT_CATEGORIES
+
+
+def _iri_local_name(iri: str) -> str:
+    hash_index = iri.rfind("#")
+    if hash_index >= 0 and hash_index < len(iri) - 1:
+        return iri[hash_index + 1 :]
+    slash_index = iri.rfind("/")
+    if slash_index >= 0 and slash_index < len(iri) - 1:
+        return iri[slash_index + 1 :]
+    return iri

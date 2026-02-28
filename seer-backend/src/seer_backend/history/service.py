@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -21,8 +22,13 @@ from seer_backend.history.models import (
     EventObjectRelationsResponse,
     EventTimelineResponse,
     IngestedObjectSummary,
+    LatestObjectItem,
+    LatestObjectsResponse,
+    ObjectEventItem,
+    ObjectEventsResponse,
     ObjectHistoryItem,
     ObjectHistoryRecord,
+    ObjectPropertyFilter,
     ObjectTimelineResponse,
 )
 from seer_backend.history.repository import HistoryRepository
@@ -174,6 +180,84 @@ class HistoryService:
             ]
         )
 
+    async def latest_objects(
+        self,
+        *,
+        object_type: str | None,
+        property_filters: list[ObjectPropertyFilter],
+        page: int,
+        size: int,
+    ) -> LatestObjectsResponse:
+        await self._ensure_schema()
+        offset = page * size
+        rows, total = await self._repository.fetch_latest_objects(
+            object_type=object_type,
+            property_filters=property_filters,
+            limit=size,
+            offset=offset,
+        )
+        return LatestObjectsResponse(
+            items=[
+                LatestObjectItem(
+                    object_history_id=row.object_history_id,
+                    object_type=row.object_type,
+                    object_ref=row.object_ref,
+                    object_ref_canonical=row.object_ref_canonical,
+                    object_ref_hash=row.object_ref_hash,
+                    object_payload=row.object_payload,
+                    recorded_at=row.recorded_at,
+                    source_event_id=row.source_event_id,
+                )
+                for row in rows
+            ],
+            page=page,
+            size=size,
+            total=total,
+            total_pages=_total_pages(total, size),
+        )
+
+    async def object_events(
+        self,
+        *,
+        object_type: str,
+        object_ref_hash: int | None,
+        object_ref_canonical: str | None,
+        page: int,
+        size: int,
+    ) -> ObjectEventsResponse:
+        await self._ensure_schema()
+        offset = page * size
+        rows, total = await self._repository.fetch_object_events(
+            object_type=object_type,
+            object_ref_hash=object_ref_hash,
+            object_ref_canonical=object_ref_canonical,
+            limit=size,
+            offset=offset,
+        )
+        return ObjectEventsResponse(
+            items=[
+                ObjectEventItem(
+                    event_id=row.event_id,
+                    occurred_at=row.occurred_at,
+                    event_type=row.event_type,
+                    source=row.source,
+                    trace_id=row.trace_id,
+                    payload=row.payload,
+                    attributes=row.attributes,
+                    relation_role=row.relation_role,
+                    linked_at=row.linked_at,
+                    object_history_id=row.object_history_id,
+                    recorded_at=row.recorded_at,
+                    object_payload=row.object_payload,
+                )
+                for row in rows
+            ],
+            page=page,
+            size=size,
+            total=total,
+            total_pages=_total_pages(total, size),
+        )
+
     async def relations(
         self,
         *,
@@ -264,6 +348,29 @@ class UnavailableHistoryService:
         del event_id, object_type, object_ref_hash, limit
         raise HistoryDependencyUnavailableError(self.reason)
 
+    async def latest_objects(
+        self,
+        *,
+        object_type: str | None,
+        property_filters: list[ObjectPropertyFilter],
+        page: int,
+        size: int,
+    ) -> LatestObjectsResponse:
+        del object_type, property_filters, page, size
+        raise HistoryDependencyUnavailableError(self.reason)
+
+    async def object_events(
+        self,
+        *,
+        object_type: str,
+        object_ref_hash: int | None,
+        object_ref_canonical: str | None,
+        page: int,
+        size: int,
+    ) -> ObjectEventsResponse:
+        del object_type, object_ref_hash, object_ref_canonical, page, size
+        raise HistoryDependencyUnavailableError(self.reason)
+
 
 def _ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
@@ -275,3 +382,9 @@ def _ensure_optional_utc(value: datetime | None) -> datetime | None:
     if value is None:
         return None
     return _ensure_utc(value)
+
+
+def _total_pages(total: int, size: int) -> int:
+    if total <= 0:
+        return 0
+    return int(math.ceil(total / size))
