@@ -1,16 +1,16 @@
 ---
-name: sequential-phase-agent-execution
-description: Plan work into explicit phases, then execute sequentially with worker agents using strict handoffs, per-phase validation, per-phase commits, and mandatory plan/documentation updates. Use when users ask for multi-phase delivery with agent delegation and controlled execution order.
+name: plan-and-execute
+description: Plan work and execute it end-to-end with clear phases, strict handoffs, validation gates, and documentation updates. Use this whenever a user asks to plan out work and then execute it.
 ---
 
-# Sequential Phase Agent Execution
+# Plan And Execute
 
 Use this skill when the user wants:
 
-1. A phased implementation plan.
-2. Sequential execution (phase-by-phase, no overlap).
-3. Worker agents per phase.
-4. Strong handoffs, validation gates, and per-phase commits.
+1. A concrete implementation plan before coding.
+2. Execution immediately after planning (single-phase or multi-phase).
+3. Worker-agent delegation with controlled sequencing when scope is large.
+4. Strong handoffs, validation gates, and phase-level commits.
 5. Plan/doc updates as part of delivery, not an afterthought.
 
 ## Core Workflow
