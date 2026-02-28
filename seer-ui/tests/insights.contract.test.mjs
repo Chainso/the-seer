@@ -12,13 +12,10 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
 
-test("inspector page exposes insights tab wired to insights panel", () => {
-  const inspectorPage = read("app/inspector/page.tsx");
+test("inspector page exposes insights route and analytics redirect", () => {
   const insightsRoute = read("app/inspector/insights/page.tsx");
   const analyticsRoute = read("app/inspector/analytics/page.tsx");
 
-  assert.match(inspectorPage, /TabsTrigger value="insights">Insights<\/TabsTrigger>/);
-  assert.match(inspectorPage, /<InsightsPanel \/>/);
   assert.match(insightsRoute, /return <InsightsPanel defaultTab="process-insights" \/>/);
   assert.match(analyticsRoute, /redirect\('\/inspector\/insights'\)/);
 });
@@ -79,13 +76,10 @@ test("process mining panel consumes shared ontology display resolver contract", 
   assert.doesNotMatch(processMiningPanel, /const ontologyNodeName =/);
 });
 
-test("object activity panel consumes shared ontology display resolver contract", () => {
-  const objectActivityPanel = read("app/components/inspector/object-activity-panel.tsx");
+test("obsolete standalone object activity panel surface is removed", () => {
+  const objectActivityPanelPath = path.join(root, "app/components/inspector/object-activity-panel.tsx");
+  const nav = read("app/components/layout/nav-sidebar.tsx");
 
-  assert.match(objectActivityPanel, /useOntologyDisplay/);
-  assert.match(objectActivityPanel, /\.displayObjectType\(/);
-  assert.match(objectActivityPanel, /\.displayEventType\(/);
-  assert.match(objectActivityPanel, /catalog\.objectModels/);
-  assert.doesNotMatch(objectActivityPanel, /const resolveActivityName =/);
-  assert.doesNotMatch(objectActivityPanel, /getNodesByLabel/);
+  assert.equal(fs.existsSync(objectActivityPanelPath), false);
+  assert.doesNotMatch(nav, /Process Inspector/);
 });

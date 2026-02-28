@@ -12,7 +12,7 @@ Catalog user-facing product specs.
 4. `root-cause-lab-phase-4.md` - completed
 5. `ai-guided-investigation-phase-5.md` - completed
 6. `ui-experience-replatform-phase-f-hardening-rollout.md` - completed
-7. `history-inspector-phase-3a.md` - in progress
+7. `history-inspector-phase-3a.md` - completed
 
 ## Usage
 

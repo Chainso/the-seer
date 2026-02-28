@@ -187,6 +187,8 @@ async def get_object_events(
     object_type: str = Query(..., min_length=1, max_length=160),
     object_ref_hash: int | None = Query(default=None, ge=0),
     object_ref_canonical: str | None = Query(default=None, min_length=2, max_length=2048),
+    start_at: datetime | None = Query(default=None),
+    end_at: datetime | None = Query(default=None),
     page: int = Query(default=0, ge=0),
     size: int = Query(default=50, ge=1, le=200),
 ) -> ObjectEventsResponse:
@@ -201,6 +203,8 @@ async def get_object_events(
             object_type=object_type,
             object_ref_hash=object_ref_hash,
             object_ref_canonical=object_ref_canonical,
+            start_at=start_at,
+            end_at=end_at,
             page=page,
             size=size,
         )

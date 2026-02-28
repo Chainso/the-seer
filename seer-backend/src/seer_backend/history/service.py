@@ -223,6 +223,8 @@ class HistoryService:
         object_type: str,
         object_ref_hash: int | None,
         object_ref_canonical: str | None,
+        start_at: datetime | None,
+        end_at: datetime | None,
         page: int,
         size: int,
     ) -> ObjectEventsResponse:
@@ -232,6 +234,8 @@ class HistoryService:
             object_type=object_type,
             object_ref_hash=object_ref_hash,
             object_ref_canonical=object_ref_canonical,
+            start_at=_ensure_optional_utc(start_at),
+            end_at=_ensure_optional_utc(end_at),
             limit=size,
             offset=offset,
         )
@@ -366,10 +370,12 @@ class UnavailableHistoryService:
         object_type: str,
         object_ref_hash: int | None,
         object_ref_canonical: str | None,
+        start_at: datetime | None,
+        end_at: datetime | None,
         page: int,
         size: int,
     ) -> ObjectEventsResponse:
-        del object_type, object_ref_hash, object_ref_canonical, page, size
+        del object_type, object_ref_hash, object_ref_canonical, start_at, end_at, page, size
         raise HistoryDependencyUnavailableError(self.reason)
 
 

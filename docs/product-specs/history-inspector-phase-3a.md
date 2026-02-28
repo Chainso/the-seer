@@ -1,18 +1,18 @@
 # History Inspector Phase 3A Spec
 
-**Status:** in_progress  
-**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
+**Status:** completed  
+**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/object-centric-history-inspector-consolidation.md`  
 **Last updated:** 2026-02-28
 
 ---
 
 ## Purpose
 
-Define user-facing behavior for the post-MVP History tab in Inspector:
+Define user-facing behavior for the object-centric History Inspector:
 
 1. latest live object snapshots,
-2. per-object event timeline,
-3. ontology-aware labels for fields and states.
+2. object-first drill-down into dedicated object activity details,
+3. ontology-aware labels for fields, types, and states.
 
 ## Primary User Flow
 
@@ -20,9 +20,10 @@ Define user-facing behavior for the post-MVP History tab in Inspector:
 2. User optionally filters by object type and property filters.
 3. UI loads latest object snapshots (paginated) sorted by latest update descending.
 4. User selects an object row.
-5. UI loads that object's event timeline (paginated).
-6. Latest event is selected by default.
-7. User clicks a different event to inspect object-at-that-time details.
+5. UI navigates to `/inspector/history/object` with `object_type` and `object_ref_canonical` query params (`object_ref_hash` optional).
+6. Object details route loads that identity's timeline (paginated) and graph.
+7. Graph defaults to `Follow Timeline` time source and depth `1`.
+8. Loading older timeline pages extends follow-mode graph coverage to older timestamps.
 
 ## Filter Behavior
 
@@ -33,6 +34,40 @@ Define user-facing behavior for the post-MVP History tab in Inspector:
    - `State` appears as a filter field option.
    - State value input is a dropdown of ontology states.
    - State filter applies as exact match (`eq`) only.
+
+## Object Store Responsibilities
+
+1. `/inspector/history` is discovery-only.
+2. It owns:
+   - object type + property filtering,
+   - latest object snapshot pagination,
+   - row navigation to object details.
+3. It does not render embedded object timeline or graph analysis panels.
+
+## Object Details Responsibilities
+
+1. `/inspector/history/object` owns object activity analysis for one identity.
+2. It renders:
+   - paginated timeline cards (`Load older` append behavior),
+   - object-centric graph from canonical history endpoints.
+3. Graph controls include only:
+   - `Graph time source`: `Follow Timeline` or `Custom Range`,
+   - `Graph depth` (default `1`, max bounded by UI guardrail),
+   - `Apply Range` for custom mode.
+4. Graph scope must stay object-centric:
+   - no trace selector controls,
+   - no workflow selector controls,
+   - no process-mining scope pills.
+
+## Graph Time Source Behavior
+
+1. `Follow Timeline`:
+   - active graph window is derived from loaded timeline event timestamps,
+   - loading older pages expands the window automatically.
+2. `Custom Range`:
+   - user sets `From` and `To`,
+   - range changes apply only on `Apply Range`,
+   - invalid/missing values show inline validation errors.
 
 ## Labeling and Display Rules
 
@@ -49,18 +84,23 @@ Define user-facing behavior for the post-MVP History tab in Inspector:
 1. `POST /api/v1/history/objects/latest/search`
    - body: `object_type`, `page`, `size`, `property_filters[]`
 2. `GET /api/v1/history/objects/events`
-   - query: `object_type`, `object_ref_canonical`, `page`, `size`
+   - query: `object_type`, `object_ref_canonical`, `page`, `size`, `start_at?`, `end_at?`
    - `object_ref_hash` optional
-3. `GET /api/v1/ontology/graph` (label/state metadata context)
+3. `GET /api/v1/history/relations`
+   - query: `event_id`, `limit`
+4. `GET /api/v1/ontology/graph` (label/state metadata context)
 
 ## Acceptance Expectations
 
-1. No legacy `/objects/*` endpoint usage in History tab.
-2. Latest objects table is server-paginated and stable by latest snapshot time.
-3. Timeline pagination remains server-driven and deterministic.
-4. Event selection updates right-side object details to selected event snapshot state.
-5. Filter controls never expose fields from unrelated object types.
-6. State dropdown appears only when the selected object type has possible states.
+1. No legacy `/objects/*` endpoint usage in History flows.
+2. `/inspector/history` shows discovery controls + latest objects table only.
+3. Clicking a live object row navigates to `/inspector/history/object` with required identity params.
+4. Object details route renders timeline and graph for the selected identity.
+5. Graph controls expose only object-centric time/depth controls; no trace/workflow controls are present.
+6. `Follow Timeline` and `Custom Range` produce deterministic, user-visible graph window behavior.
+7. Latest objects and timeline pagination remain server-driven and deterministic.
+8. Filter controls never expose fields from unrelated object types.
+9. State dropdown appears only when the selected object type has possible states.
 
 ## Out of Scope (Phase 3A)
 

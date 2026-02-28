@@ -84,6 +84,8 @@ class HistoryRepository(Protocol):
         object_type: str,
         object_ref_hash: int | None,
         object_ref_canonical: str | None,
+        start_at: datetime | None,
+        end_at: datetime | None,
         limit: int,
         offset: int,
     ) -> tuple[list[ObjectEventRecord], int]: ...
@@ -388,28 +390,47 @@ FORMAT JSON
         object_type: str,
         object_ref_hash: int | None,
         object_ref_canonical: str | None,
+        start_at: datetime | None,
+        end_at: datetime | None,
         limit: int,
         offset: int,
     ) -> tuple[list[ObjectEventRecord], int]:
-        conditions = [f"object_type = {_sql_string_literal(object_type)}"]
+        count_conditions = [f"l.object_type = {_sql_string_literal(object_type)}"]
         link_conditions = [f"l.object_type = {_sql_string_literal(object_type)}"]
         if object_ref_canonical is not None:
-            conditions.append(
-                f"object_ref_canonical = {_sql_string_literal(object_ref_canonical)}"
+            count_conditions.append(
+                f"l.object_ref_canonical = {_sql_string_literal(object_ref_canonical)}"
             )
             link_conditions.append(
                 f"l.object_ref_canonical = {_sql_string_literal(object_ref_canonical)}"
             )
         elif object_ref_hash is not None:
-            conditions.append(f"object_ref_hash = {int(object_ref_hash)}")
+            count_conditions.append(f"l.object_ref_hash = {int(object_ref_hash)}")
             link_conditions.append(f"l.object_ref_hash = {int(object_ref_hash)}")
         else:
             raise ValueError("object_ref_hash or object_ref_canonical is required")
+        if start_at is not None:
+            start_literal = _datetime_literal(_ensure_utc(start_at))
+            count_conditions.append(
+                f"coalesce(e.occurred_at, l.linked_at) >= {start_literal}"
+            )
+            link_conditions.append(
+                f"coalesce(e.occurred_at, l.linked_at) >= {start_literal}"
+            )
+        if end_at is not None:
+            end_literal = _datetime_literal(_ensure_utc(end_at))
+            count_conditions.append(
+                f"coalesce(e.occurred_at, l.linked_at) <= {end_literal}"
+            )
+            link_conditions.append(
+                f"coalesce(e.occurred_at, l.linked_at) <= {end_literal}"
+            )
 
         count_query = f"""
 SELECT count() AS cnt
-FROM event_object_links
-WHERE {' AND '.join(conditions)}
+FROM event_object_links AS l
+LEFT JOIN event_history AS e ON e.event_id = l.event_id
+WHERE {' AND '.join(count_conditions)}
 FORMAT JSON
 """.strip()
         count_rows = await self._select_rows(count_query)
@@ -670,6 +691,8 @@ class InMemoryHistoryRepository:
         object_type: str,
         object_ref_hash: int | None,
         object_ref_canonical: str | None,
+        start_at: datetime | None,
+        end_at: datetime | None,
         limit: int,
         offset: int,
     ) -> tuple[list[ObjectEventRecord], int]:
@@ -683,10 +706,18 @@ class InMemoryHistoryRepository:
         else:
             raise ValueError("object_ref_hash or object_ref_canonical is required")
 
+        normalized_start_at = _ensure_utc(start_at) if start_at is not None else None
+        normalized_end_at = _ensure_utc(end_at) if end_at is not None else None
+
         output: list[ObjectEventRecord] = []
         for link in links:
             event = self._events.get(link.event_id)
             object_row = self._object_by_id.get(link.object_history_id)
+            event_time = _ensure_utc(event.occurred_at if event else link.linked_at)
+            if normalized_start_at is not None and event_time < normalized_start_at:
+                continue
+            if normalized_end_at is not None and event_time > normalized_end_at:
+                continue
             output.append(
                 ObjectEventRecord(
                     event_id=link.event_id,

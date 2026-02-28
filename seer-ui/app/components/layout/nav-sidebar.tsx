@@ -5,18 +5,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
-import { Network, Activity, Sparkles, Sun, Moon, Database, Bot } from 'lucide-react';
+import { Network, Sparkles, Sun, Moon, Database, Bot } from 'lucide-react';
 
 const navigation = [
   {
     name: 'Ontology Explorer',
     href: '/ontology/overview',
     icon: Network,
-  },
-  {
-    name: 'Process Inspector',
-    href: '/inspector',
-    icon: Activity,
   },
   {
     name: 'Object Store',
@@ -74,7 +69,7 @@ export function NavSidebar() {
       </div>
       <nav className="flex-1 space-y-2 p-5">
         {navigation.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
             <Link
               key={item.name}

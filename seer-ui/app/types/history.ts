@@ -47,3 +47,23 @@ export interface ObjectEventsResponse {
   total: number;
   total_pages: number;
 }
+
+export interface EventObjectRelationItem {
+  event_id: string;
+  object_history_id: string;
+  object_type: string;
+  object_ref: Record<string, unknown>;
+  object_ref_canonical: string;
+  object_ref_hash: number;
+  relation_role: string | null;
+  linked_at: string;
+  occurred_at: string | null;
+  event_type: string | null;
+  source: string | null;
+  object_payload: Record<string, unknown> | null;
+  recorded_at: string | null;
+}
+
+export interface EventObjectRelationsResponse {
+  items: EventObjectRelationItem[];
+}

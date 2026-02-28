@@ -18,11 +18,8 @@ const MIGRATED_PANEL_CONTRACTS = [
     requiredPatterns: [
       /useOntologyDisplay/,
       /\.displayObjectType\(/,
-      /\.displayEventType\(/,
       /\.displayFieldLabel\(/,
-      /\.displayFieldValue\(/,
       /\.summarizeObjectRef\(/,
-      /\.summarizePayload\(/,
       /\.fieldKindForKey\(/,
       /\.operatorOptionsForField\(/,
       /profile:\s*"history"/,
@@ -52,12 +49,14 @@ const MIGRATED_PANEL_CONTRACTS = [
     ],
   },
   {
-    path: "app/components/inspector/object-activity-panel.tsx",
+    path: "app/components/inspector/object-history-details-panel.tsx",
     requiredPatterns: [
       /useOntologyDisplay/,
       /\.displayObjectType\(/,
       /\.displayEventType\(/,
-      /catalog\.objectModels/,
+      /\.displayFieldLabel\(/,
+      /\.displayFieldValue\(/,
+      /\.summarizeObjectRef\(/,
     ],
   },
 ];
@@ -71,7 +70,7 @@ const BANNED_PRETTY_HELPERS = [
 const IRI_FALLBACK_GUARDRAIL_PANELS = [
   "app/components/inspector/history-panel.tsx",
   "app/components/inspector/process-mining-panel.tsx",
-  "app/components/inspector/object-activity-panel.tsx",
+  "app/components/inspector/object-history-details-panel.tsx",
 ];
 
 test("migrated inspector panels keep using shared ontology-display APIs", () => {

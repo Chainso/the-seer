@@ -292,14 +292,15 @@ test("explorer opts into explicit lifecycle naming in catalog, inspector, and gr
   assert.match(graphSource, /displayNodeName\?\.\(node\)/);
 });
 
-test("history panel keeps object-local lifecycle naming in plain/default mode", () => {
+test("history details panel keeps object-local lifecycle naming in plain/default mode", () => {
   const historySource = read("app/components/inspector/history-panel.tsx");
+  const detailsSource = read("app/components/inspector/object-history-details-panel.tsx");
   const resolver = buildResolver();
 
   assert.doesNotMatch(historySource, /lifecycleLabelMode:\s*['"]explicit['"]/);
   assert.match(
-    historySource,
-    /displayFieldValue\(\s*key,\s*value,\s*selectedDetailsValueContext\s*\)/
+    detailsSource,
+    /displayFieldValue\(\s*key,\s*value,\s*valueContext\s*\)/
   );
   assert.equal(
     resolver.displayFieldValue("from_state", "pending", { objectType: "order" }),

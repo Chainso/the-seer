@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Clock3, Filter, Search } from "lucide-react";
-import { DataList } from "@radix-ui/themes";
+import { Filter, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -12,25 +12,24 @@ import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table } from "../ui/table";
 
-import { listLatestObjects, listObjectEvents } from "@/app/lib/api/history";
+import { listLatestObjects } from "@/app/lib/api/history";
 import { queryOntologySelect } from "@/app/lib/api/ontology";
 import {
-  normalizeComparableToken,
   type OntologyDisplayFieldKind,
-  type OntologyDisplayResolveContext,
-  type OntologyDisplayValueContext,
+  type OntologyDisplayOperator,
   useOntologyDisplay,
 } from "@/app/lib/ontology-display";
 import type {
   LatestObjectItem,
   LatestObjectsResponse,
-  ObjectEventItem,
-  ObjectEventsResponse,
   ObjectPropertyFilter,
   PropertyFilterOperator,
 } from "@/app/types/history";
 
 type PropertyFilterDraft = ObjectPropertyFilter & { id: string };
+type PropertyFilterOperatorOption = { value: PropertyFilterOperator; label: string };
+type PropertyKeyOption = { value: string; label: string; kind: OntologyDisplayFieldKind };
+
 const STATE_FILTER_KEY = "__state__";
 const TYPE_RESOLUTION_QUERY_PREFIX = `
 PREFIX prophet: <http://prophet.platform/ontology#>
@@ -44,13 +43,10 @@ const ALLOWED_HISTORY_OPERATORS = new Set<PropertyFilterOperator>([
   "lte",
 ]);
 
-type PropertyFilterOperatorOption = { value: PropertyFilterOperator; label: string };
-type PropertyKeyOption = { value: string; label: string; kind: OntologyDisplayFieldKind };
-
 function formatDateTime(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const parsed = new Date(value);
-  if (Number.isNaN(parsed.valueOf())) return "—";
+  if (Number.isNaN(parsed.valueOf())) return "-";
   return parsed.toLocaleString();
 }
 
@@ -92,89 +88,10 @@ function objectIdentityKey(item: LatestObjectItem): string {
   return `${item.object_type}:${item.object_ref_canonical}`;
 }
 
-function objectEventIdentityKey(item: ObjectEventItem): string {
-  return `${item.event_id}:${item.object_history_id}`;
-}
-
-type ObjectDetailsEntry = {
-  key: string;
-  label: string;
-  value: unknown;
-};
-
-function renderObjectDetailsNode(
-  value: unknown,
-  resolveFieldLabel: (key: string) => string,
-  resolveFieldValue: (key: string, nestedValue: unknown) => unknown,
-  depth: number
-): React.ReactNode {
-  if (depth > 6) {
-    return (
-      <code className="rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] break-all">
-        {JSON.stringify(value)}
-      </code>
-    );
-  }
-  if (value === null || value === undefined) {
-    return <span className="text-muted-foreground">—</span>;
-  }
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return <span className="break-all">{String(value)}</span>;
-  }
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return <span className="text-muted-foreground">[]</span>;
-    }
-    return (
-      <div className="space-y-2">
-        {value.map((item, index) => (
-          <div key={`item-${index}`} className="rounded-md border border-border/60 bg-muted/20 p-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              Item {index + 1}
-            </p>
-            <div className="mt-1 border-l border-border/60 pl-3">
-              {renderObjectDetailsNode(item, resolveFieldLabel, resolveFieldValue, depth + 1)}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>);
-    if (!entries.length) {
-      return <span className="text-muted-foreground">{"{}"}</span>;
-    }
-    return (
-      <div className="space-y-1.5">
-        {entries.map(([key, nestedValue]) => {
-          const nestedLabel = resolveFieldLabel(key);
-          const resolvedNestedValue = resolveFieldValue(key, nestedValue);
-          return (
-            <div key={key} className="grid grid-cols-[minmax(80px,auto)_1fr] items-start gap-2">
-              <span className="text-xs font-medium text-muted-foreground">{nestedLabel}:</span>
-              <div className="min-w-0">
-                {renderObjectDetailsNode(resolvedNestedValue, resolveFieldLabel, resolveFieldValue, depth + 1)}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-  return <span className="break-all">{String(value)}</span>;
-}
-
-function renderObjectDetailsValue(
-  value: unknown,
-  resolveFieldLabel: (key: string) => string,
-  resolveFieldValue: (key: string, nestedValue: unknown) => unknown
-): React.ReactNode {
-  return renderObjectDetailsNode(value, resolveFieldLabel, resolveFieldValue, 0);
-}
-
 export function HistoryPanel() {
+  const router = useRouter();
   const ontologyDisplay = useOntologyDisplay();
+
   const [latestPage, setLatestPage] = useState(0);
   const latestPageSize = 25;
   const [latestData, setLatestData] = useState<LatestObjectsResponse | null>(null);
@@ -202,30 +119,20 @@ export function HistoryPanel() {
     [ontologyDisplay]
   );
 
-  const ontologyConceptDisplayLabel = useCallback(
-    (conceptType: string | null | undefined, fallbackObjectType?: string) =>
-      ontologyDisplay.displayEventType(conceptType, { fallbackObjectType }),
-    [ontologyDisplay]
-  );
-
   const summarizeObjectRef = useCallback(
     (ref: Record<string, unknown>, objectType: string) =>
       ontologyDisplay.summarizeObjectRef(ref, { objectType }),
     [ontologyDisplay]
   );
 
-  const summarizePayload = useCallback(
-    (payload: Record<string, unknown> | null | undefined, context?: OntologyDisplayValueContext) =>
-      ontologyDisplay.summarizePayload(payload, context),
-    [ontologyDisplay]
+  const objectTypeOptions = useMemo(
+    () =>
+      knownObjectTypes.map((type) => ({
+        value: type,
+        label: objectTypeDisplayLabel(type),
+      })),
+    [knownObjectTypes, objectTypeDisplayLabel]
   );
-
-  const objectTypeOptions = useMemo(() => {
-    return knownObjectTypes.map((type) => ({
-      value: type,
-      label: objectTypeDisplayLabel(type),
-    }));
-  }, [knownObjectTypes, objectTypeDisplayLabel]);
 
   const selectedDraftModel = useMemo(
     () => (objectTypeDraft ? resolveObjectModel(objectTypeDraft) : null),
@@ -257,12 +164,10 @@ export function HistoryPanel() {
     return options.sort((a, b) => a.label.localeCompare(b.label));
   }, [ontologyDisplay, propertyKindsByModelUri, selectedDraftModel]);
 
-  const stateValueOptions = useMemo(() => {
-    if (!selectedDraftModel) {
-      return [];
-    }
-    return selectedDraftModel.stateFilterOptions;
-  }, [selectedDraftModel]);
+  const stateValueOptions = useMemo(
+    () => selectedDraftModel?.stateFilterOptions || [],
+    [selectedDraftModel]
+  );
 
   const propertyKeyOptionLookup = useMemo(
     () => new Map(propertyKeyOptions.map((option) => [option.value, option])),
@@ -305,7 +210,11 @@ export function HistoryPanel() {
           profile: "history",
         })
         .filter((option) => ALLOWED_HISTORY_OPERATORS.has(option.value as PropertyFilterOperator))
-        .map((option) => ({ value: option.value as PropertyFilterOperator, label: option.label }));
+        .map((option) => ({
+          value: option.value as PropertyFilterOperator,
+          label: option.label,
+        }));
+
       if (key === STATE_FILTER_KEY) {
         options = options.filter((option) => option.value === "eq");
       }
@@ -325,90 +234,6 @@ export function HistoryPanel() {
     [operatorOptionsForPropertyKey]
   );
 
-  const [selectedObjectKey, setSelectedObjectKey] = useState<string | null>(null);
-  const selectedObject = useMemo(() => {
-    if (!latestData || !selectedObjectKey) return null;
-    return latestData.items.find((item) => objectIdentityKey(item) === selectedObjectKey) || null;
-  }, [latestData, selectedObjectKey]);
-
-  const [eventsPage, setEventsPage] = useState(0);
-  const eventsPageSize = 20;
-  const [eventsData, setEventsData] = useState<ObjectEventsResponse | null>(null);
-  const [eventsLoading, setEventsLoading] = useState(false);
-  const [eventsError, setEventsError] = useState<string | null>(null);
-  const [selectedEventKey, setSelectedEventKey] = useState<string | null>(null);
-  const selectedEvent = useMemo<ObjectEventItem | null>(() => {
-    const items = eventsData?.items || [];
-    if (!items.length) {
-      return null;
-    }
-    if (selectedEventKey) {
-      const matched = items.find((item) => objectEventIdentityKey(item) === selectedEventKey);
-      if (matched) {
-        return matched;
-      }
-    }
-    return items[0];
-  }, [eventsData, selectedEventKey]);
-  const selectedObjectStateLabels = useMemo(
-    () => (selectedObject ? resolveObjectModel(selectedObject.object_type)?.stateLabelByToken : undefined),
-    [selectedObject, resolveObjectModel]
-  );
-  const selectedDetailsLabelContext = useMemo<OntologyDisplayResolveContext | undefined>(() => {
-    if (!selectedObject) {
-      return undefined;
-    }
-    return {
-      objectType: selectedObject.object_type,
-      eventType: selectedEvent?.event_type,
-    };
-  }, [selectedEvent, selectedObject]);
-  const selectedDetailsValueContext = useMemo<OntologyDisplayValueContext | undefined>(() => {
-    if (!selectedObject) {
-      return undefined;
-    }
-    return {
-      objectType: selectedObject.object_type,
-      eventType: selectedEvent?.event_type,
-      stateLabelByToken: selectedObjectStateLabels,
-    };
-  }, [selectedEvent, selectedObject, selectedObjectStateLabels]);
-  const displaySelectedDetailsFieldLabel = useCallback(
-    (key: string) => ontologyDisplay.displayFieldLabel(key, selectedDetailsLabelContext),
-    [ontologyDisplay, selectedDetailsLabelContext]
-  );
-  const displaySelectedDetailsFieldValue = useCallback(
-    (key: string, value: unknown) =>
-      ontologyDisplay.displayFieldValue(key, value, selectedDetailsValueContext),
-    [ontologyDisplay, selectedDetailsValueContext]
-  );
-  const selectedObjectDetails = useMemo<ObjectDetailsEntry[]>(() => {
-    if (!selectedObject) {
-      return [];
-    }
-
-    const entryByComparableKey = new Map<string, ObjectDetailsEntry>();
-    const appendEntries = (payload: Record<string, unknown>) => {
-      for (const [key, value] of Object.entries(payload || {})) {
-        if (normalizeComparableToken(key) === "objecttype") {
-          continue;
-        }
-        const label = displaySelectedDetailsFieldLabel(key);
-        const displayValue = displaySelectedDetailsFieldValue(key, value);
-        entryByComparableKey.set(normalizeComparableToken(key), {
-          key: `field:${key}`,
-          label,
-          value: displayValue,
-        });
-      }
-    };
-
-    const snapshotPayload = selectedEvent?.object_payload || selectedObject.object_payload || {};
-    appendEntries(selectedObject.object_ref || {});
-    appendEntries(snapshotPayload);
-    return Array.from(entryByComparableKey.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [displaySelectedDetailsFieldLabel, displaySelectedDetailsFieldValue, selectedEvent, selectedObject]);
-
   useEffect(() => {
     let active = true;
     const modelUri = selectedDraftModel?.uri;
@@ -417,6 +242,7 @@ export function HistoryPanel() {
         active = false;
       };
     }
+
     fetchObjectModelPropertyKinds(modelUri, (fieldKey, hints) =>
       ontologyDisplay.fieldKindForKey(fieldKey, {
         objectType: modelUri,
@@ -445,6 +271,7 @@ export function HistoryPanel() {
           return { ...previous, [modelUri]: {} };
         });
       });
+
     return () => {
       active = false;
     };
@@ -462,10 +289,7 @@ export function HistoryPanel() {
           changed = true;
           return { ...filter, key: "", op: "eq" as PropertyFilterOperator, value: "" };
         }
-        const normalizedOperator = normalizeOperatorForPropertyKey(
-          filter.key,
-          filter.op
-        );
+        const normalizedOperator = normalizeOperatorForPropertyKey(filter.key, filter.op);
         if (normalizedOperator !== filter.op) {
           changed = true;
           return { ...filter, op: normalizedOperator };
@@ -481,6 +305,7 @@ export function HistoryPanel() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLatestLoading(true);
     setLatestError(null);
+
     listLatestObjects({
       objectType: appliedObjectType,
       propertyFilters: appliedPropertyFilters,
@@ -495,63 +320,21 @@ export function HistoryPanel() {
           response.items.forEach((item) => next.add(item.object_type));
           return Array.from(next).sort();
         });
-        setSelectedObjectKey((previous) => {
-          if (!response.items.length) return null;
-          if (previous && response.items.some((item) => objectIdentityKey(item) === previous)) {
-            return previous;
-          }
-          return objectIdentityKey(response.items[0]);
-        });
       })
       .catch((cause) => {
         if (!active) return;
         setLatestData(null);
-        setSelectedObjectKey(null);
         setLatestError(cause instanceof Error ? cause.message : "Failed to load latest objects");
       })
       .finally(() => {
         if (!active) return;
         setLatestLoading(false);
       });
+
     return () => {
       active = false;
     };
   }, [appliedObjectType, appliedPropertyFilters, latestPage]);
-
-  useEffect(() => {
-    if (!selectedObject) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setEventsData(null);
-      setEventsError(null);
-      return;
-    }
-    let active = true;
-    setEventsLoading(true);
-    setEventsError(null);
-    listObjectEvents({
-      objectType: selectedObject.object_type,
-      objectRefCanonical: selectedObject.object_ref_canonical,
-      objectRefHash: selectedObject.object_ref_hash,
-      page: eventsPage,
-      size: eventsPageSize,
-    })
-      .then((response) => {
-        if (!active) return;
-        setEventsData(response);
-      })
-      .catch((cause) => {
-        if (!active) return;
-        setEventsData(null);
-        setEventsError(cause instanceof Error ? cause.message : "Failed to load object events");
-      })
-      .finally(() => {
-        if (!active) return;
-        setEventsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [eventsPage, selectedObject]);
 
   const applyFilters = () => {
     const nextType = objectTypeDraft.trim();
@@ -565,10 +348,7 @@ export function HistoryPanel() {
               allowedPropertyKeySet.has(filter.key.trim())
           )
           .map((filter) => ({
-            op: normalizeOperatorForPropertyKey(
-              filter.key.trim(),
-              filter.op
-            ),
+            op: normalizeOperatorForPropertyKey(filter.key.trim(), filter.op),
             key:
               filter.key.trim() === STATE_FILTER_KEY
                 ? currentModel?.stateFilterFieldKey || "state"
@@ -576,11 +356,10 @@ export function HistoryPanel() {
             value: filter.value.trim(),
           }))
       : [];
+
     setAppliedObjectType(nextType || undefined);
     setAppliedPropertyFilters(nextFilters);
     setLatestPage(0);
-    setEventsPage(0);
-    setSelectedEventKey(null);
   };
 
   const clearFilters = () => {
@@ -589,8 +368,6 @@ export function HistoryPanel() {
     setAppliedObjectType(undefined);
     setAppliedPropertyFilters([]);
     setLatestPage(0);
-    setEventsPage(0);
-    setSelectedEventKey(null);
   };
 
   const addFilter = () => {
@@ -611,7 +388,17 @@ export function HistoryPanel() {
 
   const updateFilter = (id: string, patch: Partial<PropertyFilterDraft>) => {
     setPropertyFilterDrafts((previous) =>
-      previous.map((filter) => (filter.id === id ? { ...filter, ...patch } : filter))
+      previous.map((filter) => {
+        if (filter.id !== id) {
+          return filter;
+        }
+        const merged = { ...filter, ...patch };
+        if (Object.prototype.hasOwnProperty.call(patch, "op")) {
+          return merged;
+        }
+        const normalizedOperator = normalizeOperatorForPropertyKey(merged.key, merged.op);
+        return { ...merged, op: normalizedOperator as OntologyDisplayOperator as PropertyFilterOperator };
+      })
     );
   };
 
@@ -623,7 +410,7 @@ export function HistoryPanel() {
             <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Object Store</p>
             <h1 className="mt-3 font-display text-3xl">Object Store</h1>
             <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-              Browse the latest snapshot of every object and inspect full event history for the selected identity.
+              Discover live object identities and open a dedicated activity view for timeline and graph analysis.
             </p>
           </div>
         </div>
@@ -673,109 +460,113 @@ export function HistoryPanel() {
                   : fieldKind === "temporal"
                     ? "2026-03-01T08:00:00Z or P2D"
                     : "approved";
+
               return (
-              <div key={filter.id} className="grid gap-2 md:grid-cols-[1.2fr_1fr_1.2fr_auto]">
-                <Select
-                  value={propertyFilteringEnabled ? filter.key || "__unset" : "__unset"}
-                  onValueChange={(value) => {
-                    const nextKey = value === "__unset" ? "" : value;
-                    updateFilter(filter.id, {
-                      key: nextKey,
-                      op: normalizeOperatorForPropertyKey(nextKey, filter.op),
-                      value: "",
-                    });
-                  }}
-                  disabled={!propertyFilteringEnabled}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select field" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__unset">Select field</SelectItem>
-                    {propertyKeyOptions.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select
-                  value={filter.op}
-                  onValueChange={(value) =>
-                    updateFilter(filter.id, { op: value as PropertyFilterOperator })
-                  }
-                  disabled={
-                    !propertyFilteringEnabled ||
-                    !filter.key ||
-                    filter.key === STATE_FILTER_KEY ||
-                    operatorOptions.length <= 1
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {operatorOptions.map((operator) => (
-                      <SelectItem key={operator.value} value={operator.value}>
-                        {operator.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {filter.key === STATE_FILTER_KEY ? (
+                <div key={filter.id} className="grid gap-2 md:grid-cols-[1.2fr_1fr_1.2fr_auto]">
                   <Select
-                    value={propertyFilteringEnabled ? filter.value || "__unset" : "__unset"}
-                    onValueChange={(value) =>
-                      updateFilter(filter.id, { value: value === "__unset" ? "" : value })
-                    }
-                    disabled={!propertyFilteringEnabled || stateValueOptions.length === 0}
+                    value={propertyFilteringEnabled ? filter.key || "__unset" : "__unset"}
+                    onValueChange={(value) => {
+                      const nextKey = value === "__unset" ? "" : value;
+                      updateFilter(filter.id, {
+                        key: nextKey,
+                        op: normalizeOperatorForPropertyKey(nextKey, filter.op),
+                        value: "",
+                      });
+                    }}
+                    disabled={!propertyFilteringEnabled}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select state" />
+                      <SelectValue placeholder="Select field" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__unset">Select state</SelectItem>
-                      {stateValueOptions.map((option) => (
+                      <SelectItem value="__unset">Select field</SelectItem>
+                      {propertyKeyOptions.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                ) : isBooleanField ? (
+
                   <Select
-                    value={propertyFilteringEnabled ? filter.value || "__unset" : "__unset"}
+                    value={filter.op}
                     onValueChange={(value) =>
-                      updateFilter(filter.id, { value: value === "__unset" ? "" : value })
+                      updateFilter(filter.id, { op: value as PropertyFilterOperator })
                     }
-                    disabled={!propertyFilteringEnabled}
+                    disabled={
+                      !propertyFilteringEnabled ||
+                      !filter.key ||
+                      filter.key === STATE_FILTER_KEY ||
+                      operatorOptions.length <= 1
+                    }
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select value" />
+                      <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="__unset">Select value</SelectItem>
-                      <SelectItem value="true">True</SelectItem>
-                      <SelectItem value="false">False</SelectItem>
+                      {operatorOptions.map((operator) => (
+                        <SelectItem key={operator.value} value={operator.value}>
+                          {operator.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                ) : (
-                  <Input
-                    placeholder={valuePlaceholder}
-                    value={filter.value}
-                    onChange={(event) => updateFilter(filter.id, { value: event.target.value })}
-                    disabled={!propertyFilteringEnabled}
-                  />
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => removeFilter(filter.id)}
-                  disabled={!propertyFilteringEnabled || propertyFilterDrafts.length <= 1}
-                >
-                  Remove
-                </Button>
-              </div>
+
+                  {filter.key === STATE_FILTER_KEY ? (
+                    <Select
+                      value={propertyFilteringEnabled ? filter.value || "__unset" : "__unset"}
+                      onValueChange={(value) =>
+                        updateFilter(filter.id, { value: value === "__unset" ? "" : value })
+                      }
+                      disabled={!propertyFilteringEnabled || stateValueOptions.length === 0}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select state" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__unset">Select state</SelectItem>
+                        {stateValueOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : isBooleanField ? (
+                    <Select
+                      value={propertyFilteringEnabled ? filter.value || "__unset" : "__unset"}
+                      onValueChange={(value) =>
+                        updateFilter(filter.id, { value: value === "__unset" ? "" : value })
+                      }
+                      disabled={!propertyFilteringEnabled}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select value" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__unset">Select value</SelectItem>
+                        <SelectItem value="true">True</SelectItem>
+                        <SelectItem value="false">False</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      placeholder={valuePlaceholder}
+                      value={filter.value}
+                      onChange={(event) => updateFilter(filter.id, { value: event.target.value })}
+                      disabled={!propertyFilteringEnabled}
+                    />
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => removeFilter(filter.id)}
+                    disabled={!propertyFilteringEnabled || propertyFilterDrafts.length <= 1}
+                  >
+                    Remove
+                  </Button>
+                </div>
               );
             })}
             <Button
@@ -837,29 +628,30 @@ export function HistoryPanel() {
                     </Table.Cell>
                   </Table.Row>
                 ) : latestData && latestData.items.length > 0 ? (
-                  latestData.items.map((item) => {
-                    const key = objectIdentityKey(item);
-                    const selected = selectedObjectKey === key;
-                    return (
-                      <Table.Row
-                        key={key}
-                        className={selected ? "bg-muted/50" : ""}
-                        onClick={() => {
-                          setSelectedObjectKey(key);
-                          setEventsPage(0);
-                          setSelectedEventKey(null);
-                        }}
-                      >
-                        <Table.RowHeaderCell className="font-medium whitespace-normal">
-                          {objectTypeDisplayLabel(item.object_type)}
-                        </Table.RowHeaderCell>
-                        <Table.Cell className="whitespace-normal break-words">
-                          {summarizeObjectRef(item.object_ref, item.object_type)}
-                        </Table.Cell>
-                        <Table.Cell className="whitespace-normal">{formatDateTime(item.recorded_at)}</Table.Cell>
-                      </Table.Row>
-                    );
-                  })
+                  latestData.items.map((item) => (
+                    <Table.Row
+                      key={objectIdentityKey(item)}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          object_type: item.object_type,
+                          object_ref_canonical: item.object_ref_canonical,
+                        });
+                        if (typeof item.object_ref_hash === "number") {
+                          params.set("object_ref_hash", String(item.object_ref_hash));
+                        }
+                        router.push(`/inspector/history/object?${params.toString()}`);
+                      }}
+                    >
+                      <Table.RowHeaderCell className="font-medium whitespace-normal">
+                        {objectTypeDisplayLabel(item.object_type)}
+                      </Table.RowHeaderCell>
+                      <Table.Cell className="whitespace-normal break-words">
+                        {summarizeObjectRef(item.object_ref, item.object_type)}
+                      </Table.Cell>
+                      <Table.Cell className="whitespace-normal">{formatDateTime(item.recorded_at)}</Table.Cell>
+                    </Table.Row>
+                  ))
                 ) : (
                   <Table.Row>
                     <Table.Cell colSpan={3} className="h-16 text-center text-sm text-muted-foreground">
@@ -897,148 +689,14 @@ export function HistoryPanel() {
         </Card>
 
         <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Timeline</p>
-              <h2 className="mt-1 font-display text-xl">Object Event History</h2>
-            </div>
-            <Badge variant="outline" className="rounded-full">
-              {eventsData?.total ?? 0} events
-            </Badge>
-          </div>
-
-          {selectedObject ? (
-            <div className="mb-4 rounded-xl border border-border bg-muted/20 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    {selectedEvent ? "Selected Event Object Snapshot" : "Selected Object"}
-                  </p>
-                  <p className="mt-1 text-sm font-semibold">
-                    {objectTypeDisplayLabel(selectedObject.object_type)}
-                  </p>
-                  {selectedEvent && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {ontologyConceptDisplayLabel(
-                        selectedEvent.event_type,
-                        selectedObject.object_type
-                      )}{" "}
-                      · {formatDateTime(selectedEvent.occurred_at || selectedEvent.linked_at)}
-                    </p>
-                  )}
-                </div>
-                <Badge variant="outline" className="rounded-full text-[10px] uppercase">
-                  {selectedObjectDetails.length} fields
-                </Badge>
-              </div>
-              <div className="max-h-56 overflow-y-auto pr-1">
-                <DataList.Root size="1">
-                  {selectedObjectDetails.map((entry) => (
-                    <DataList.Item key={entry.key} align="start">
-                      <DataList.Value>
-                        <div className="space-y-1">
-                          <span className="font-medium">{entry.label}:</span>
-                          <div className="rounded-md border border-border/60 bg-muted/20 p-2">
-                            {renderObjectDetailsValue(
-                              entry.value,
-                              displaySelectedDetailsFieldLabel,
-                              displaySelectedDetailsFieldValue
-                            )}
-                          </div>
-                        </div>
-                      </DataList.Value>
-                    </DataList.Item>
-                  ))}
-                </DataList.Root>
-              </div>
-            </div>
-          ) : (
-            <div className="mb-4 rounded-xl border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-              Select an object from the table to load its event history.
-            </div>
-          )}
-
-          {eventsError ? (
-            <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-              {eventsError}
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {eventsLoading ? (
-                <div className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
-                  Loading event history...
-                </div>
-              ) : eventsData && eventsData.items.length > 0 ? (
-                eventsData.items.map((item) => {
-                  const eventKey = objectEventIdentityKey(item);
-                  const isSelected = selectedEvent
-                    ? objectEventIdentityKey(selectedEvent) === eventKey
-                    : false;
-                  return (
-                    <button
-                      key={eventKey}
-                      type="button"
-                      className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                        isSelected
-                          ? "border-primary/40 bg-primary/5"
-                          : "border-border hover:bg-muted/30"
-                      }`}
-                      onClick={() => setSelectedEventKey(eventKey)}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="font-medium">
-                          {ontologyConceptDisplayLabel(item.event_type, selectedObject?.object_type)}
-                        </p>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock3 className="h-3 w-3" />
-                          {formatDateTime(item.occurred_at || item.linked_at)}
-                        </div>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Source · {item.source || "—"} | Role · {item.relation_role || "—"}
-                      </p>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        {summarizePayload(
-                          item.payload,
-                          {
-                            objectType: selectedObject?.object_type,
-                            eventType: item.event_type,
-                            stateLabelByToken: selectedObjectStateLabels,
-                          }
-                        )}
-                      </p>
-                    </button>
-                  );
-                })
-              ) : (
-                <div className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
-                  No events for this object in the selected page.
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-4 flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">
-              Page {(eventsData?.page ?? eventsPage) + 1} of {eventsData?.total_pages ?? 0}
+          <div className="space-y-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Object Activity</p>
+            <h2 className="font-display text-xl">Open Timeline + Graph</h2>
+            <p className="text-sm text-muted-foreground">
+              Click a row in Live Objects to open object-specific timeline and graph analysis.
             </p>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEventsPage((previous) => Math.max(0, previous - 1))}
-                disabled={eventsPage <= 0 || eventsLoading || !selectedObject}
-              >
-                Previous
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEventsPage((previous) => previous + 1)}
-                disabled={eventsLoading || !selectedObject || (eventsData ? eventsPage + 1 >= eventsData.total_pages : true)}
-              >
-                Next
-              </Button>
+            <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
+              Object activity details moved into a dedicated object route to keep Object Store discovery-first.
             </div>
           </div>
         </Card>

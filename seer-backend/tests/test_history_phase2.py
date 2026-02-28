@@ -445,20 +445,23 @@ def test_latest_objects_supports_temporal_property_filter_ranges() -> None:
 
 def test_object_events_returns_desc_timeline_with_pagination() -> None:
     client = build_client()
+    order_type_uri = "https://example.com/ontology/object/Order"
+    order_created_uri = "https://example.com/ontology/event/order.created"
+    order_fulfilled_uri = "https://example.com/ontology/event/order.fulfilled"
 
     first = _ingest_event(
         client,
         {
             "event_id": str(uuid4()),
             "occurred_at": "2026-02-22T10:00:00Z",
-            "event_type": "order.created",
+            "event_type": order_created_uri,
             "source": "erp",
             "payload": {"order_id": "O-100", "status": "created"},
             "updated_objects": [
                 {
-                    "object_type": "Order",
+                    "object_type": order_type_uri,
                     "object_ref": {"tenant": "acme", "order_id": "O-100"},
-                    "object": {"object_type": "Order", "status": "created"},
+                    "object": {"object_type": order_type_uri, "status": "created"},
                     "relation_role": "primary",
                 }
             ],
@@ -469,14 +472,14 @@ def test_object_events_returns_desc_timeline_with_pagination() -> None:
         {
             "event_id": str(uuid4()),
             "occurred_at": "2026-02-22T11:30:00Z",
-            "event_type": "order.fulfilled",
+            "event_type": order_fulfilled_uri,
             "source": "erp",
             "payload": {"order_id": "O-100", "status": "fulfilled"},
             "updated_objects": [
                 {
-                    "object_type": "Order",
+                    "object_type": order_type_uri,
                     "object_ref": {"order_id": "O-100", "tenant": "acme"},
-                    "object": {"object_type": "Order", "status": "fulfilled"},
+                    "object": {"object_type": order_type_uri, "status": "fulfilled"},
                     "relation_role": "primary",
                 }
             ],
@@ -488,7 +491,7 @@ def test_object_events_returns_desc_timeline_with_pagination() -> None:
     events_page = client.get(
         "/api/v1/history/objects/events",
         params={
-            "object_type": "Order",
+            "object_type": order_type_uri,
             "object_ref_hash": object_ref_hash,
             "page": 0,
             "size": 1,
@@ -499,12 +502,12 @@ def test_object_events_returns_desc_timeline_with_pagination() -> None:
     assert body["total"] == 2
     assert body["total_pages"] == 2
     assert len(body["items"]) == 1
-    assert body["items"][0]["event_type"] == "order.fulfilled"
+    assert body["items"][0]["event_type"] == order_fulfilled_uri
 
     events_by_canonical = client.get(
         "/api/v1/history/objects/events",
         params={
-            "object_type": "Order",
+            "object_type": order_type_uri,
             "object_ref_canonical": object_ref_canonical,
             "page": 0,
             "size": 10,
@@ -513,6 +516,22 @@ def test_object_events_returns_desc_timeline_with_pagination() -> None:
     assert events_by_canonical.status_code == 200, events_by_canonical.text
     canonical_body = events_by_canonical.json()
     assert canonical_body["total"] == 2
+
+    filtered_events = client.get(
+        "/api/v1/history/objects/events",
+        params={
+            "object_type": order_type_uri,
+            "object_ref_canonical": object_ref_canonical,
+            "start_at": "2026-02-22T11:00:00Z",
+            "end_at": "2026-02-22T12:00:00Z",
+            "page": 0,
+            "size": 10,
+        },
+    )
+    assert filtered_events.status_code == 200, filtered_events.text
+    filtered_body = filtered_events.json()
+    assert filtered_body["total"] == 1
+    assert filtered_body["items"][0]["event_type"] == order_fulfilled_uri
 
 
 def test_relation_row_parser_accepts_qualified_join_keys() -> None:
