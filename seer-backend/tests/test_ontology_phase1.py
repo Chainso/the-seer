@@ -312,9 +312,14 @@ def test_copilot_builds_system_and_conversation_messages() -> None:
     assert latest[1]["role"] == "system"
     assert "Workflow for each turn" in latest[1]["content"]
     assert latest[2]["role"] == "system"
-    assert latest[3] == {"role": "user", "content": "First question"}
-    assert latest[4] == {"role": "assistant", "content": "First answer"}
-    assert latest[5] == {"role": "user", "content": "What is Ticket?"}
+    assert latest[3]["role"] == "system"
+    assert "# Prefixes / Local Ontologies" in latest[3]["content"]
+    assert "# Concepts" in latest[3]["content"]
+    assert "support_local" in latest[3]["content"]
+    assert "Support Local" in latest[3]["content"]
+    assert latest[4] == {"role": "user", "content": "First question"}
+    assert latest[5] == {"role": "assistant", "content": "First answer"}
+    assert latest[6] == {"role": "user", "content": "What is Ticket?"}
 
 
 def test_valid_ingest_sets_current_release_pointer(client: TestClient) -> None:

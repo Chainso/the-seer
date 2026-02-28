@@ -29,6 +29,18 @@ from seer_backend.ontology.service import OntologyService, UnavailableOntologySe
 
 _TOOL_CALL_MAX_ROUNDS = 6
 _TOOL_CALL_MAX_TOTAL = 8
+_ONTOLOGY_INDEX_CACHE_KEY_EMPTY_RELEASE = "__none__"
+
+_PROPHET_PREFIX = "prophet"
+_STD_PREFIX = "std"
+_PROPHET_NAMESPACE = "http://prophet.platform/ontology#"
+_STD_NAMESPACE = "http://prophet.platform/standard-types#"
+_LOCAL_ONTOLOGY_NAMESPACE_PREFIX = "http://prophet.platform/local/"
+_BASE_CONCEPT_IRI_PREFIXES = (
+    _PROPHET_NAMESPACE,
+    _STD_NAMESPACE,
+    "http://www.w3.org/",
+)
 
 _BASE_ONTOLOGY_SYSTEM_PROMPT_TEMPLATE = """
 Authoritative Prophet base ontology (verbatim Turtle).
@@ -47,7 +59,7 @@ Your job:
 
 Workflow for each turn:
 1. Read the user question and prior conversation.
-2. Use the ontology context message first (current release + concept/detail snippets).
+2. Use the ontology index and ontology context messages first.
 3. Decide whether a tool query is needed:
 - Answer directly when context is already sufficient.
 - Use the SPARQL tool when the user asks for exact relationships,
@@ -57,7 +69,10 @@ Workflow for each turn:
 
 Tool planning and budget:
 - Prefer batching independent checks in one round instead of serial loops.
-- Keep tool usage small: usually 1 round, at most 2 unless explicitly asked for exhaustive validation.
+- When tool evidence is needed, prefer 1 round of parallel tool invocation
+  for all independent checks.
+- Keep tool usage small: usually 1 round, at most 2 unless explicitly asked
+  for exhaustive validation.
 - If evidence is still incomplete after limited queries, stop and explain what is missing.
 
 SPARQL query rules:
@@ -129,6 +144,62 @@ WHERE {
 }
 ORDER BY ?fieldKey
 LIMIT 100
+""".strip()
+
+_PREFIX_DECLARATION_PATTERN = re.compile(
+    r"^@prefix\s+([A-Za-z_][\w-]*):\s*<([^>]+)>\s*\.$",
+    re.MULTILINE,
+)
+
+_ONTOLOGY_INDEX_TOP_LEVEL_CONCEPTS_QUERY = """
+PREFIX prophet: <http://prophet.platform/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT DISTINCT ?concept ?category ?label
+WHERE {
+  VALUES ?categoryIri {
+    prophet:ObjectModel
+    prophet:Action
+    prophet:Process
+    prophet:Workflow
+    prophet:Event
+    prophet:Signal
+    prophet:Transition
+    prophet:EventTrigger
+    prophet:LocalOntology
+  }
+  ?concept a ?categoryIri .
+  OPTIONAL { ?concept prophet:name ?prophetName . }
+  OPTIONAL { ?concept rdfs:label ?rdfsLabel . }
+  BIND(
+    COALESCE(STR(?prophetName), STR(?rdfsLabel), REPLACE(STR(?concept), "^.*[#/]", ""))
+    AS ?label
+  )
+  BIND(REPLACE(STR(?categoryIri), "^.*[#/]", "") AS ?category)
+}
+ORDER BY ?category ?concept
+LIMIT 5000
+""".strip()
+
+_ONTOLOGY_INDEX_LOCAL_ONTOLOGIES_QUERY = """
+PREFIX prophet: <http://prophet.platform/ontology#>
+SELECT DISTINCT ?ontology ?name ?description
+WHERE {
+  ?ontology a prophet:LocalOntology .
+  OPTIONAL { ?ontology prophet:name ?name . }
+  OPTIONAL { ?ontology prophet:description ?description . }
+}
+ORDER BY ?ontology
+LIMIT 500
+""".strip()
+
+_ONTOLOGY_INDEX_UNAVAILABLE_MARKDOWN = """
+# Prefixes / Local Ontologies
+- unavailable | unavailable | unavailable | Ontology index unavailable for this turn.
+
+# Concepts
+- unavailable | unavailable | Ontology index unavailable for this turn.
+
+---
 """.strip()
 
 _SPARQL_READ_ONLY_TOOL_SCHEMA = {
@@ -231,9 +302,12 @@ class OntologyCopilotService:
         self._ontology_service = ontology_service
         self._model_runtime = model_runtime
         self._query_row_limit = query_row_limit
+        self._base_ontology_turtle = base_ontology_turtle.strip()
         self._base_ontology_system_prompt = _build_base_ontology_system_prompt(
             base_ontology_turtle
         )
+        self._base_prefix_map = _extract_prefix_map(base_ontology_turtle)
+        self._ontology_index_cache: dict[str, str] = {}
 
     async def answer(
         self,
@@ -242,12 +316,16 @@ class OntologyCopilotService:
     ) -> CopilotChatResponse:
         current = await self._ontology_service.current()
         context = await self._build_context(question)
+        ontology_index_markdown = await self._build_ontology_index_markdown(
+            current_release_id=current.release_id
+        )
         messages = _build_messages(
             question=question,
             conversation=conversation or [],
             current_release_id=current.release_id,
             context=context,
             base_ontology_system_prompt=self._base_ontology_system_prompt,
+            ontology_index_markdown=ontology_index_markdown,
         )
 
         tool_result: CopilotToolResult | None = None
@@ -332,6 +410,78 @@ class OntologyCopilotService:
             if token_hits:
                 return token_hits
         return []
+
+    async def _build_ontology_index_markdown(self, current_release_id: str | None) -> str:
+        cache_key = current_release_id or _ONTOLOGY_INDEX_CACHE_KEY_EMPTY_RELEASE
+        cached = self._ontology_index_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        prefix_map = dict(self._base_prefix_map)
+        if _PROPHET_PREFIX not in prefix_map:
+            prefix_map[_PROPHET_PREFIX] = _PROPHET_NAMESPACE
+        if _STD_PREFIX not in prefix_map:
+            prefix_map[_STD_PREFIX] = _STD_NAMESPACE
+
+        concept_entries: list[tuple[str, str, str]] = []
+        local_ontology_by_prefix: dict[str, tuple[str, str]] = {}
+
+        try:
+            top_level_result, local_ontology_result = await asyncio.gather(
+                self._ontology_service.run_read_only_query(
+                    _ONTOLOGY_INDEX_TOP_LEVEL_CONCEPTS_QUERY
+                ),
+                self._ontology_service.run_read_only_query(
+                    _ONTOLOGY_INDEX_LOCAL_ONTOLOGIES_QUERY
+                ),
+            )
+        except (
+            OntologyDependencyUnavailableError,
+            OntologyNotReadyError,
+            OntologyReadOnlyViolationError,
+            OntologyError,
+        ):
+            self._ontology_index_cache[cache_key] = _ONTOLOGY_INDEX_UNAVAILABLE_MARKDOWN
+            return _ONTOLOGY_INDEX_UNAVAILABLE_MARKDOWN
+
+        for row in top_level_result.bindings:
+            concept_iri = row.get("concept")
+            if not concept_iri:
+                continue
+            if _is_base_concept_iri(concept_iri):
+                continue
+            _ensure_prefix_for_iri(prefix_map, concept_iri)
+            qname = _iri_to_qname(concept_iri, prefix_map)
+            category = row.get("category", "Concept")
+            label = row.get("label", qname)
+            concept_entries.append((category, qname, label))
+
+        for row in local_ontology_result.bindings:
+            ontology_iri = row.get("ontology")
+            if not ontology_iri:
+                continue
+            _ensure_prefix_for_iri(prefix_map, ontology_iri)
+            ontology_qname = _iri_to_qname(ontology_iri, prefix_map)
+            prefix = ontology_qname.split(":", 1)[0] if ":" in ontology_qname else ""
+            if not prefix:
+                continue
+            name = row.get("name", "").strip()
+            description = row.get("description", "").strip()
+            if prefix not in local_ontology_by_prefix:
+                local_ontology_by_prefix[prefix] = (name, description)
+                continue
+            existing_name, existing_description = local_ontology_by_prefix[prefix]
+            merged_name = existing_name or name
+            merged_description = existing_description or description
+            local_ontology_by_prefix[prefix] = (merged_name, merged_description)
+
+        markdown = _format_ontology_index_markdown(
+            concept_entries=concept_entries,
+            prefix_map=prefix_map,
+            local_ontology_by_prefix=local_ontology_by_prefix,
+        )
+        self._ontology_index_cache[cache_key] = markdown
+        return markdown
 
     async def _execute_tool_call(self, tool_call: CopilotToolCall) -> CopilotToolResult:
         query_text = tool_call.query.strip()
@@ -524,6 +674,7 @@ def _build_messages(
     current_release_id: str | None,
     context: str,
     base_ontology_system_prompt: str,
+    ontology_index_markdown: str,
 ) -> list[dict[str, Any]]:
     release_text = current_release_id or "none"
     messages: list[dict[str, Any]] = [
@@ -537,6 +688,7 @@ def _build_messages(
                 f"{context}"
             ),
         },
+        {"role": "system", "content": ontology_index_markdown},
     ]
     for message in conversation:
         messages.append({"role": message.role, "content": message.content})
@@ -616,6 +768,156 @@ def _infer_variables(
 def _tokenize(value: str) -> list[str]:
     tokens = [token.lower() for token in re.findall(r"[A-Za-z0-9_:-]{3,}", value)]
     return tokens[:5]
+
+
+def _extract_prefix_map(turtle: str) -> dict[str, str]:
+    prefixes: dict[str, str] = {}
+    for alias, iri in _PREFIX_DECLARATION_PATTERN.findall(turtle):
+        prefixes[alias] = iri
+    return prefixes
+
+
+def _is_base_concept_iri(concept_iri: str) -> bool:
+    return any(concept_iri.startswith(prefix) for prefix in _BASE_CONCEPT_IRI_PREFIXES)
+
+
+def _ensure_prefix_for_iri(prefix_map: dict[str, str], iri: str) -> None:
+    namespace, _ = _split_namespace_and_local_name(iri)
+    if not namespace:
+        return
+    for existing_namespace in prefix_map.values():
+        if existing_namespace == namespace:
+            return
+
+    alias = _infer_prefix_alias(namespace)
+    alias = _dedupe_prefix_alias(alias, prefix_map)
+    prefix_map[alias] = namespace
+
+
+def _split_namespace_and_local_name(iri: str) -> tuple[str, str]:
+    hash_index = iri.rfind("#")
+    if 0 <= hash_index < len(iri) - 1:
+        return iri[: hash_index + 1], iri[hash_index + 1 :]
+
+    slash_index = iri.rfind("/")
+    if 0 <= slash_index < len(iri) - 1:
+        return iri[: slash_index + 1], iri[slash_index + 1 :]
+
+    return "", iri
+
+
+def _infer_prefix_alias(namespace: str) -> str:
+    if namespace == _PROPHET_NAMESPACE:
+        return _PROPHET_PREFIX
+    if namespace == _STD_NAMESPACE:
+        return _STD_PREFIX
+    if namespace.startswith(_LOCAL_ONTOLOGY_NAMESPACE_PREFIX) and namespace.endswith("#"):
+        remainder = namespace[len(_LOCAL_ONTOLOGY_NAMESPACE_PREFIX) : -1]
+        normalized = _normalize_prefix_token(remainder)
+        if normalized:
+            return normalized
+    return _normalize_prefix_token(namespace) or "ns"
+
+
+def _normalize_prefix_token(value: str) -> str:
+    lowered = value.lower()
+    lowered = re.sub(r"[^a-z0-9_]+", "_", lowered)
+    lowered = lowered.strip("_")
+    if not lowered:
+        return ""
+    if lowered[0].isdigit():
+        lowered = f"ns_{lowered}"
+    return lowered
+
+
+def _dedupe_prefix_alias(alias: str, prefix_map: dict[str, str]) -> str:
+    if alias not in prefix_map:
+        return alias
+    suffix = 2
+    candidate = f"{alias}_{suffix}"
+    while candidate in prefix_map:
+        suffix += 1
+        candidate = f"{alias}_{suffix}"
+    return candidate
+
+
+def _iri_to_qname(iri: str, prefix_map: dict[str, str]) -> str:
+    for alias, namespace in sorted(prefix_map.items(), key=lambda item: len(item[1]), reverse=True):
+        if not iri.startswith(namespace):
+            continue
+        local_name = iri[len(namespace) :]
+        if local_name:
+            return f"{alias}:{local_name}"
+    return iri
+
+
+def _format_ontology_index_markdown(
+    *,
+    concept_entries: list[tuple[str, str, str]],
+    prefix_map: dict[str, str],
+    local_ontology_by_prefix: dict[str, tuple[str, str]],
+) -> str:
+    deduped_concepts: list[tuple[str, str, str]] = []
+    seen_concepts: set[tuple[str, str, str]] = set()
+    used_prefixes: set[str] = set()
+    for category, qname, label in concept_entries:
+        normalized = (category.strip() or "Concept", qname.strip(), label.strip() or qname.strip())
+        if not normalized[1]:
+            continue
+        if normalized in seen_concepts:
+            continue
+        seen_concepts.add(normalized)
+        deduped_concepts.append(normalized)
+        if ":" in normalized[1]:
+            used_prefixes.add(normalized[1].split(":", 1)[0])
+
+    used_prefixes.update(local_ontology_by_prefix.keys())
+    used_prefixes.update({_PROPHET_PREFIX, _STD_PREFIX})
+
+    prefix_lines: list[str] = []
+    for prefix in sorted(used_prefixes):
+        base_uri = prefix_map.get(prefix)
+        if not base_uri:
+            continue
+        ontology_name = "-"
+        ontology_description = "-"
+        if prefix in local_ontology_by_prefix:
+            name, description = local_ontology_by_prefix[prefix]
+            ontology_name = name or "-"
+            ontology_description = description or "-"
+        elif prefix == _PROPHET_PREFIX:
+            ontology_name = "Prophet Base Ontology"
+            ontology_description = "Prophet metamodel concepts and predicates."
+        elif prefix == _STD_PREFIX:
+            ontology_name = "Prophet Standard Types"
+            ontology_description = "Standard scalar and value types used by local ontologies."
+        prefix_lines.append(
+            f"- {prefix} | {base_uri} | {ontology_name} | {ontology_description}"
+        )
+
+    concept_lines: list[str] = []
+    for category, qname, label in sorted(
+        deduped_concepts,
+        key=lambda item: (item[0].lower(), item[1].lower()),
+    ):
+        concept_lines.append(f"- {category} | {qname} | {label}")
+
+    if not prefix_lines:
+        prefix_lines = ["- none | none | none | No prefix metadata available."]
+    if not concept_lines:
+        concept_lines = ["- none | none | No concept metadata available."]
+
+    return "\n".join(
+        [
+            "# Prefixes / Local Ontologies",
+            *prefix_lines,
+            "",
+            "# Concepts",
+            *concept_lines,
+            "",
+            "---",
+        ]
+    )
 
 
 def _build_base_ontology_system_prompt(base_ontology_turtle: str) -> str:
