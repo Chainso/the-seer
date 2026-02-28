@@ -11,6 +11,9 @@ export interface ProcessMiningRequest {
   filters?: Record<string, string>;
   minShare?: number;
   collapseObjects?: boolean;
+  maxEvents?: number;
+  maxRelations?: number;
+  maxTracesPerHandle?: number;
 }
 
 interface OntologyConceptDetailResponse {
@@ -23,6 +26,9 @@ interface ProcessMineRequestContract {
   start_at: string;
   end_at: string;
   include_object_types?: string[];
+  max_events?: number;
+  max_relations?: number;
+  max_traces_per_handle?: number;
 }
 
 interface ProcessMineNodeContract {
@@ -293,12 +299,27 @@ async function toMineRequestContract(payload: ProcessMiningRequest): Promise<Pro
   const anchorObjectType = await resolveAnchorObjectType(modelUri);
   const includeObjectTypes = await resolveIncludeObjectTypes(payload.modelUris);
   const { startAt, endAt } = resolveCanonicalWindow(payload.from, payload.to);
+  const maxEvents =
+    typeof payload.maxEvents === 'number' && Number.isFinite(payload.maxEvents)
+      ? Math.max(1, Math.floor(payload.maxEvents))
+      : undefined;
+  const maxRelations =
+    typeof payload.maxRelations === 'number' && Number.isFinite(payload.maxRelations)
+      ? Math.max(1, Math.floor(payload.maxRelations))
+      : undefined;
+  const maxTracesPerHandle =
+    typeof payload.maxTracesPerHandle === 'number' && Number.isFinite(payload.maxTracesPerHandle)
+      ? Math.max(1, Math.floor(payload.maxTracesPerHandle))
+      : undefined;
 
   return {
     anchor_object_type: anchorObjectType,
     start_at: startAt,
     end_at: endAt,
     include_object_types: includeObjectTypes,
+    max_events: maxEvents,
+    max_relations: maxRelations,
+    max_traces_per_handle: maxTracesPerHandle,
   };
 }
 

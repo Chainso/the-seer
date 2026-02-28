@@ -39,6 +39,11 @@ const navigation = [
     icon: BarChart3,
   },
   {
+    name: 'Insights',
+    href: '/inspector/insights',
+    icon: Sparkles,
+  },
+  {
     name: 'Assistant',
     href: '/assistant',
     icon: Bot,

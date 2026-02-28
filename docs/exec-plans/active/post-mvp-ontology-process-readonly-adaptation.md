@@ -242,6 +242,7 @@ Exit criteria:
 6. 2026-02-28: Latest-object history search moved to canonical `POST /api/v1/history/objects/latest/search` with structured `property_filters`.
 7. 2026-02-28: Object event timeline fetch is keyed by `object_ref_canonical` (hash optional) to avoid client precision problems on 64-bit hashes.
 8. 2026-02-28: History UI now supports ontology-aware field/state labels and selected-event snapshot details.
+9. 2026-02-28: Added Inspector `Insights` tab powered by canonical `POST /api/v1/process/mine` with trace-handle drill-down via `GET /api/v1/process/traces`.
 
 ## Progress Tracking
 
@@ -254,6 +255,7 @@ Exit criteria:
 Current execution state:
 
 - `in_progress`: Phase 4 hardening + documentation sync
+- `in_progress`: Inspector Insights UX landed with full mine controls, ranked findings, and evidence drill-down.
 
 ## Plan Maintenance Rules
 
