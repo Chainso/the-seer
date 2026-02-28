@@ -1,7 +1,7 @@
 # Post-MVP Exec Plan: Global Assistant Layer + Generic AI Assistant Endpoint
 
-**Status:** planned  
-**Target order:** post-MVP track 3 (queued)  
+**Status:** completed  
+**Target order:** post-MVP track 3 (completed out-of-order)  
 **Agent slot:** AI-UX-G1  
 **Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`  
 **Successor:** TBD  
@@ -198,16 +198,32 @@ Exit criteria:
 4. 2026-02-28: Ontology SPARQL tool access remains read-only and enforced by existing query guard policy.
 5. 2026-02-28: Legacy `/assistant` route retained as fallback during migration window.
 
+## Completion Summary
+
+1. Added generic assistant chat route `POST /api/v1/ai/assistant/chat` under the canonical AI gateway.
+2. Added assistant chat request/context/response models and route-aware context shaping in gateway orchestration.
+3. Reused ontology copilot read-only SPARQL tool path and added explicit caveat/evidence signaling for policy-blocked queries.
+4. Added global shell-mounted assistant layer with bottom-right launcher and assistant-ui runtime/primitives.
+5. Migrated legacy frontend assistant adapter off `/assistant/generate` to canonical assistant chat endpoint.
+6. Added frontend contract checks for global assistant mounting and endpoint mapping.
+7. Synced architecture/spec/readme docs for the new assistant contract and global launcher behavior.
+
+## Acceptance Evidence
+
+1. Backend lint: `seer-backend/.venv/bin/ruff check seer-backend/src/seer_backend/ai/gateway.py seer-backend/src/seer_backend/api/ai.py seer-backend/tests/test_ai_phase5.py` (pass).
+2. Backend tests: `seer-backend/.venv/bin/pytest seer-backend/tests/test_ai_phase5.py -q` (`5 passed`, warnings only).
+3. Frontend lint (touched files): `cd seer-ui && npm run lint -- app/components/assistant/global-assistant-layer.tsx app/components/layout/app-shell.tsx app/lib/api/assistant-chat.ts` (pass).
+
 ## Progress Tracking
 
-- [ ] Phase 1 complete
-- [ ] Phase 2 complete
-- [ ] Phase 3 complete
-- [ ] Phase 4 complete
+- [x] Phase 1 complete
+- [x] Phase 2 complete
+- [x] Phase 3 complete
+- [x] Phase 4 complete
 
 Current execution state:
 
-- `queued`: awaiting predecessor plan completion signal and kickoff.
+- `completed`: all phases delivered on 2026-02-28.
 
 ## Plan Maintenance Rules
 

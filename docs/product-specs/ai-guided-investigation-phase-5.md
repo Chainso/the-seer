@@ -32,6 +32,7 @@ Define user-facing behavior for unified AI interactions and the guided ontology 
 3. `POST /api/v1/ai/root-cause/setup`
 4. `POST /api/v1/ai/root-cause/interpret`
 5. `POST /api/v1/ai/guided-investigation`
+6. `POST /api/v1/ai/assistant/chat` (global shell assistant, route-independent context)
 
 ## Acceptance Expectations
 

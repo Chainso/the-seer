@@ -174,7 +174,8 @@ Flow:
    - analytics output shape for UI and AI rendering
    - includes hypothesis, scoring metrics, coverage, and evidence references
 6. AI gateway contract:
-   - single backend `/ai` API surface for ontology/process/RCA AI interactions
+   - single backend `/ai` API surface for ontology/process/RCA AI interactions plus generic assistant chat
+   - generic assistant chat route: `POST /api/v1/ai/assistant/chat` with route/module context and policy metadata
    - module-scoped tool permissions are explicit in responses
    - analytical responses must include evidence and caveats
 

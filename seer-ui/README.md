@@ -7,7 +7,8 @@ Read-first ontology explorer and digital twin interface for Seer.
 - `\/ontology/[tab]`: ontology explorer (graph-first, deep-linkable)
 - `\/changes`: semantic diff, blast radius, governance scorecard, perf budgets
 - `\/inspector` and `\/inspector/analytics`: runtime/process mining views
-- `\/assistant`: evidence-grounded mission control with redacted audit logging
+- global shell assistant: bottom-right launcher + panel powered by assistant-ui
+- `\/assistant`: evidence-grounded mission control fallback route
 
 ## Local Development
 
