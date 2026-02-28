@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from seer_backend.ai.ontology_copilot import OntologyCopilotService
 from seer_backend.analytics.models import ProcessMiningRequest, ProcessMiningResponse
@@ -36,7 +36,7 @@ class AiEvidenceItem(BaseModel):
 class AiAssistEnvelope(BaseModel):
     """Common AI response envelope with policy and permission metadata."""
 
-    module: Literal["ontology", "process", "root_cause"]
+    module: Literal["ontology", "process", "root_cause", "assistant"]
     task: str
     response_policy: Literal["informational", "analytical"]
     tool_permissions: list[str] = Field(default_factory=list)
@@ -58,6 +58,52 @@ class AiOntologyQuestionRequest(BaseModel):
 class AiOntologyQuestionResponse(AiAssistEnvelope):
     module: Literal["ontology"] = "ontology"
     task: Literal["question"] = "question"
+    copilot: CopilotChatResponse
+
+
+class AiAssistantChatMessage(BaseModel):
+    """Generic assistant message payload for cross-module chat turns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class AiAssistantContext(BaseModel):
+    """Optional module and route context for generic assistant turns."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    route: str | None = Field(default=None, max_length=200)
+    module: str | None = Field(default=None, max_length=80)
+    anchor_object_type: str | None = Field(default=None, max_length=160)
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    concept_uris: list[str] = Field(default_factory=list)
+
+
+class AiAssistantChatRequest(BaseModel):
+    """Generic assistant request contract for route-independent chat."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    messages: list[AiAssistantChatMessage] = Field(min_length=1, max_length=120)
+    context: AiAssistantContext | None = None
+    thread_id: str | None = Field(default=None, min_length=1, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_has_user_turn(self) -> AiAssistantChatRequest:
+        if not any(message.role == "user" for message in self.messages):
+            raise ValueError("messages must include at least one user message")
+        return self
+
+
+class AiAssistantChatResponse(AiAssistEnvelope):
+    module: Literal["assistant"] = "assistant"
+    task: Literal["chat"] = "chat"
+    thread_id: str
+    answer: str
     copilot: CopilotChatResponse
 
 
@@ -155,40 +201,7 @@ class AiGatewayService:
             payload.question,
             conversation=payload.conversation,
         )
-
-        evidence = [
-            AiEvidenceItem(
-                label="Concept reference",
-                detail=f"{item.concept_iri} via {item.query}",
-                uri=item.concept_iri,
-            )
-            for item in copilot.evidence
-        ]
-        caveats: list[str] = []
-
-        if copilot.tool_result is not None:
-            if copilot.tool_result.error:
-                caveats.append(
-                    "Tool execution failed; response may rely on incomplete ontology context."
-                )
-            else:
-                result_detail = (
-                    f"{copilot.tool_result.query_type} query returned "
-                    f"{copilot.tool_result.row_count} rows"
-                )
-                if copilot.tool_result.truncated:
-                    result_detail += " (truncated)"
-                evidence.append(
-                    AiEvidenceItem(
-                        label="Read-only SPARQL tool result",
-                        detail=result_detail,
-                    )
-                )
-
-        if not evidence:
-            caveats.append(
-                "Informational response generated without explicit query evidence."
-            )
+        evidence, caveats = _build_copilot_evidence_and_caveats(copilot)
 
         return AiOntologyQuestionResponse(
             response_policy="informational",
@@ -205,6 +218,49 @@ class AiGatewayService:
                 "Ask a follow-up concept-level question to narrow ontology scope.",
                 "Open Process Explorer to validate behavior over event history.",
             ],
+            copilot=copilot,
+        )
+
+    async def assistant_chat(
+        self,
+        payload: AiAssistantChatRequest,
+    ) -> AiAssistantChatResponse:
+        question, conversation = _to_copilot_turn(payload.messages, payload.context)
+        copilot = await self._ontology_copilot_service.answer(
+            question,
+            conversation=conversation,
+        )
+        evidence, caveats = _build_copilot_evidence_and_caveats(copilot)
+        thread_id = payload.thread_id or str(uuid4())
+
+        if payload.context is not None:
+            context_details = _format_context_details(payload.context)
+            if context_details:
+                evidence.append(
+                    AiEvidenceItem(
+                        label="Request context",
+                        detail=context_details,
+                    )
+                )
+
+        return AiAssistantChatResponse(
+            response_policy="informational",
+            tool_permissions=[
+                "assistant.context",
+                "ontology.current",
+                "ontology.concepts",
+                "ontology.concept_detail",
+                "ontology.query(read_only)",
+            ],
+            summary=copilot.answer,
+            answer=copilot.answer,
+            evidence=evidence,
+            caveats=caveats,
+            next_actions=[
+                "Ask a narrower follow-up scoped to one concept, process path, or outcome.",
+                "Include object type and time window context for process/RCA guidance.",
+            ],
+            thread_id=thread_id,
             copilot=copilot,
         )
 
@@ -469,3 +525,106 @@ def _ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _build_copilot_evidence_and_caveats(
+    copilot: CopilotChatResponse,
+) -> tuple[list[AiEvidenceItem], list[str]]:
+    evidence = [
+        AiEvidenceItem(
+            label="Concept reference",
+            detail=f"{item.concept_iri} via {item.query}",
+            uri=item.concept_iri,
+        )
+        for item in copilot.evidence
+    ]
+    caveats: list[str] = []
+
+    if copilot.tool_result is not None:
+        if copilot.tool_result.error:
+            caveats.append(
+                "Tool execution failed; response may rely on incomplete ontology context."
+            )
+            lowered = copilot.tool_result.error.lower()
+            if "not allowed" in lowered or "restricted" in lowered:
+                caveats.append(
+                    "Read-only SPARQL policy blocked a mutating or dataset-scoped query."
+                )
+                evidence.append(
+                    AiEvidenceItem(
+                        label="Read-only SPARQL policy block",
+                        detail=copilot.tool_result.error,
+                    )
+                )
+        else:
+            result_detail = (
+                f"{copilot.tool_result.query_type} query returned "
+                f"{copilot.tool_result.row_count} rows"
+            )
+            if copilot.tool_result.truncated:
+                result_detail += " (truncated)"
+            evidence.append(
+                AiEvidenceItem(
+                    label="Read-only SPARQL tool result",
+                    detail=result_detail,
+                )
+            )
+
+    if not evidence:
+        caveats.append("Informational response generated without explicit query evidence.")
+
+    return evidence, caveats
+
+
+def _to_copilot_turn(
+    messages: list[AiAssistantChatMessage],
+    context: AiAssistantContext | None,
+) -> tuple[str, list[CopilotConversationMessage]]:
+    last_user_index = max(
+        (index for index, message in enumerate(messages) if message.role == "user"),
+        default=-1,
+    )
+    if last_user_index < 0:
+        raise ValueError("messages must include at least one user message")
+
+    question = messages[last_user_index].content.strip()
+    if context is not None:
+        context_lines = _context_lines(context)
+        if context_lines:
+            question = (
+                "Context for this request:\n"
+                + "\n".join(f"- {line}" for line in context_lines)
+                + f"\n\nUser request:\n{question}"
+            )
+
+    conversation = [
+        CopilotConversationMessage(role=message.role, content=message.content)
+        for message in messages[:last_user_index]
+    ]
+    return question, conversation
+
+
+def _context_lines(context: AiAssistantContext) -> list[str]:
+    lines: list[str] = []
+    if context.route:
+        lines.append(f"route={context.route}")
+    if context.module:
+        lines.append(f"module={context.module}")
+    if context.anchor_object_type:
+        lines.append(f"anchor_object_type={context.anchor_object_type}")
+    if context.start_at and context.end_at:
+        lines.append(
+            f"time_window={_ensure_utc(context.start_at).isoformat()}..{_ensure_utc(context.end_at).isoformat()}"
+        )
+    if context.concept_uris:
+        uri_preview = ", ".join(context.concept_uris[:3])
+        extra_count = len(context.concept_uris) - 3
+        if extra_count > 0:
+            uri_preview = f"{uri_preview} (+{extra_count} more)"
+        lines.append(f"concept_uris={uri_preview}")
+    return lines
+
+
+def _format_context_details(context: AiAssistantContext) -> str:
+    lines = _context_lines(context)
+    return " | ".join(lines)

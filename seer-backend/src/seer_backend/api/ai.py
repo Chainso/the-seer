@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request, status
 
 from seer_backend.ai.gateway import (
+    AiAssistantChatRequest,
+    AiAssistantChatResponse,
     AiGatewayService,
     AiOntologyQuestionRequest,
     AiOntologyQuestionResponse,
@@ -42,6 +44,24 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 
 def get_ai_gateway_service(request: Request) -> AiGatewayService:
     return request.app.state.ai_gateway_service
+
+
+@router.post("/assistant/chat", response_model=AiAssistantChatResponse)
+async def assistant_chat(
+    payload: AiAssistantChatRequest,
+    request: Request,
+) -> AiAssistantChatResponse:
+    service = get_ai_gateway_service(request)
+    try:
+        return await service.assistant_chat(payload)
+    except ValueError as exc:
+        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    except OntologyDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except OntologyNotReadyError as exc:
+        raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except OntologyError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 
 @router.post("/ontology/question", response_model=AiOntologyQuestionResponse)
