@@ -64,6 +64,8 @@ Every meaningful change should satisfy this checklist:
 3. Any execution status change is reflected in the relevant active/completed plan.
 4. Index files remain accurate when docs are added, renamed, or moved.
 5. Links and references in touched docs remain valid.
+6. Legacy-compatibility concessions are not assumed; if any are retained, they are explicitly justified.
+7. UI and backend behavior changes document what legacy behavior was intentionally removed.
 
 ## Commit Message Standard
 

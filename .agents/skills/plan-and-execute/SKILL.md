@@ -31,6 +31,7 @@ Create or update an execution plan doc that includes:
 4. Validation commands per phase.
 5. Required documentation updates.
 6. Progress checklist and decision log.
+7. Explicit UI/backend legacy behavior removals and rationale.
 
 Rules:
 
@@ -68,6 +69,7 @@ Phase N goals:
 
 Scope constraints:
 - ...
+- no default legacy-compatibility retention for UI/backend behavior
 
 Validation required:
 - <commands>
@@ -158,5 +160,6 @@ A phase is complete only when all are true:
 3. Plan/doc updates made.
 4. Commit created.
 5. Controller verification passes.
+6. Legacy behavior removals are documented for both UI and backend impact.
 
 If any condition fails, phase remains open.
