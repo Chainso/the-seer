@@ -16,16 +16,13 @@ export interface ProcessMiningRequest {
   maxTracesPerHandle?: number;
 }
 
-interface OntologyConceptDetailResponse {
-  iri: string;
-  label: string;
-}
-
 interface ProcessMineRequestContract {
   anchor_object_type: string;
+  anchor_object_type_uri?: string;
   start_at: string;
   end_at: string;
   include_object_types?: string[];
+  include_object_type_uris?: string[];
   max_events?: number;
   max_relations?: number;
   max_traces_per_handle?: number;
@@ -158,35 +155,24 @@ function fallbackObjectTypeFromModelUri(modelUri: string): string {
     .join('');
 }
 
-async function resolveAnchorObjectType(modelUri: string): Promise<string> {
-  try {
-    const detail = await fetchApi<OntologyConceptDetailResponse>(
-      `/ontology/concept-detail?iri=${encodeURIComponent(modelUri)}`
-    );
-    if (typeof detail.label === 'string' && detail.label.trim()) {
-      return detail.label.trim().replace(/\s+/g, '');
-    }
-  } catch {
-    // Fallback below intentionally keeps Phase A resilient.
-  }
-  return fallbackObjectTypeFromModelUri(modelUri);
-}
-
-async function resolveIncludeObjectTypes(modelUris: string[] | undefined): Promise<string[] | undefined> {
+function normalizeModelUris(modelUris: string[] | undefined): string[] | undefined {
   if (!Array.isArray(modelUris) || modelUris.length === 0) {
     return undefined;
   }
 
-  const objectTypes = await Promise.all(
-    modelUris.map(async (modelUri) => {
-      if (!modelUri || !modelUri.trim()) {
-        return null;
-      }
-      return resolveAnchorObjectType(modelUri);
-    })
-  );
+  const normalized = Array.from(new Set(modelUris.map((value) => value.trim()).filter(Boolean)));
+  return normalized.length > 0 ? normalized : undefined;
+}
 
-  const unique = Array.from(new Set(objectTypes.filter((value): value is string => Boolean(value))));
+function resolveIncludeObjectTypes(modelUris: string[] | undefined): string[] | undefined {
+  const normalizedModelUris = normalizeModelUris(modelUris);
+  if (!normalizedModelUris) {
+    return undefined;
+  }
+
+  const unique = Array.from(
+    new Set(normalizedModelUris.map((modelUri) => fallbackObjectTypeFromModelUri(modelUri)))
+  );
   return unique.length > 0 ? unique : undefined;
 }
 
@@ -290,14 +276,15 @@ function buildPlaceNodes(run: ProcessMineResponseContract): OcpnNode[] {
   }));
 }
 
-async function toMineRequestContract(payload: ProcessMiningRequest): Promise<ProcessMineRequestContract> {
+function toMineRequestContract(payload: ProcessMiningRequest): ProcessMineRequestContract {
   const modelUri = payload.modelUri || payload.modelUris?.[0];
   if (!modelUri) {
     throw new Error('Process mining requires an ontology object model selection.');
   }
 
-  const anchorObjectType = await resolveAnchorObjectType(modelUri);
-  const includeObjectTypes = await resolveIncludeObjectTypes(payload.modelUris);
+  const anchorObjectType = fallbackObjectTypeFromModelUri(modelUri);
+  const includeObjectTypeUris = normalizeModelUris(payload.modelUris);
+  const includeObjectTypes = resolveIncludeObjectTypes(includeObjectTypeUris);
   const { startAt, endAt } = resolveCanonicalWindow(payload.from, payload.to);
   const maxEvents =
     typeof payload.maxEvents === 'number' && Number.isFinite(payload.maxEvents)
@@ -314,9 +301,11 @@ async function toMineRequestContract(payload: ProcessMiningRequest): Promise<Pro
 
   return {
     anchor_object_type: anchorObjectType,
+    anchor_object_type_uri: modelUri,
     start_at: startAt,
     end_at: endAt,
     include_object_types: includeObjectTypes,
+    include_object_type_uris: includeObjectTypeUris,
     max_events: maxEvents,
     max_relations: maxRelations,
     max_traces_per_handle: maxTracesPerHandle,
@@ -324,7 +313,7 @@ async function toMineRequestContract(payload: ProcessMiningRequest): Promise<Pro
 }
 
 export async function mineProcess(payload: ProcessMiningRequest): Promise<ProcessMineResponseContract> {
-  const contract = await toMineRequestContract(payload);
+  const contract = toMineRequestContract(payload);
   return fetchApi<ProcessMineResponseContract>('/process/mine', {
     method: 'POST',
     body: JSON.stringify(contract),

@@ -167,14 +167,6 @@ function parseTraceAnchor(trace: RootCauseEvidenceResponseContract["traces"][num
   }
 }
 
-function toAnchorObjectType(name: string, uri: string): string {
-  const raw = (name || iriLocalName(uri)).trim();
-  if (!raw) {
-    return iriLocalName(uri);
-  }
-  return raw.replace(/\s+/g, "");
-}
-
 function summarizeTraceEvents(
   events: RootCauseEvidenceResponseContract["traces"][number]["events"],
   displayEventType: (eventType: string) => string
@@ -208,7 +200,13 @@ function toPascalToken(value: string): string {
     .join("");
 }
 
-function deriveEventTypeFromLocalName(localName: string): string {
+function legacyObjectTypeFromUri(uri: string): string {
+  const localName = iriLocalName(uri).replace(/^obj[_:-]?/i, "");
+  const canonical = toPascalToken(localName);
+  return canonical || iriLocalName(uri);
+}
+
+function legacyEventTypeFromLocalName(localName: string): string {
   if (localName.startsWith("trans_")) {
     return `${toPascalToken(localName.slice("trans_".length))}Transition`;
   }
@@ -227,35 +225,12 @@ function deriveEventTypeFromLocalName(localName: string): string {
   return "";
 }
 
-function nodeEventTypeValue(node: OntologyNode): string {
-  const canonicalFromField = (value: unknown): string => {
-    if (typeof value !== "string") {
-      return "";
-    }
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return "";
-    }
-    return trimmed.replace(/\s+/g, "");
-  };
-
-  const localName = iriLocalName(node.uri);
-  const localDerived = deriveEventTypeFromLocalName(localName);
-  if (localName.startsWith("trans_") && localDerived) {
-    return localDerived;
+function legacyEventTypeFromUri(uri: string): string {
+  const localName = iriLocalName(uri).trim();
+  if (!localName) {
+    return uri;
   }
-
-  const fromProphetName = canonicalFromField(node.properties?.["prophet:name"]);
-  if (fromProphetName) {
-    return fromProphetName;
-  }
-
-  const fromName = canonicalFromField(node.properties?.name);
-  if (fromName) {
-    return fromName;
-  }
-
-  return localDerived || localName;
+  return legacyEventTypeFromLocalName(localName) || localName;
 }
 
 function buildOutcomeOptions(
@@ -324,7 +299,7 @@ function buildOutcomeOptions(
     if (!node) {
       return;
     }
-    const value = nodeEventTypeValue(node);
+    const value = uri;
     if (!value || byValue.has(value)) {
       return;
     }
@@ -492,7 +467,7 @@ export function ProcessInsightsPanel() {
             return {
               uri: node.uri,
               name,
-              objectType: toAnchorObjectType(name, node.uri),
+              objectType: legacyObjectTypeFromUri(node.uri),
             };
           })
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -573,7 +548,7 @@ export function ProcessInsightsPanel() {
     const merged = new Map<string, OutcomeOption>();
     baseOutcomeOptions.forEach((option) => merged.set(option.value, option));
     setupSuggestions.forEach((suggestion) => {
-      const value = suggestion.outcome.event_type;
+      const value = (suggestion.outcome.event_type_uri || suggestion.outcome.event_type || "").trim();
       if (!value || merged.has(value)) {
         return;
       }
@@ -757,14 +732,18 @@ export function ProcessInsightsPanel() {
     setInterpretation(null);
     setInterpretError(null);
     try {
+      const outcomeEventTypeUri = selectedOutcomeEventType.trim();
       const response = await runRootCause({
         anchor_object_type: anchorObjectType,
+        anchor_object_type_uri: anchorModelUri,
         start_at: new Date(from).toISOString(),
         end_at: new Date(to).toISOString(),
         depth: Number(depth),
         outcome: {
-          event_type: selectedOutcomeEventType.trim(),
+          event_type: legacyEventTypeFromUri(outcomeEventTypeUri),
+          event_type_uri: outcomeEventTypeUri,
           object_type: anchorObjectType,
+          object_type_uri: anchorModelUri,
         },
         filters: activeFilterPayload,
       });
@@ -794,6 +773,7 @@ export function ProcessInsightsPanel() {
     try {
       const response = await assistRootCauseSetup({
         anchor_object_type: anchorObjectType,
+        anchor_object_type_uri: anchorModelUri,
         start_at: new Date(from).toISOString(),
         end_at: new Date(to).toISOString(),
       });
@@ -1080,15 +1060,17 @@ export function ProcessInsightsPanel() {
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             {setupSuggestions.map((suggestion, index) => (
               <button
-                key={`${suggestion.outcome.event_type}-${index}`}
+                key={`${suggestion.outcome.event_type_uri || suggestion.outcome.event_type}-${index}`}
                 type="button"
-                onClick={() => setOutcomeEventType(suggestion.outcome.event_type)}
+                onClick={() =>
+                  setOutcomeEventType(suggestion.outcome.event_type_uri || suggestion.outcome.event_type)
+                }
                 className={cn(
                   "rounded-xl border border-border bg-background p-4 text-left transition-colors hover:bg-accent"
                 )}
               >
                 <p className="font-medium">
-                  {displayEventType(suggestion.outcome.event_type)}
+                  {displayEventType(suggestion.outcome.event_type_uri || suggestion.outcome.event_type)}
                 </p>
                 <p className="mt-2 text-xs text-muted-foreground">{suggestion.rationale}</p>
               </button>

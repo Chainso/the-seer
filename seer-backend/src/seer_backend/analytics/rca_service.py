@@ -292,6 +292,7 @@ class RootCauseService:
         await self._ensure_schema()
         preview_request = RootCauseRequest(
             anchor_object_type=payload.anchor_object_type,
+            anchor_object_type_uri=payload.anchor_object_type_uri,
             start_at=payload.start_at,
             end_at=payload.end_at,
             depth=1,

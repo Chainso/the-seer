@@ -196,3 +196,25 @@ Decisions recorded:
 1. Canonical semantics are resolved at contract layer via URI-first accessors (`*_uri` if present, else legacy field).
 2. Existing storage columns remain source of truth for canonical values during Phase 1 (no dual-write schema change).
 3. Trace/evidence flows continue to use existing payload shapes, but with canonicalized values propagated through context.
+
+### 2026-02-28 - Phase 2 frontend URI-first migration (process + RCA panel)
+
+Status: completed for scoped Phase 2 changes.
+
+Implemented:
+
+1. Migrated process mining API adapter to URI-first request fields:
+   - Sends `anchor_object_type_uri` and `include_object_type_uris`.
+   - Retains `anchor_object_type` and `include_object_types` as compatibility fallbacks derived from URI local names.
+   - Removed ontology concept label fetch for anchor derivation to avoid mutable-label dependency.
+2. Migrated inspector root-cause flow to URI-first semantics:
+   - Outcome selector now uses event concept URI as option value.
+   - RCA run payload sends `anchor_object_type_uri`, `outcome.event_type_uri`, and `outcome.object_type_uri`.
+   - Legacy fallback fields remain populated from URI-local-name derivation (no display-label dependency).
+3. Added additive backend setup compatibility for anchor URI:
+   - `RootCauseAssistSetupRequest` now supports optional `anchor_object_type_uri` and canonical accessor.
+   - Setup preview request propagation includes `anchor_object_type_uri` so extraction respects URI canonicalization.
+
+Scope exclusions honored:
+
+1. No Phase 3 fake-data/fixture/test-migration work included.

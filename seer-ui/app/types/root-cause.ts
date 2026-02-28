@@ -9,11 +9,14 @@ export interface RootCauseFilterCondition {
 export interface RootCauseOutcomeDefinition {
   kind?: "event_type";
   event_type: string;
+  event_type_uri?: string | null;
   object_type?: string | null;
+  object_type_uri?: string | null;
 }
 
 export interface RootCauseRequestContract {
   anchor_object_type: string;
+  anchor_object_type_uri?: string;
   start_at: string;
   end_at: string;
   depth: number;
@@ -104,6 +107,7 @@ export interface RootCauseEvidenceResponseContract {
 
 export interface RootCauseAssistSetupRequestContract {
   anchor_object_type: string;
+  anchor_object_type_uri?: string;
   start_at: string;
   end_at: string;
 }

@@ -159,8 +159,13 @@ class RootCauseAssistSetupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     anchor_object_type: str = Field(min_length=1, max_length=160)
+    anchor_object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
     start_at: datetime
     end_at: datetime
+
+    @property
+    def canonical_anchor_object_type(self) -> str:
+        return self.anchor_object_type_uri or self.anchor_object_type
 
     @model_validator(mode="after")
     def validate_window(self) -> RootCauseAssistSetupRequest:
