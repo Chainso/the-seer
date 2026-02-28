@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -24,6 +25,18 @@ from seer_backend.history.models import (
 )
 
 _MISSING = object()
+_DURATION_PATTERN = re.compile(
+    r"^P"
+    r"(?:(?P<years>\d+(?:\.\d+)?)Y)?"
+    r"(?:(?P<months>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<weeks>\d+(?:\.\d+)?)W)?"
+    r"(?:(?P<days>\d+(?:\.\d+)?)D)?"
+    r"(?:T"
+    r"(?:(?P<hours>\d+(?:\.\d+)?)H)?"
+    r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?"
+    r")?$"
+)
 
 
 class HistoryRepository(Protocol):
@@ -284,7 +297,7 @@ FORMAT JSON
             source_conditions.append(f"object_type = {_sql_string_literal(object_type)}")
         source_where = f"WHERE {' AND '.join(source_conditions)}" if source_conditions else ""
 
-        latest_filter_conditions = _build_latest_object_filter_conditions(
+        latest_filter_conditions, residual_filters = _build_latest_object_filter_conditions(
             property_filters,
             payload_column="latest_object_payload",
         )
@@ -294,7 +307,7 @@ FORMAT JSON
             else ""
         )
 
-        count_query = f"""
+        base_latest_cte = f"""
 WITH latest AS (
   SELECT
     argMax(object_history_id, tuple(recorded_at, object_history_id)) AS latest_object_history_id,
@@ -312,34 +325,9 @@ WITH latest AS (
   {source_where}
   GROUP BY object_type, object_ref_hash
 )
-SELECT count() AS cnt
-FROM latest
-{latest_where}
-FORMAT JSON
 """.strip()
-        count_rows = await self._select_rows(count_query)
-        total = int(count_rows[0].get("cnt", 0)) if count_rows else 0
-        if total <= 0:
-            return ([], 0)
 
-        data_query = f"""
-WITH latest AS (
-  SELECT
-    argMax(object_history_id, tuple(recorded_at, object_history_id)) AS latest_object_history_id,
-    object_type,
-    object_ref_hash,
-    argMax(object_ref, tuple(recorded_at, object_history_id)) AS latest_object_ref,
-    argMax(
-      object_ref_canonical,
-      tuple(recorded_at, object_history_id)
-    ) AS latest_object_ref_canonical,
-    argMax(object_payload, tuple(recorded_at, object_history_id)) AS latest_object_payload,
-    max(recorded_at) AS latest_recorded_at,
-    argMax(source_event_id, tuple(recorded_at, object_history_id)) AS latest_source_event_id
-  FROM object_history
-  {source_where}
-  GROUP BY object_type, object_ref_hash
-)
+        latest_select = f"""
 SELECT
   latest_object_history_id AS object_history_id,
   object_type,
@@ -351,6 +339,42 @@ SELECT
   latest_source_event_id AS source_event_id
 FROM latest
 {latest_where}
+""".strip()
+
+        if residual_filters:
+            unbounded_query = f"""
+{base_latest_cte}
+{latest_select}
+ORDER BY latest_recorded_at DESC, object_type, object_ref_hash
+FORMAT JSON
+""".strip()
+            data_rows = await self._select_rows(unbounded_query)
+            all_rows = [_latest_object_row_from_clickhouse(row) for row in data_rows]
+            filtered_rows = [
+                row
+                for row in all_rows
+                if _matches_property_filters(row.object_payload, property_filters)
+            ]
+            total = len(filtered_rows)
+            if total <= 0:
+                return ([], 0)
+            return (filtered_rows[offset : offset + limit], total)
+
+        count_query = f"""
+{base_latest_cte}
+SELECT count() AS cnt
+FROM latest
+{latest_where}
+FORMAT JSON
+""".strip()
+        count_rows = await self._select_rows(count_query)
+        total = int(count_rows[0].get("cnt", 0)) if count_rows else 0
+        if total <= 0:
+            return ([], 0)
+
+        data_query = f"""
+{base_latest_cte}
+{latest_select}
 ORDER BY latest_recorded_at DESC, object_type, object_ref_hash
 LIMIT {int(limit)} OFFSET {int(offset)}
 FORMAT JSON
@@ -855,8 +879,9 @@ def _build_latest_object_filter_conditions(
     property_filters: Sequence[ObjectPropertyFilter],
     *,
     payload_column: str = "object_payload",
-) -> list[str]:
+) -> tuple[list[str], list[ObjectPropertyFilter]]:
     conditions: list[str] = []
+    residual_filters: list[ObjectPropertyFilter] = []
     for property_filter in property_filters:
         key_literal = _sql_string_literal(property_filter.key)
         normalized_value_expr = (
@@ -876,7 +901,11 @@ def _build_latest_object_filter_conditions(
             )
             continue
 
-        numeric_value = float(property_filter.value)
+        comparable_filter = _as_comparable_scalar(property_filter.value)
+        if comparable_filter is None or comparable_filter[0] != "number":
+            residual_filters.append(property_filter)
+            continue
+        numeric_value = comparable_filter[1]
         numeric_expr = f"toFloat64OrNull({normalized_value_expr})"
         if property_filter.op == "gt":
             conditions.append(f"{numeric_expr} > {numeric_value}")
@@ -886,7 +915,7 @@ def _build_latest_object_filter_conditions(
             conditions.append(f"{numeric_expr} < {numeric_value}")
         elif property_filter.op == "lte":
             conditions.append(f"{numeric_expr} <= {numeric_value}")
-    return conditions
+    return conditions, residual_filters
 
 
 def _matches_property_filters(
@@ -913,10 +942,14 @@ def _matches_property_filter(
         candidate = _scalar_to_string(raw)
         return property_filter.value.lower() in candidate.lower()
 
-    candidate_number = _coerce_to_number(raw)
-    if candidate_number is None:
+    candidate_value = _coerce_to_comparable_scalar(raw)
+    filter_value = _as_comparable_scalar(property_filter.value)
+    if candidate_value is None or filter_value is None:
         return False
-    filter_number = float(property_filter.value)
+    if candidate_value[0] != filter_value[0]:
+        return False
+    candidate_number = candidate_value[1]
+    filter_number = filter_value[1]
     if property_filter.op == "gt":
         return candidate_number > filter_number
     if property_filter.op == "gte":
@@ -936,16 +969,76 @@ def _scalar_to_string(raw: Any) -> str:
     return str(raw)
 
 
-def _coerce_to_number(raw: Any) -> float | None:
+def _coerce_to_comparable_scalar(raw: Any) -> tuple[str, float] | None:
     if isinstance(raw, bool):
         return None
     if isinstance(raw, (int, float)):
-        return float(raw)
+        return ("number", float(raw))
     if isinstance(raw, str):
-        try:
-            return float(raw)
-        except ValueError:
-            return None
+        return _as_comparable_scalar(raw)
+    return None
+
+
+def _as_comparable_number(value: str) -> tuple[str, float] | None:
+    cleaned = value.strip()
+    try:
+        return ("number", float(cleaned))
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_comparable_datetime(value: str) -> tuple[str, float] | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    normalized = cleaned.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    else:
+        parsed = parsed.astimezone(UTC)
+    return ("datetime", parsed.timestamp())
+
+
+def _as_comparable_duration(value: str) -> tuple[str, float] | None:
+    cleaned = value.strip().upper()
+    if not cleaned:
+        return None
+    match = _DURATION_PATTERN.fullmatch(cleaned)
+    if not match:
+        return None
+    years = float(match.group("years") or 0.0)
+    months = float(match.group("months") or 0.0)
+    weeks = float(match.group("weeks") or 0.0)
+    days = float(match.group("days") or 0.0)
+    hours = float(match.group("hours") or 0.0)
+    minutes = float(match.group("minutes") or 0.0)
+    seconds = float(match.group("seconds") or 0.0)
+    return (
+        "duration",
+        years * 365.0 * 24.0 * 60.0 * 60.0
+        + months * 30.0 * 24.0 * 60.0 * 60.0
+        + weeks * 7.0 * 24.0 * 60.0 * 60.0
+        + days * 24.0 * 60.0 * 60.0
+        + hours * 60.0 * 60.0
+        + minutes * 60.0
+        + seconds,
+    )
+
+
+def _as_comparable_scalar(value: str) -> tuple[str, float] | None:
+    numeric = _as_comparable_number(value)
+    if numeric is not None:
+        return numeric
+    timestamp = _as_comparable_datetime(value)
+    if timestamp is not None:
+        return timestamp
+    duration = _as_comparable_duration(value)
+    if duration is not None:
+        return duration
     return None
 
 

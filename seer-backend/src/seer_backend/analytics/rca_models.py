@@ -28,7 +28,7 @@ class RcaFilterCondition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     field: str = Field(min_length=1, max_length=240)
-    op: Literal["eq", "ne", "contains"] = "eq"
+    op: Literal["eq", "ne", "contains", "gt", "gte", "lt", "lte"] = "eq"
     value: str = Field(min_length=1, max_length=300)
 
     @field_validator("field", "value")

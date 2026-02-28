@@ -13,11 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table } from "../ui/table";
 
 import { listLatestObjects, listObjectEvents } from "@/app/lib/api/history";
+import { queryOntologySelect } from "@/app/lib/api/ontology";
 import { mapPropertyDefinitions } from "@/app/lib/ontology-helpers";
 import { useOntologyGraphContext } from "@/app/components/providers/ontology-graph-provider";
 import type {
   LatestObjectItem,
   LatestObjectsResponse,
+  ObjectEventItem,
   ObjectEventsResponse,
   ObjectPropertyFilter,
   PropertyFilterOperator,
@@ -25,6 +27,13 @@ import type {
 
 type PropertyFilterDraft = ObjectPropertyFilter & { id: string };
 const STATE_FILTER_KEY = "__state__";
+const TYPE_RESOLUTION_QUERY_PREFIX = `
+PREFIX prophet: <http://prophet.platform/ontology#>
+`.trim();
+
+type FilterFieldKind = "string" | "number" | "boolean" | "temporal";
+type PropertyFilterOperatorOption = { value: PropertyFilterOperator; label: string };
+type PropertyKeyOption = { value: string; label: string; kind: FilterFieldKind };
 
 type ObjectModelDescriptor = {
   uri: string;
@@ -34,10 +43,10 @@ type ObjectModelDescriptor = {
   stateLabelByToken: Map<string, string>;
   stateFilterFieldKey: string | null;
   stateFilterOptions: Array<{ value: string; label: string }>;
-  filterFieldOptions: Array<{ value: string; label: string }>;
+  filterFieldOptions: PropertyKeyOption[];
 };
 
-const PROPERTY_OPERATORS: Array<{ value: PropertyFilterOperator; label: string }> = [
+const PROPERTY_OPERATORS: Array<PropertyFilterOperatorOption> = [
   { value: "eq", label: "Equals" },
   { value: "contains", label: "Contains" },
   { value: "gt", label: "Greater Than" },
@@ -45,6 +54,32 @@ const PROPERTY_OPERATORS: Array<{ value: PropertyFilterOperator; label: string }
   { value: "lt", label: "Less Than" },
   { value: "lte", label: "Less or Equal" },
 ];
+const NUMERIC_TYPE_TOKENS = new Set([
+  "int",
+  "integer",
+  "long",
+  "short",
+  "byte",
+  "double",
+  "float",
+  "decimal",
+  "nonnegativeinteger",
+  "positiveinteger",
+  "negativeinteger",
+  "nonpositiveinteger",
+  "unsignedint",
+  "unsignedlong",
+  "unsignedshort",
+  "unsignedbyte",
+]);
+const BOOLEAN_TYPE_TOKENS = new Set(["boolean", "bool"]);
+const TEMPORAL_TYPE_TOKENS = new Set(["datetime", "date", "duration", "time", "timestamp"]);
+const FILTER_OPERATORS_BY_KIND: Record<FilterFieldKind, PropertyFilterOperator[]> = {
+  string: ["eq", "contains"],
+  number: ["eq", "contains", "gt", "gte", "lt", "lte"],
+  boolean: ["eq"],
+  temporal: ["eq", "gt", "gte", "lt", "lte"],
+};
 
 function formatDateTime(value: string | null): string {
   if (!value) return "—";
@@ -71,6 +106,128 @@ function normalizeToken(value: string): string {
 
 function normalizeComparableToken(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function formatStateLabel(value: string): string {
+  const cleaned = value.trim();
+  if (!cleaned) {
+    return value;
+  }
+  return cleaned
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function kindFromTypeToken(token: string): FilterFieldKind {
+  const normalized = normalizeComparableToken(token);
+  if (!normalized) {
+    return "string";
+  }
+  if (TEMPORAL_TYPE_TOKENS.has(normalized)) {
+    return "temporal";
+  }
+  if (BOOLEAN_TYPE_TOKENS.has(normalized)) {
+    return "boolean";
+  }
+  if (NUMERIC_TYPE_TOKENS.has(normalized)) {
+    return "number";
+  }
+  return "string";
+}
+
+function fieldKindFromTypeHints(hints: Array<string | undefined>): FilterFieldKind {
+  for (const hint of hints) {
+    if (!hint || !hint.trim()) {
+      continue;
+    }
+    const inferred = kindFromTypeToken(iriLocalName(hint));
+    if (inferred !== "string") {
+      return inferred;
+    }
+    const fallback = kindFromTypeToken(hint);
+    if (fallback !== "string") {
+      return fallback;
+    }
+  }
+  return "string";
+}
+
+function inferPropertyFieldKind(valueTypeUri: string | undefined): FilterFieldKind {
+  if (!valueTypeUri) {
+    return "string";
+  }
+  return fieldKindFromTypeHints([valueTypeUri]);
+}
+
+function preferredOntologyName(properties: Record<string, unknown> | undefined): string | null {
+  const prophetName = properties?.["prophet:name"];
+  if (typeof prophetName === "string" && prophetName.trim()) {
+    return prophetName.trim();
+  }
+  const name = properties?.name;
+  if (typeof name === "string" && name.trim()) {
+    return name.trim();
+  }
+  return null;
+}
+
+async function fetchObjectModelPropertyKinds(
+  objectModelUri: string
+): Promise<Record<string, FilterFieldKind>> {
+  if (!objectModelUri || /[<>\s]/.test(objectModelUri)) {
+    return {};
+  }
+  const query = `
+${TYPE_RESOLUTION_QUERY_PREFIX}
+SELECT DISTINCT ?fieldKey ?baseType ?baseName ?mapsToXsd
+WHERE {
+  <${objectModelUri}> prophet:hasProperty ?property .
+  ?property prophet:fieldKey ?fieldKey .
+  ?property prophet:valueType ?valueType .
+  OPTIONAL {
+    ?valueType (prophet:derivedFrom|prophet:itemType)* ?baseType .
+    ?baseType a prophet:BaseType .
+    OPTIONAL { ?baseType prophet:name ?baseName . }
+    OPTIONAL { ?baseType prophet:mapsToXSD ?mapsToXsd . }
+  }
+}
+`.trim();
+  const rows = await queryOntologySelect(query);
+  const output: Record<string, FilterFieldKind> = {};
+  rows.forEach((row) => {
+    const key = row.fieldKey?.trim();
+    if (!key) {
+      return;
+    }
+    output[key] = fieldKindFromTypeHints([row.baseName, row.baseType, row.mapsToXsd]);
+  });
+  return output;
+}
+
+function operatorOptionsForPropertyKey(
+  key: string,
+  propertyKeyOptionLookup: Map<string, PropertyKeyOption>
+): Array<PropertyFilterOperatorOption> {
+  if (key === STATE_FILTER_KEY) {
+    return PROPERTY_OPERATORS.filter((operator) => operator.value === "eq");
+  }
+  const kind = propertyKeyOptionLookup.get(key)?.kind || "string";
+  const allowed = new Set(FILTER_OPERATORS_BY_KIND[kind]);
+  return PROPERTY_OPERATORS.filter((operator) => allowed.has(operator.value));
+}
+
+function normalizeOperatorForPropertyKey(
+  key: string,
+  operator: PropertyFilterOperator,
+  propertyKeyOptionLookup: Map<string, PropertyKeyOption>
+): PropertyFilterOperator {
+  const options = operatorOptionsForPropertyKey(key, propertyKeyOptionLookup);
+  if (options.some((option) => option.value === operator)) {
+    return operator;
+  }
+  return options[0]?.value || "eq";
 }
 
 const MODEL_ALIAS_REWRITES: Array<[RegExp, string]> = [
@@ -185,24 +342,42 @@ function resolveStateDisplayValue(
   if (!stateLabelByToken || typeof value !== "string" || !value.trim()) {
     return value;
   }
-  const normalizedKey = normalizeComparableToken(key);
-  const stateLike =
-    normalizedKey === "status" ||
-    normalizedKey === "state" ||
-    normalizedKey.endsWith("status") ||
-    normalizedKey.endsWith("state");
-  if (!stateLike) {
+  if (!isStateLikeFieldKey(key)) {
     return value;
   }
   return (
     stateLabelByToken.get(normalizeToken(value)) ||
     stateLabelByToken.get(normalizeComparableToken(value)) ||
-    value
+    formatStateLabel(value)
   );
 }
 
 function fallbackFieldLabel(key: string): string {
-  return normalizeComparableToken(key) === "status" ? "Status" : key;
+  const normalized = normalizeComparableToken(key);
+  if (normalized === "fromstate") {
+    return "From";
+  }
+  if (normalized === "tostate") {
+    return "To";
+  }
+  if (normalized === "state") {
+    return "State";
+  }
+  return iriLocalName(key);
+}
+
+function isStateLikeFieldKey(key: string): boolean {
+  return normalizeComparableToken(key) === "state";
+}
+
+function displayFieldLabel(
+  fieldLabelByKey: Map<string, string> | undefined,
+  key: string
+): string {
+  if (isStateLikeFieldKey(key)) {
+    return fallbackFieldLabel(key);
+  }
+  return resolveFieldLabel(fieldLabelByKey, key) || fallbackFieldLabel(key);
 }
 
 function registerPropertyAliases(
@@ -235,7 +410,7 @@ function summarizeObjectRef(
     .slice(0, 2)
     .map(
       ([key, value]) =>
-        `${resolveFieldLabel(fieldLabelByKey, key) || fallbackFieldLabel(key)} · ${String(value)}`
+        `${displayFieldLabel(fieldLabelByKey, key)} · ${String(value)}`
     )
     .join(" | ");
 }
@@ -254,7 +429,7 @@ function summarizePayload(
     .slice(0, 3)
     .map(([key, value]) => {
       const displayValue = resolveStateDisplayValue(key, value, stateLabelByToken);
-      return `${resolveFieldLabel(fieldLabelByKey, key) || fallbackFieldLabel(key)} · ${String(displayValue)}`;
+      return `${displayFieldLabel(fieldLabelByKey, key)} · ${String(displayValue)}`;
     })
     .join(" | ");
 }
@@ -273,7 +448,19 @@ type ObjectDetailsEntry = {
   value: unknown;
 };
 
-function renderObjectDetailsValue(value: unknown): React.ReactNode {
+function renderObjectDetailsNode(
+  value: unknown,
+  fieldLabelByKey: Map<string, string> | undefined,
+  stateLabelByToken: Map<string, string> | undefined,
+  depth: number
+): React.ReactNode {
+  if (depth > 6) {
+    return (
+      <code className="rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] break-all">
+        {JSON.stringify(value)}
+      </code>
+    );
+  }
   if (value === null || value === undefined) {
     return <span className="text-muted-foreground">—</span>;
   }
@@ -281,20 +468,60 @@ function renderObjectDetailsValue(value: unknown): React.ReactNode {
     return <span className="break-all">{String(value)}</span>;
   }
   if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return <span className="text-muted-foreground">[]</span>;
+    }
     return (
-      <code className="rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] break-all">
-        {JSON.stringify(value)}
-      </code>
+      <div className="space-y-2">
+        {value.map((item, index) => (
+          <div key={`item-${index}`} className="rounded-md border border-border/60 bg-muted/20 p-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              Item {index + 1}
+            </p>
+            <div className="mt-1 border-l border-border/60 pl-3">
+              {renderObjectDetailsNode(item, fieldLabelByKey, stateLabelByToken, depth + 1)}
+            </div>
+          </div>
+        ))}
+      </div>
     );
   }
   if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (!entries.length) {
+      return <span className="text-muted-foreground">{"{}"}</span>;
+    }
     return (
-      <code className="rounded bg-muted/40 px-1.5 py-0.5 font-mono text-[11px] break-all">
-        {JSON.stringify(value)}
-      </code>
+      <div className="space-y-1.5">
+        {entries.map(([key, nestedValue]) => {
+          const nestedLabel = displayFieldLabel(fieldLabelByKey, key);
+          const resolvedNestedValue = resolveStateDisplayValue(key, nestedValue, stateLabelByToken);
+          return (
+            <div key={key} className="grid grid-cols-[minmax(80px,auto)_1fr] items-start gap-2">
+              <span className="text-xs font-medium text-muted-foreground">{nestedLabel}:</span>
+              <div className="min-w-0">
+                {renderObjectDetailsNode(
+                  resolvedNestedValue,
+                  fieldLabelByKey,
+                  stateLabelByToken,
+                  depth + 1
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     );
   }
   return <span className="break-all">{String(value)}</span>;
+}
+
+function renderObjectDetailsValue(
+  value: unknown,
+  fieldLabelByKey?: Map<string, string>,
+  stateLabelByToken?: Map<string, string>
+): React.ReactNode {
+  return renderObjectDetailsNode(value, fieldLabelByKey, stateLabelByToken, 0);
 }
 
 export function HistoryPanel() {
@@ -312,6 +539,9 @@ export function HistoryPanel() {
   const [appliedObjectType, setAppliedObjectType] = useState<string | undefined>(undefined);
   const [appliedPropertyFilters, setAppliedPropertyFilters] = useState<ObjectPropertyFilter[]>([]);
   const [knownObjectTypes, setKnownObjectTypes] = useState<string[]>([]);
+  const [propertyKindsByModelUri, setPropertyKindsByModelUri] = useState<
+    Record<string, Record<string, FilterFieldKind>>
+  >({});
 
   const objectModels = useMemo<ObjectModelDescriptor[]>(() => {
     if (!graph) {
@@ -324,7 +554,7 @@ export function HistoryPanel() {
         const fieldLabelByKey = new Map<string, string>();
         const stateLabelByToken = new Map<string, string>();
         const stateFilterOptionsByValue = new Map<string, string>();
-        const filterFieldOptions: Array<{ value: string; label: string }> = [];
+        const filterFieldOptions: PropertyKeyOption[] = [];
         const canonicalFieldKeys: string[] = [];
         const objectLocalName = iriLocalName(node.uri);
         const objectSlug = objectLocalName.startsWith("obj_")
@@ -332,7 +562,9 @@ export function HistoryPanel() {
           : objectLocalName;
 
         for (const prop of mapPropertyDefinitions(node.uri, graph.nodes, graph.edges)) {
+          const propertyNode = prop.uri ? nodesByUri.get(prop.uri) : undefined;
           const label =
+            preferredOntologyName(propertyNode?.properties) ||
             (prop.name && prop.name.trim()) ||
             (prop.fieldKey && prop.fieldKey.trim()) ||
             (prop.uri ? iriLocalName(prop.uri) : "");
@@ -343,7 +575,11 @@ export function HistoryPanel() {
           }
           if (canonicalKey) {
             canonicalFieldKeys.push(canonicalKey);
-            filterFieldOptions.push({ value: canonicalKey, label });
+            filterFieldOptions.push({
+              value: canonicalKey,
+              label,
+              kind: inferPropertyFieldKind(prop.valueTypeUri),
+            });
           }
           registerPropertyAliases(
             fieldLabelByKey,
@@ -358,10 +594,7 @@ export function HistoryPanel() {
         for (const stateUri of stateUris) {
           const stateNode = nodesByUri.get(stateUri);
           const stateLocalName = iriLocalName(stateUri);
-          const stateName =
-            typeof stateNode?.properties?.name === "string" && stateNode.properties.name.trim()
-              ? stateNode.properties.name.trim()
-              : stateLocalName;
+          const stateName = preferredOntologyName(stateNode?.properties) || stateLocalName;
           const aliases = new Set<string>([stateName, stateLocalName]);
           const scopedPrefix = `state_${objectSlug}_`;
           const stateValue =
@@ -389,15 +622,10 @@ export function HistoryPanel() {
           }
         }
 
-        const rawName = node.properties?.name;
-        const name =
-          typeof rawName === "string" && rawName.trim().length > 0 ? rawName : iriLocalName(node.uri);
+        const name = preferredOntologyName(node.properties) || iriLocalName(node.uri);
         const scoreStateFieldKey = (key: string): number => {
           const comparable = normalizeComparableToken(key);
-          if (comparable === "status") return 0;
-          if (comparable === "state") return 1;
-          if (comparable.endsWith("status")) return 2;
-          if (comparable.endsWith("state")) return 3;
+          if (comparable === "state") return 0;
           return 99;
         };
         const stateFieldKeyCandidate = canonicalFieldKeys
@@ -444,9 +672,7 @@ export function HistoryPanel() {
       return byToken;
     }
     for (const node of graph.nodes) {
-      const rawName = node.properties?.name;
-      const displayName =
-        typeof rawName === "string" && rawName.trim().length > 0 ? rawName : iriLocalName(node.uri);
+      const displayName = preferredOntologyName(node.properties) || iriLocalName(node.uri);
       const keys = [node.uri, displayName, iriLocalName(node.uri)];
       for (const value of Object.values(node.properties || {})) {
         if (typeof value === "string") {
@@ -476,10 +702,13 @@ export function HistoryPanel() {
     if (!graph) {
       return byToken;
     }
+    const nodesByUri = new Map(graph.nodes.map((node) => [node.uri, node]));
     for (const node of graph.nodes) {
       const fieldLabelByKey = new Map<string, string>();
       for (const prop of mapPropertyDefinitions(node.uri, graph.nodes, graph.edges)) {
+        const propertyNode = prop.uri ? nodesByUri.get(prop.uri) : undefined;
         const label =
+          preferredOntologyName(propertyNode?.properties) ||
           (prop.name && prop.name.trim()) ||
           (prop.fieldKey && prop.fieldKey.trim()) ||
           (prop.uri ? iriLocalName(prop.uri) : "");
@@ -496,9 +725,9 @@ export function HistoryPanel() {
         continue;
       }
       const keys = [node.uri, iriLocalName(node.uri)];
-      const rawName = node.properties?.name;
-      if (typeof rawName === "string" && rawName.trim().length > 0) {
-        keys.push(rawName);
+      const preferredName = preferredOntologyName(node.properties);
+      if (preferredName) {
+        keys.push(preferredName);
       }
       for (const key of keys) {
         for (const normalized of tokenVariants(key)) {
@@ -517,9 +746,12 @@ export function HistoryPanel() {
     if (!graph) {
       return labels;
     }
+    const nodesByUri = new Map(graph.nodes.map((node) => [node.uri, node]));
     for (const node of graph.nodes) {
       for (const prop of mapPropertyDefinitions(node.uri, graph.nodes, graph.edges)) {
+        const propertyNode = prop.uri ? nodesByUri.get(prop.uri) : undefined;
         const label =
+          preferredOntologyName(propertyNode?.properties) ||
           (prop.name && prop.name.trim()) ||
           (prop.fieldKey && prop.fieldKey.trim()) ||
           (prop.uri ? iriLocalName(prop.uri) : "");
@@ -548,7 +780,7 @@ export function HistoryPanel() {
     (objectType: string): string => {
       const model = resolveObjectModel(objectType);
       if (!model) {
-        return objectType;
+        return iriLocalName(objectType);
       }
       return model.name;
     },
@@ -579,7 +811,7 @@ export function HistoryPanel() {
         const objectLabel = objectTypeDisplayLabel(fallbackObjectType || entityToken);
         return `${objectLabel} ${actionToken}`;
       }
-      return conceptType;
+      return iriLocalName(conceptType);
     },
     [conceptLabelLookup, objectTypeDisplayLabel]
   );
@@ -620,34 +852,42 @@ export function HistoryPanel() {
     }));
   }, [knownObjectTypes, objectTypeDisplayLabel]);
 
-  const propertyFilteringEnabled = useMemo(
-    () => Boolean(objectTypeDraft && resolveObjectModel(objectTypeDraft)),
+  const selectedDraftModel = useMemo(
+    () => (objectTypeDraft ? resolveObjectModel(objectTypeDraft) : null),
     [objectTypeDraft, resolveObjectModel]
   );
 
+  const propertyFilteringEnabled = useMemo(
+    () => Boolean(objectTypeDraft && selectedDraftModel),
+    [objectTypeDraft, selectedDraftModel]
+  );
+
   const propertyKeyOptions = useMemo(() => {
-    const currentModel = objectTypeDraft ? resolveObjectModel(objectTypeDraft) : null;
-    if (!currentModel) {
+    if (!selectedDraftModel) {
       return [];
     }
-
-    const options = currentModel.filterFieldOptions.slice();
-    if (currentModel.stateFilterOptions.length > 0) {
-      options.push({ value: STATE_FILTER_KEY, label: "State" });
+    const resolvedKinds = propertyKindsByModelUri[selectedDraftModel.uri] || {};
+    const options = selectedDraftModel.filterFieldOptions.map((option) => ({
+      ...option,
+      kind: resolvedKinds[option.value] || option.kind,
+    }));
+    if (selectedDraftModel.stateFilterOptions.length > 0 && selectedDraftModel.stateFilterFieldKey) {
+      options.push({ value: STATE_FILTER_KEY, label: "State", kind: "string" });
     }
-
-    return options
-      .slice()
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [objectTypeDraft, resolveObjectModel]);
+    return options.sort((a, b) => a.label.localeCompare(b.label));
+  }, [selectedDraftModel, propertyKindsByModelUri]);
 
   const stateValueOptions = useMemo(() => {
-    const currentModel = objectTypeDraft ? resolveObjectModel(objectTypeDraft) : null;
-    if (!currentModel) {
+    if (!selectedDraftModel) {
       return [];
     }
-    return currentModel.stateFilterOptions;
-  }, [objectTypeDraft, resolveObjectModel]);
+    return selectedDraftModel.stateFilterOptions;
+  }, [selectedDraftModel]);
+
+  const propertyKeyOptionLookup = useMemo(
+    () => new Map(propertyKeyOptions.map((option) => [option.value, option])),
+    [propertyKeyOptions]
+  );
 
   const allowedPropertyKeySet = useMemo(
     () => new Set(propertyKeyOptions.map((option) => option.value)),
@@ -712,7 +952,7 @@ export function HistoryPanel() {
         if (normalizeComparableToken(key) === "objecttype") {
           continue;
         }
-        const label = resolveFieldLabel(selectedDetailsFieldLabels, key) || fallbackFieldLabel(key);
+        const label = displayFieldLabel(selectedDetailsFieldLabels, key);
         const displayValue = resolveStateDisplayValue(key, value, selectedObjectStateLabels);
         entryByComparableKey.set(normalizeComparableToken(key), {
           key: `field:${key}`,
@@ -730,6 +970,70 @@ export function HistoryPanel() {
 
   useEffect(() => {
     let active = true;
+    const modelUri = selectedDraftModel?.uri;
+    if (!modelUri || propertyKindsByModelUri[modelUri]) {
+      return () => {
+        active = false;
+      };
+    }
+    fetchObjectModelPropertyKinds(modelUri)
+      .then((kinds) => {
+        if (!active) {
+          return;
+        }
+        setPropertyKindsByModelUri((previous) => {
+          if (previous[modelUri]) {
+            return previous;
+          }
+          return { ...previous, [modelUri]: kinds };
+        });
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        setPropertyKindsByModelUri((previous) => {
+          if (previous[modelUri]) {
+            return previous;
+          }
+          return { ...previous, [modelUri]: {} };
+        });
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedDraftModel, propertyKindsByModelUri]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPropertyFilterDrafts((previous) => {
+      let changed = false;
+      const next = previous.map((filter) => {
+        if (!filter.key) {
+          return filter;
+        }
+        if (!allowedPropertyKeySet.has(filter.key)) {
+          changed = true;
+          return { ...filter, key: "", op: "eq", value: "" };
+        }
+        const normalizedOperator = normalizeOperatorForPropertyKey(
+          filter.key,
+          filter.op,
+          propertyKeyOptionLookup
+        );
+        if (normalizedOperator !== filter.op) {
+          changed = true;
+          return { ...filter, op: normalizedOperator };
+        }
+        return filter;
+      });
+      return changed ? next : previous;
+    });
+  }, [allowedPropertyKeySet, propertyKeyOptionLookup]);
+
+  useEffect(() => {
+    let active = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLatestLoading(true);
     setLatestError(null);
     listLatestObjects({
@@ -771,6 +1075,7 @@ export function HistoryPanel() {
 
   useEffect(() => {
     if (!selectedObject) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setEventsData(null);
       setEventsError(null);
       return;
@@ -815,11 +1120,15 @@ export function HistoryPanel() {
               allowedPropertyKeySet.has(filter.key.trim())
           )
           .map((filter) => ({
+            op: normalizeOperatorForPropertyKey(
+              filter.key.trim(),
+              filter.op,
+              propertyKeyOptionLookup
+            ),
             key:
               filter.key.trim() === STATE_FILTER_KEY
-                ? currentModel?.stateFilterFieldKey || "status"
+                ? currentModel?.stateFilterFieldKey || "state"
                 : filter.key.trim(),
-            op: filter.op,
             value: filter.value.trim(),
           }))
       : [];
@@ -910,17 +1219,35 @@ export function HistoryPanel() {
                 Select an object type first to enable property filters.
               </p>
             )}
-            {propertyFilterDrafts.map((filter) => (
+            {propertyFilterDrafts.map((filter) => {
+              const operatorOptions = operatorOptionsForPropertyKey(
+                filter.key,
+                propertyKeyOptionLookup
+              );
+              const fieldKind = propertyKeyOptionLookup.get(filter.key)?.kind || "string";
+              const isBooleanField = filter.key !== STATE_FILTER_KEY && fieldKind === "boolean";
+              const valuePlaceholder =
+                fieldKind === "number"
+                  ? "80"
+                  : fieldKind === "temporal"
+                    ? "2026-03-01T08:00:00Z or P2D"
+                    : "approved";
+              return (
               <div key={filter.id} className="grid gap-2 md:grid-cols-[1.2fr_1fr_1.2fr_auto]">
                 <Select
                   value={propertyFilteringEnabled ? filter.key || "__unset" : "__unset"}
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
+                    const nextKey = value === "__unset" ? "" : value;
                     updateFilter(filter.id, {
-                      key: value === "__unset" ? "" : value,
-                      op: value === STATE_FILTER_KEY ? "eq" : filter.op,
+                      key: nextKey,
+                      op: normalizeOperatorForPropertyKey(
+                        nextKey,
+                        filter.op,
+                        propertyKeyOptionLookup
+                      ),
                       value: "",
-                    })
-                  }
+                    });
+                  }}
                   disabled={!propertyFilteringEnabled}
                 >
                   <SelectTrigger>
@@ -940,16 +1267,18 @@ export function HistoryPanel() {
                   onValueChange={(value) =>
                     updateFilter(filter.id, { op: value as PropertyFilterOperator })
                   }
-                  disabled={!propertyFilteringEnabled || filter.key === STATE_FILTER_KEY}
+                  disabled={
+                    !propertyFilteringEnabled ||
+                    !filter.key ||
+                    filter.key === STATE_FILTER_KEY ||
+                    operatorOptions.length <= 1
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {(filter.key === STATE_FILTER_KEY
-                      ? PROPERTY_OPERATORS.filter((operator) => operator.value === "eq")
-                      : PROPERTY_OPERATORS
-                    ).map((operator) => (
+                    {operatorOptions.map((operator) => (
                       <SelectItem key={operator.value} value={operator.value}>
                         {operator.label}
                       </SelectItem>
@@ -976,9 +1305,26 @@ export function HistoryPanel() {
                       ))}
                     </SelectContent>
                   </Select>
+                ) : isBooleanField ? (
+                  <Select
+                    value={propertyFilteringEnabled ? filter.value || "__unset" : "__unset"}
+                    onValueChange={(value) =>
+                      updateFilter(filter.id, { value: value === "__unset" ? "" : value })
+                    }
+                    disabled={!propertyFilteringEnabled}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select value" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__unset">Select value</SelectItem>
+                      <SelectItem value="true">True</SelectItem>
+                      <SelectItem value="false">False</SelectItem>
+                    </SelectContent>
+                  </Select>
                 ) : (
                   <Input
-                    placeholder="approved"
+                    placeholder={valuePlaceholder}
                     value={filter.value}
                     onChange={(event) => updateFilter(filter.id, { value: event.target.value })}
                     disabled={!propertyFilteringEnabled}
@@ -993,7 +1339,8 @@ export function HistoryPanel() {
                   Remove
                 </Button>
               </div>
-            ))}
+              );
+            })}
             <Button
               type="button"
               variant="outline"
@@ -1155,8 +1502,16 @@ export function HistoryPanel() {
                   {selectedObjectDetails.map((entry) => (
                     <DataList.Item key={entry.key} align="start">
                       <DataList.Value>
-                        <span className="font-medium">{entry.label}:</span>{" "}
-                        {renderObjectDetailsValue(entry.value)}
+                        <div className="space-y-1">
+                          <span className="font-medium">{entry.label}:</span>
+                          <div className="rounded-md border border-border/60 bg-muted/20 p-2">
+                            {renderObjectDetailsValue(
+                              entry.value,
+                              selectedDetailsFieldLabels,
+                              selectedObjectStateLabels
+                            )}
+                          </div>
+                        </div>
                       </DataList.Value>
                     </DataList.Item>
                   ))}

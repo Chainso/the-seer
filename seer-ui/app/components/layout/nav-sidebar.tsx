@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
-import { Home, Network, Activity, Sparkles, Sun, Moon, BarChart3, Database, Bot, GitPullRequest } from 'lucide-react';
+import { Home, Network, Activity, Sparkles, Sun, Moon, Database, Bot, GitPullRequest } from 'lucide-react';
 
 const navigation = [
   {
@@ -32,11 +32,6 @@ const navigation = [
     name: 'Object Store',
     href: '/inspector/history',
     icon: Database,
-  },
-  {
-    name: 'Process Mining',
-    href: '/inspector/analytics',
-    icon: BarChart3,
   },
   {
     name: 'Insights',

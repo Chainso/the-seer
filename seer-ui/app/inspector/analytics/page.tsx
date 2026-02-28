@@ -1,5 +1,5 @@
-import { ProcessMiningPanel } from '@/app/components/inspector/process-mining-panel';
+import { redirect } from 'next/navigation';
 
 export default function InspectorAnalyticsPage() {
-  return <ProcessMiningPanel />;
+  redirect('/inspector/insights');
 }

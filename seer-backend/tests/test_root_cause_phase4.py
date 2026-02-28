@@ -142,3 +142,117 @@ def test_rca_evidence_and_ai_assist_endpoints_return_actionable_payloads() -> No
     )
     assert interpret.status_code == 200, interpret.text
     assert "Baseline outcome rate" in interpret.json()["summary"]
+
+
+def test_rca_filters_support_numeric_comparison_operators() -> None:
+    client = build_client()
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/root-cause/run",
+        json={
+            "anchor_object_type": "Order",
+            "start_at": "2026-02-22T07:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+            "depth": 2,
+            "outcome": {"event_type": "order.delayed"},
+            "filters": [
+                {"field": "event.count.order.delayed", "op": "gte", "value": "1"},
+                {"field": "object_type.count.Invoice", "op": "lt", "value": "4+"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["cohort_size"] >= 1
+    assert body["feature_count"] >= 1
+
+
+def test_rca_filters_support_temporal_comparison_operators() -> None:
+    client = build_client()
+
+    events = [
+        {
+            "event_id": "f2fdb15f-b4d8-4f23-a618-e27506d73200",
+            "occurred_at": "2026-03-01T08:00:00Z",
+            "event_type": "order.created",
+            "source": "erp",
+            "payload": {"order_id": "O-201"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"order_id": "O-201"},
+                    "object": {
+                        "object_type": "Order",
+                        "order_id": "O-201",
+                        "scheduled_at": "2026-03-05T09:00:00Z",
+                        "sla_duration": "PT45M",
+                    },
+                }
+            ],
+        },
+        {
+            "event_id": "c12f3bb1-d31e-4c0e-8ef1-0d6e1da03f63",
+            "occurred_at": "2026-03-01T08:10:00Z",
+            "event_type": "order.created",
+            "source": "erp",
+            "payload": {"order_id": "O-202"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"order_id": "O-202"},
+                    "object": {
+                        "object_type": "Order",
+                        "order_id": "O-202",
+                        "scheduled_at": "2026-03-06T11:30:00Z",
+                        "sla_duration": "PT2H30M",
+                    },
+                }
+            ],
+        },
+        {
+            "event_id": "f2dc0241-ef56-4b5d-99f0-d765af4ccf36",
+            "occurred_at": "2026-03-01T09:00:00Z",
+            "event_type": "order.delayed",
+            "source": "erp",
+            "payload": {"order_id": "O-202"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"order_id": "O-202"},
+                    "object": {
+                        "object_type": "Order",
+                        "order_id": "O-202",
+                        "scheduled_at": "2026-03-06T11:30:00Z",
+                        "sla_duration": "PT2H30M",
+                        "status": "delayed",
+                    },
+                }
+            ],
+        },
+    ]
+
+    for payload in events:
+        ingest = client.post("/api/v1/history/events/ingest", json=payload)
+        assert ingest.status_code == 200, ingest.text
+
+    response = client.post(
+        "/api/v1/root-cause/run",
+        json={
+            "anchor_object_type": "Order",
+            "start_at": "2026-03-01T07:00:00Z",
+            "end_at": "2026-03-01T12:00:00Z",
+            "depth": 1,
+            "outcome": {"event_type": "order.delayed"},
+            "filters": [
+                {"field": "anchor.scheduled_at", "op": "gt", "value": "2026-03-06T00:00:00Z"},
+                {"field": "anchor.sla_duration", "op": "gte", "value": "PT2H"},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["cohort_size"] == 1
+    assert body["positive_count"] == 1

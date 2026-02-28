@@ -151,6 +151,10 @@ async function runOntologySelectQuery(query: string): Promise<Array<Record<strin
   return Array.isArray(response.bindings) ? response.bindings : [];
 }
 
+export async function queryOntologySelect(query: string): Promise<Array<Record<string, string>>> {
+  return runOntologySelectQuery(query);
+}
+
 function toNodeLabel(category: string | undefined): NodeLabel {
   if (!category) return 'Class';
   return CATEGORY_TO_NODE_LABEL[category] || 'Class';

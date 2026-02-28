@@ -243,6 +243,7 @@ Exit criteria:
 7. 2026-02-28: Object event timeline fetch is keyed by `object_ref_canonical` (hash optional) to avoid client precision problems on 64-bit hashes.
 8. 2026-02-28: History UI now supports ontology-aware field/state labels and selected-event snapshot details.
 9. 2026-02-28: Added Inspector `Insights` tab powered by canonical `POST /api/v1/process/mine` with trace-handle drill-down via `GET /api/v1/process/traces`.
+10. 2026-02-28: Consolidated analytics under Inspector `Insights` with `Process Insights` (root-cause) first and `Process Mining` second; legacy `/inspector/analytics` now redirects to `/inspector/insights`.
 
 ## Progress Tracking
 

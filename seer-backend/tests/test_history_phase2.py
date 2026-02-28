@@ -355,7 +355,92 @@ def test_latest_objects_rejects_invalid_property_filter_value() -> None:
         },
     )
     assert response.status_code == 422
-    assert "numeric value" in response.json()["detail"]
+    assert "comparable value" in response.json()["detail"]
+
+
+def test_latest_objects_supports_temporal_property_filter_ranges() -> None:
+    client = build_client()
+
+    first = _ingest_event(
+        client,
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T10:00:00Z",
+            "event_type": "truck.created",
+            "source": "fleet",
+            "payload": {"truck_id": "T-100", "state": "active"},
+            "updated_objects": [
+                {
+                    "object_type": "Truck",
+                    "object_ref": {"tenant": "acme", "truck_id": "T-100"},
+                    "object": {
+                        "object_type": "Truck",
+                        "state": "active",
+                        "next_service_at": "2026-03-01T08:00:00Z",
+                        "max_downtime": "P2D",
+                    },
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+    _ingest_event(
+        client,
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T10:05:00Z",
+            "event_type": "truck.created",
+            "source": "fleet",
+            "payload": {"truck_id": "T-200", "state": "active"},
+            "updated_objects": [
+                {
+                    "object_type": "Truck",
+                    "object_ref": {"tenant": "acme", "truck_id": "T-200"},
+                    "object": {
+                        "object_type": "Truck",
+                        "state": "active",
+                        "next_service_at": "2026-02-24T08:00:00Z",
+                        "max_downtime": "PT12H",
+                    },
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+
+    first_hash = first["linked_objects"][0]["object_ref_hash"]
+
+    date_filtered = client.post(
+        "/api/v1/history/objects/latest/search",
+        json={
+            "object_type": "Truck",
+            "property_filters": [
+                {"key": "next_service_at", "op": "gt", "value": "2026-02-26T00:00:00Z"},
+            ],
+            "page": 0,
+            "size": 10,
+        },
+    )
+    assert date_filtered.status_code == 200, date_filtered.text
+    date_filtered_body = date_filtered.json()
+    assert date_filtered_body["total"] == 1
+    assert date_filtered_body["items"][0]["object_ref_hash"] == first_hash
+
+    duration_filtered = client.post(
+        "/api/v1/history/objects/latest/search",
+        json={
+            "object_type": "Truck",
+            "property_filters": [
+                {"key": "max_downtime", "op": "gte", "value": "P1D"},
+            ],
+            "page": 0,
+            "size": 10,
+        },
+    )
+    assert duration_filtered.status_code == 200, duration_filtered.text
+    duration_filtered_body = duration_filtered.json()
+    assert duration_filtered_body["total"] == 1
+    assert duration_filtered_body["items"][0]["object_ref_hash"] == first_hash
 
 
 def test_object_events_returns_desc_timeline_with_pagination() -> None:

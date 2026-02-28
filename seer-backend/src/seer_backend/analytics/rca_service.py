@@ -6,6 +6,7 @@ import asyncio
 import base64
 import json
 import math
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -44,6 +45,18 @@ from seer_backend.analytics.rca_models import (
 from seer_backend.analytics.rca_repository import RootCauseRepository
 
 _MISSING_VALUE = "__MISSING__"
+_DURATION_PATTERN = re.compile(
+    r"^P"
+    r"(?:(?P<years>\d+(?:\.\d+)?)Y)?"
+    r"(?:(?P<months>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<weeks>\d+(?:\.\d+)?)W)?"
+    r"(?:(?P<days>\d+(?:\.\d+)?)D)?"
+    r"(?:T"
+    r"(?:(?P<hours>\d+(?:\.\d+)?)H)?"
+    r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?"
+    r")?$"
+)
 
 
 @dataclass(slots=True)
@@ -749,6 +762,76 @@ def _count_bucket(value: int) -> str:
     return "4+"
 
 
+_COUNT_BUCKET_ORDER = {"1": 1.0, "2": 2.0, "3": 3.0, "4+": 4.0}
+
+
+def _as_comparable_number(value: str) -> float | None:
+    cleaned = value.strip()
+    if cleaned in _COUNT_BUCKET_ORDER:
+        return _COUNT_BUCKET_ORDER[cleaned]
+    try:
+        return float(cleaned)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_comparable_datetime(value: str) -> float | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    normalized = cleaned.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    else:
+        parsed = parsed.astimezone(UTC)
+    return parsed.timestamp()
+
+
+def _as_comparable_duration(value: str) -> float | None:
+    cleaned = value.strip().upper()
+    if not cleaned:
+        return None
+    match = _DURATION_PATTERN.fullmatch(cleaned)
+    if not match:
+        return None
+    years = float(match.group("years") or 0.0)
+    months = float(match.group("months") or 0.0)
+    weeks = float(match.group("weeks") or 0.0)
+    days = float(match.group("days") or 0.0)
+    hours = float(match.group("hours") or 0.0)
+    minutes = float(match.group("minutes") or 0.0)
+    seconds = float(match.group("seconds") or 0.0)
+    return (
+        years * 365.0 * 24.0 * 60.0 * 60.0
+        + months * 30.0 * 24.0 * 60.0 * 60.0
+        + weeks * 7.0 * 24.0 * 60.0 * 60.0
+        + days * 24.0 * 60.0 * 60.0
+        + hours * 60.0 * 60.0
+        + minutes * 60.0
+        + seconds
+    )
+
+
+def _as_comparable_scalar(value: str) -> tuple[str, float] | None:
+    numeric = _as_comparable_number(value)
+    if numeric is not None:
+        return ("number", numeric)
+
+    timestamp = _as_comparable_datetime(value)
+    if timestamp is not None:
+        return ("temporal", timestamp)
+
+    duration = _as_comparable_duration(value)
+    if duration is not None:
+        return ("temporal", duration)
+
+    return None
+
+
 def _passes_filters(features: dict[str, str], filters: list[RcaFilterCondition]) -> bool:
     for condition in filters:
         current = features.get(condition.field)
@@ -760,6 +843,23 @@ def _passes_filters(features: dict[str, str], filters: list[RcaFilterCondition])
             return False
         if condition.op == "contains" and condition.value not in current:
             return False
+        if condition.op in {"gt", "gte", "lt", "lte"}:
+            current_value = _as_comparable_scalar(current)
+            filter_value = _as_comparable_scalar(condition.value)
+            if current_value is None or filter_value is None:
+                return False
+            if current_value[0] != filter_value[0]:
+                return False
+            current_number = current_value[1]
+            filter_number = filter_value[1]
+            if condition.op == "gt" and not current_number > filter_number:
+                return False
+            if condition.op == "gte" and not current_number >= filter_number:
+                return False
+            if condition.op == "lt" and not current_number < filter_number:
+                return False
+            if condition.op == "lte" and not current_number <= filter_number:
+                return False
     return True
 
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -33,6 +34,18 @@ from seer_backend.history.service import HistoryService, UnavailableHistoryServi
 
 router = APIRouter(prefix="/history", tags=["history"])
 _PROPERTY_FILTER_OPERATORS = {"eq", "contains", "gt", "gte", "lt", "lte"}
+_DURATION_PATTERN = re.compile(
+    r"^P"
+    r"(?:(?P<years>\d+(?:\.\d+)?)Y)?"
+    r"(?:(?P<months>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<weeks>\d+(?:\.\d+)?)W)?"
+    r"(?:(?P<days>\d+(?:\.\d+)?)D)?"
+    r"(?:T"
+    r"(?:(?P<hours>\d+(?:\.\d+)?)H)?"
+    r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
+    r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?"
+    r")?$"
+)
 
 
 def build_history_service(settings: Settings) -> HistoryService | UnavailableHistoryService:
@@ -233,6 +246,69 @@ def _http_error(status_code: int, detail: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail=detail)
 
 
+def _as_comparable_number(value: str) -> tuple[str, float] | None:
+    cleaned = value.strip()
+    try:
+        return ("number", float(cleaned))
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_comparable_datetime(value: str) -> tuple[str, float] | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    normalized = cleaned.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    else:
+        parsed = parsed.astimezone(UTC)
+    return ("datetime", parsed.timestamp())
+
+
+def _as_comparable_duration(value: str) -> tuple[str, float] | None:
+    cleaned = value.strip().upper()
+    if not cleaned:
+        return None
+    match = _DURATION_PATTERN.fullmatch(cleaned)
+    if not match:
+        return None
+    years = float(match.group("years") or 0.0)
+    months = float(match.group("months") or 0.0)
+    weeks = float(match.group("weeks") or 0.0)
+    days = float(match.group("days") or 0.0)
+    hours = float(match.group("hours") or 0.0)
+    minutes = float(match.group("minutes") or 0.0)
+    seconds = float(match.group("seconds") or 0.0)
+    return (
+        "duration",
+        years * 365.0 * 24.0 * 60.0 * 60.0
+        + months * 30.0 * 24.0 * 60.0 * 60.0
+        + weeks * 7.0 * 24.0 * 60.0 * 60.0
+        + days * 24.0 * 60.0 * 60.0
+        + hours * 60.0 * 60.0
+        + minutes * 60.0
+        + seconds,
+    )
+
+
+def _as_comparable_scalar(value: str) -> tuple[str, float] | None:
+    numeric = _as_comparable_number(value)
+    if numeric is not None:
+        return numeric
+    timestamp = _as_comparable_datetime(value)
+    if timestamp is not None:
+        return timestamp
+    duration = _as_comparable_duration(value)
+    if duration is not None:
+        return duration
+    return None
+
+
 def _parse_property_filters(raw_filters: list[str]) -> list[ObjectPropertyFilter]:
     output: list[ObjectPropertyFilter] = []
     for raw in raw_filters:
@@ -246,12 +322,11 @@ def _parse_property_filters(raw_filters: list[str]) -> list[ObjectPropertyFilter
                 "Use one of: eq, contains, gt, gte, lt, lte."
             )
         if op in {"gt", "gte", "lt", "lte"}:
-            try:
-                float(value)
-            except ValueError as exc:
+            if _as_comparable_scalar(value) is None:
                 raise ValueError(
-                    f"Property filter '{expression}' requires a numeric value for '{op}'."
-                ) from exc
+                    f"Property filter '{expression}' requires a comparable value for '{op}' "
+                    "(number, ISO-8601 datetime/date, or ISO-8601 duration)."
+                )
         output.append(ObjectPropertyFilter(key=key, op=op, value=value))
     return output
 
@@ -269,12 +344,11 @@ def _coerce_property_filters(
         if not value:
             raise ValueError("Property filter value cannot be empty.")
         if op in {"gt", "gte", "lt", "lte"}:
-            try:
-                float(value)
-            except ValueError as exc:
+            if _as_comparable_scalar(value) is None:
                 raise ValueError(
-                    f"Property filter '{key}:{op}:{value}' requires a numeric value for '{op}'."
-                ) from exc
+                    f"Property filter '{key}:{op}:{value}' requires a comparable value for '{op}' "
+                    "(number, ISO-8601 datetime/date, or ISO-8601 duration)."
+                )
         output.append(ObjectPropertyFilter(key=key, op=op, value=value))
     return output
 

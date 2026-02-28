@@ -63,6 +63,30 @@ type Pm4jsGlobal = typeof globalThis & {
   WfNetToBpmnConverter?: { apply: (net: unknown) => BpmnGraph };
 };
 
+const iriLocalName = (value: string): string => {
+  const hashIndex = value.lastIndexOf("#");
+  if (hashIndex >= 0 && hashIndex < value.length - 1) {
+    return value.slice(hashIndex + 1);
+  }
+  const slashIndex = value.lastIndexOf("/");
+  if (slashIndex >= 0 && slashIndex < value.length - 1) {
+    return value.slice(slashIndex + 1);
+  }
+  return value;
+};
+
+const ontologyNodeName = (node: OntologyNode): string => {
+  const prophetName = node.properties?.["prophet:name"];
+  if (typeof prophetName === "string" && prophetName.trim()) {
+    return prophetName.trim();
+  }
+  const name = node.properties?.name;
+  if (typeof name === "string" && name.trim()) {
+    return name.trim();
+  }
+  return iriLocalName(node.uri);
+};
+
 const ensurePm4js = async (): Promise<Pm4jsGlobal> => {
   const globalRef = globalThis as Pm4jsGlobal;
   if (!globalRef.global) {
@@ -216,7 +240,7 @@ export function ProcessMiningPanel() {
   const modelOptions = useMemo(() => {
     return models.map(node => ({
       uri: node.uri,
-      name: (node.properties?.name as string) || node.uri,
+      name: ontologyNodeName(node),
     }));
   }, [models]);
 
@@ -231,7 +255,12 @@ export function ProcessMiningPanel() {
     return (ontologyGraph?.nodes || [])
       .filter(node => ["Event", "Transition", "Signal"].includes(node.label))
       .reduce<Record<string, string>>((acc, node) => {
-        acc[node.uri] = (node.properties?.name as string) || node.uri;
+        const name = ontologyNodeName(node);
+        const local = iriLocalName(node.uri);
+        acc[node.uri] = name;
+        if (!(local in acc)) {
+          acc[local] = name;
+        }
         return acc;
       }, {});
   }, [ontologyGraph]);
@@ -351,7 +380,7 @@ export function ProcessMiningPanel() {
     });
     return Array.from(active).sort().map(uri => ({
       uri,
-      name: modelLabels[uri] ?? uri,
+      name: modelLabels[uri] ?? iriLocalName(uri),
       color: colorForModel(uri),
     }));
   }, [graph, modelLabels]);
@@ -534,16 +563,11 @@ export function ProcessMiningPanel() {
                 <div className="mt-3 space-y-3 text-sm">
                   <div className="font-display text-lg">
                     {selectedNode.type === "PLACE"
-                      ? modelLabels[selectedNode.modelUri ?? ""] || selectedNode.label
-                      : eventLabels?.[selectedNode.eventUri ?? ""] || selectedNode.label}
+                      ? modelLabels[selectedNode.modelUri ?? ""] || iriLocalName(selectedNode.label ?? "")
+                      : eventLabels?.[selectedNode.eventUri ?? ""] || iriLocalName(selectedNode.label ?? "")}
                   </div>
                   <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                     {selectedNode.type === "PLACE" ? "Object type" : "Event"}
-                  </div>
-                  <div className="rounded-xl border border-border bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-                    {selectedNode.type === "PLACE"
-                      ? selectedNode.modelUri
-                      : selectedNode.eventUri}
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                     <div className="rounded-lg border border-border bg-background px-3 py-2">
@@ -619,7 +643,7 @@ export function ProcessMiningPanel() {
             <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.2em]">
               event
             </span>
-            Transition nodes are event URIs
+            Transition nodes represent ontology event concepts
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.2em]">
@@ -659,7 +683,7 @@ export function ProcessMiningPanel() {
         <div className="mt-4">
           {!graph || !graphCollapsed ? (
             <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-              Enable "Collapse object places" and run mining to generate the inductive model.
+              Enable collapse object places and run mining to generate the inductive model.
             </div>
           ) : mining ? (
             <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">

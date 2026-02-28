@@ -6,6 +6,7 @@ import {
   Controls,
   Edge,
   EdgeLabelRenderer,
+  EdgeTypes,
   EdgeProps,
   BaseEdge,
   Handle,
@@ -19,7 +20,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { Card } from '../ui/card';
-import type { OcpnGraph, OcpnNode } from '@/app/types/process-mining';
+import type { OcpnGraph } from '@/app/types/process-mining';
 import ELK from 'elkjs/lib/elk.bundled.js';
 
 interface OcpnGraphProps {
@@ -38,6 +39,25 @@ interface ElkEdgePoint {
 
 interface ElkEdgeData {
   points?: ElkEdgePoint[];
+}
+
+function iriLocalName(value: string): string {
+  const hashIndex = value.lastIndexOf("#");
+  if (hashIndex >= 0 && hashIndex < value.length - 1) {
+    return value.slice(hashIndex + 1);
+  }
+  const slashIndex = value.lastIndexOf("/");
+  if (slashIndex >= 0 && slashIndex < value.length - 1) {
+    return value.slice(slashIndex + 1);
+  }
+  return value;
+}
+
+function conceptLabel(value: string | null | undefined): string {
+  if (!value) {
+    return "Unknown";
+  }
+  return iriLocalName(value);
 }
 
 function buildPolylinePath(points: ElkEdgePoint[]) {
@@ -77,7 +97,7 @@ function ElkEdge(props: EdgeProps<ElkEdgeData>) {
   );
 }
 
-function PlaceNode({ data }: { data: { label: string; uri: string; count?: number | null } }) {
+function PlaceNode({ data }: { data: { label: string; count?: number | null } }) {
   const tooltip = data.count != null ? `${data.count} linked event relations` : 'No linked events yet.';
 
   return (
@@ -91,7 +111,6 @@ function PlaceNode({ data }: { data: { label: string; uri: string; count?: numbe
         Object type
       </div>
       <div className="font-display text-sm">{data.label}</div>
-      <div className="mt-1 text-[0.7rem] text-muted-foreground">{data.uri}</div>
       <div className="mt-2 text-xs text-muted-foreground">
         {data.count != null ? `${data.count} relations` : 'No relations yet'}
       </div>
@@ -134,12 +153,14 @@ async function buildLayout(
 
   if (!collapseObjects) {
     placeNodes.forEach((node) => {
-      const label = node.modelUri && modelLabels?.[node.modelUri] ? modelLabels[node.modelUri] : node.label;
+      const label = node.modelUri && modelLabels?.[node.modelUri]
+        ? modelLabels[node.modelUri]
+        : conceptLabel(node.label);
       nodes.push({
         id: node.id,
         type: 'placeNode',
         position: { x: 0, y: 0 },
-        data: { label, uri: node.modelUri ?? node.label, count: node.count },
+        data: { label, count: node.count },
         className: node.id === selectedNodeId ? 'ring-2 ring-foreground/70' : undefined,
       });
       nodeSizes.set(node.id, PLACE_NODE_SIZE);
@@ -147,7 +168,9 @@ async function buildLayout(
   }
 
   transitionNodes.forEach((node) => {
-    const label = node.eventUri && eventLabels?.[node.eventUri] ? eventLabels[node.eventUri] : node.label;
+    const label = node.eventUri && eventLabels?.[node.eventUri]
+      ? eventLabels[node.eventUri]
+      : conceptLabel(node.label);
     nodes.push({
       id: node.id,
       type: 'transitionNode',
@@ -224,7 +247,7 @@ function OcpnGraphInner({
     count: number;
     share: number;
   } | null>(null);
-  const edgeTypes = useMemo(
+  const edgeTypes = useMemo<EdgeTypes>(
     () => ({
       elk: ElkEdge,
     }),
@@ -252,7 +275,7 @@ function OcpnGraphInner({
         nodes={nodes}
         edges={edges}
         nodeTypes={{ placeNode: PlaceNode, transitionNode: TransitionNode }}
-        edgeTypes={edgeTypes as any}
+        edgeTypes={edgeTypes}
         fitView
         minZoom={0.2}
         maxZoom={1.8}
