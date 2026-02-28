@@ -91,6 +91,8 @@ Answer style:
 - Be concise and concrete.
 - Distinguish between facts from ontology/tool evidence vs inference.
 - If evidence is insufficient, say exactly what is missing.
+- Do not include raw URIs/IRIs in user-facing answers unless the user explicitly asks for them.
+- Prefer human-readable concept names and qnames over full URIs.
 - Return markdown only (no JSON wrappers).
 - Use short sections only when they improve readability.
 
