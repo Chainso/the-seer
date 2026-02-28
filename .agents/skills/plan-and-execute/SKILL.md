@@ -19,6 +19,13 @@ Use this skill when the user wants:
 2. Choose the best current UX, backend contracts, and invariant-aligned behavior, even when it differs from legacy flows.
 3. If a tradeoff is required, document why the new behavior is superior and what legacy behavior is intentionally dropped.
 
+## Agent Roles
+
+1. The main agent is the orchestrator (controller), not the primary implementer.
+2. The orchestrator owns phase planning, worker handoffs, gating, verification, and user status updates.
+3. Workers own only their assigned phase scope and must report deliverables/evidence back to the orchestrator.
+4. Keep execution sequential by default: one worker-active phase at a time unless the plan explicitly authorizes safe parallelism.
+
 ## Core Workflow
 
 ## Step 1: Define The Phase Map
