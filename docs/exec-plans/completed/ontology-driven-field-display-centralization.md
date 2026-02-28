@@ -1,7 +1,7 @@
 # Post-MVP Exec Plan: Ontology-Driven Field Display Centralization
 
-**Status:** in_progress  
-**Target order:** post-MVP track 3 (planned)  
+**Status:** completed  
+**Target order:** post-MVP track 3 (completed)  
 **Agent slot:** UX-R3  
 **Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`  
 **Successor:** TBD  
@@ -217,7 +217,7 @@ Exit criteria:
 - [x] Phase 3 complete
 - [x] Phase 4 complete
 - [x] Phase 5 complete
-- [ ] Phase 6 complete
+- [x] Phase 6 complete
 
 ## Progress / Decision Log
 
@@ -279,7 +279,20 @@ Exit criteria:
    - `cd seer-ui && node --test tests/ontology-display-guardrails.contract.test.mjs tests/ontology-display.contract.test.mjs`: pass.
    - `cd seer-ui && npm run test:contracts`: passes `tests/history.contract.test.mjs`, `tests/insights.contract.test.mjs`, `tests/ontology-display-guardrails.contract.test.mjs`, and `tests/ontology-display.contract.test.mjs`; suite still has one unrelated pre-existing failure in `tests/change-intelligence.contract.test.mjs` (`assert.ok(assistantApi.includes("/assistant/generate"))`).
 18. Decision: mark Phase 5 complete after guardrails + resolver contract extensions + required validation evidence; keep Phase 6 unchecked for final documentation ratification.
+19. Delivered Phase 6 documentation ratification updates to canonical docs:
+   - `VISION.md` adds product-level ontology-driven display consistency requirement.
+   - `DESIGN.md` adds shared ontology display layer as a design theme.
+   - `ARCHITECTURE.md` adds invariant centralizing field/state/value display policy in `seer-ui/app/lib/ontology-display/`.
+   - `docs/product-specs/history-inspector-phase-3a.md` makes shared resolver mandatory for field/state label source-of-truth.
+20. Updated execution-plan lifecycle docs for completion handoff:
+   - added handoff note in `docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`,
+   - moved this plan to `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ontology-driven-field-display-centralization.md`,
+   - updated `docs/exec-plans/active/index.md` and `docs/exec-plans/completed/README.md` for accurate status/indexing.
+21. Validation evidence for Phase 6:
+   - markdown/index sanity checks: confirmed moved-plan presence under `docs/exec-plans/completed/`, no remaining `active/ontology-driven-field-display-centralization.md` references, and updated listing/state entries in `docs/exec-plans/active/index.md`, `docs/exec-plans/completed/README.md`, and `docs/exec-plans/active/post-mvp-ontology-process-readonly-adaptation.md`.
+   - `cd seer-ui && npm run test:contracts`: passes `tests/history.contract.test.mjs`, `tests/insights.contract.test.mjs`, `tests/ontology-display-guardrails.contract.test.mjs`, and `tests/ontology-display.contract.test.mjs`; unchanged pre-existing failure remains in `tests/change-intelligence.contract.test.mjs`.
+22. Decision: mark Phase 6 complete and close this plan after documentation ratification, index synchronization, and final validation evidence capture.
 
 Current execution state:
 
-- `in_progress`: Phases 1-5 complete; Phase 6 documentation ratification pending.
+- `completed`: Phases 1-6 complete on 2026-02-28.

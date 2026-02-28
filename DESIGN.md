@@ -22,6 +22,7 @@ Capture design-level decisions that sit between product vision and concrete arch
 5. RCA uses a pluggable extraction layer plus ranking methods.
 6. AI UX uses a shared backend gateway with module-scoped permissions and policy-aware evidence/caveat rendering.
 7. Ontology concept discovery for explorer workflows is backend-filtered to user-graph concepts and graph-safe categories only.
+8. User-visible field/state display in inspector flows is centralized in a shared ontology display layer (ontology-first, consistent fallbacks).
 
 ## Design Docs Index
 

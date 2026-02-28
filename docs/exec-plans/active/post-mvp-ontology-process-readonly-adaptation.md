@@ -244,6 +244,7 @@ Exit criteria:
 8. 2026-02-28: History UI now supports ontology-aware field/state labels and selected-event snapshot details.
 9. 2026-02-28: Added Inspector `Insights` tab powered by canonical `POST /api/v1/process/mine` with trace-handle drill-down via `GET /api/v1/process/traces`.
 10. 2026-02-28: Consolidated analytics under Inspector `Insights` with `Process Insights` (root-cause) first and `Process Mining` second; legacy `/inspector/analytics` now redirects to `/inspector/insights`.
+11. 2026-02-28: Field/state display consistency handoff completed to `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ontology-driven-field-display-centralization.md`; shared ontology display resolver is now the canonical policy source for inspector label/value rendering.
 
 ## Progress Tracking
 
@@ -257,6 +258,7 @@ Current execution state:
 
 - `in_progress`: Phase 4 hardening + documentation sync
 - `in_progress`: Inspector Insights UX landed with full mine controls, ranked findings, and evidence drill-down.
+- `completed-handoff`: Ontology-driven field display centralization ratified in completed plan doc for cross-inspector labeling policy.
 
 ## Plan Maintenance Rules
 

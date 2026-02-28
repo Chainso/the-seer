@@ -36,10 +36,11 @@ Define user-facing behavior for the post-MVP History tab in Inspector:
 
 ## Labeling and Display Rules
 
-1. Field labels should use ontology property labels where available.
-2. State-like payload values (`status`, `state`, `*_status`, `*_state`) should use ontology state labels where available.
-3. If no ontology label exists, raw key/value is shown.
-4. Event cards and object references use compact inline formatting:
+1. Field and state label resolution must use the shared ontology display resolver as the single source of truth.
+2. Field labels should use ontology property labels where available.
+3. State-like payload values (`status`, `state`, `*_status`, `*_state`) should use ontology state labels where available.
+4. If no ontology label exists, raw key/value is shown.
+5. Event cards and object references use compact inline formatting:
    - field display: `Key · Value`
    - separator between fields: ` | `
 

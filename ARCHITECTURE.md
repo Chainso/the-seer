@@ -205,6 +205,7 @@ The following invariants are deliberate and must hold unless explicitly changed 
 20. Governance/trust-center modules are intentionally out of current scope.
 21. Ontology concept index responses for UI exploration exclude Prophet base concepts and non-graph concept categories.
 22. Ontology graph views are limited to object/action/event/trigger concepts; property and custom-type concepts are excluded from graph navigation.
+23. User-visible field label, state label, and field-value display policy in inspector flows is centralized in the shared UI ontology display layer (`seer-ui/app/lib/ontology-display/`), not page-local fallback chains.
 
 ## Boundaries and Dependency Direction
 

@@ -30,6 +30,7 @@ The product goal is speed to usable process intelligence, not platform complexit
 5. Event/object history persistence in ClickHouse.
 6. Process mining workflows in Python with `pm4py`.
 7. AI-assisted analytics and discovery workflows.
+8. Ontology-driven field/state display consistency through one shared UI display policy.
 
 ## 2.2 Out of Scope (Current Phase)
 
@@ -122,6 +123,7 @@ Ontology explorer constraints:
 - concept lists and search results must exclude Prophet base concepts.
 - graph visualization must be limited to object/action/event/trigger concepts and their relationships.
 - property and custom-type concepts are not shown in ontology graph navigation views.
+- user-visible field/state label decisions in inspector flows must be ontology-first through a shared resolver contract.
 
 UI does not support:
 - ontology creation/editing,
