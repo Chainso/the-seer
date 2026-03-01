@@ -86,6 +86,7 @@ Expected internal service areas:
 4. `ai` domain:
    - unified AI gateway routing by module (`ontology`, `process`, `root_cause`)
    - module-scoped tool permission policy
+   - SSE-first assistant streaming orchestration (`meta`, `assistant_delta`, optional `tool_status`, `final`, `done`, `error`)
    - response-policy enforcement (`informational` vs `analytical`)
    - evidence/caveat packaging for analytical outputs
 5. `api` / `transport` domain:
@@ -176,7 +177,10 @@ Flow:
    - includes hypothesis, scoring metrics, coverage, and evidence references
 6. AI gateway contract:
    - single backend `/ai` API surface for ontology/process/RCA AI interactions plus generic assistant chat
-   - generic assistant chat route: `POST /api/v1/ai/assistant/chat` with route/module context and policy metadata
+   - generic assistant chat route: `POST /api/v1/ai/assistant/chat` is SSE-first (`text/event-stream`)
+   - assistant request contract uses canonical `completion_messages[]` only (top-level `messages[]` is not accepted)
+   - assistant stream terminal semantics are deterministic: success emits `final` then `done`; failures emit terminal `error` without `done`
+   - assistant `final` payload includes canonical `completion_messages[]` for UI persistence/replay across turns
    - module-scoped tool permissions are explicit in responses
    - analytical responses must include evidence and caveats
 

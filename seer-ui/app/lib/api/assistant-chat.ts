@@ -1,10 +1,4 @@
-export type AssistantChatRole = 'user' | 'assistant';
 export type AssistantCompletionRole = 'system' | 'user' | 'assistant' | 'tool';
-
-export interface AssistantChatMessage {
-  role: AssistantChatRole;
-  content: string;
-}
 
 export interface AssistantCompletionMessage {
   role: AssistantCompletionRole;
@@ -25,8 +19,7 @@ export interface AssistantChatContext {
 }
 
 export interface AssistantChatRequest {
-  messages: AssistantChatMessage[];
-  completion_messages?: AssistantCompletionMessage[];
+  completion_messages: AssistantCompletionMessage[];
   context?: AssistantChatContext;
   thread_id?: string;
 }

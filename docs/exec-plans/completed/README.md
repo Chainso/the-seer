@@ -24,3 +24,4 @@ Each completed plan should preserve:
 12. `post-mvp-ontology-process-readonly-adaptation.md` - completed (2026-02-28)
 13. `stable-identifiers-uri-migration.md` - completed (2026-03-01)
 14. `object-centric-history-inspector-consolidation.md` - completed (2026-02-28)
+15. `assistant-chat-sse-streaming-migration.md` - completed (2026-03-01)

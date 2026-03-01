@@ -25,6 +25,8 @@ test("assistant clients target canonical ai assistant endpoint", () => {
   assert.match(adapter, /\/ai\/assistant\/chat/);
   assert.match(adapter, /text\/event-stream/);
   assert.match(adapter, /postAssistantChatStream/);
+  assert.match(adapter, /completion_messages/);
+  assert.doesNotMatch(adapter, /messages:\s*AssistantChatMessage\[\]/);
   assert.match(adapter, /assistant_delta/);
   assert.match(adapter, /case 'final'/);
 });
@@ -41,6 +43,7 @@ test("shared assistant state uses a single canonical storage model", () => {
   assert.match(sharedState, /postAssistantChatStream/);
   assert.match(sharedState, /onAssistantDelta/);
   assert.match(sharedState, /completion_messages/);
+  assert.doesNotMatch(sharedState, /toAssistantChatMessages/);
   assert.match(sharedState, /cancelThread/);
   assert.doesNotMatch(sharedState, /postAssistantChat\(/);
   assert.doesNotMatch(sharedState, /seer_global_assistant_threads_v1/);

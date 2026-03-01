@@ -7,7 +7,6 @@ import {
   postAssistantChatStream,
   type AssistantCompletionMessage,
   type AssistantChatContext,
-  type AssistantChatMessage,
   type AssistantChatResponse,
 } from '@/app/lib/api/assistant-chat';
 
@@ -229,15 +228,6 @@ function isAbortError(error: unknown): boolean {
   );
 }
 
-function toAssistantChatMessages(messages: StoredMessage[]): AssistantChatMessage[] {
-  return messages
-    .map((message) => ({
-      role: message.role,
-      content: message.text.trim(),
-    }))
-    .filter((message) => message.content.length > 0);
-}
-
 function upsertAssistantMessage(
   messages: StoredMessage[],
   messageId: string,
@@ -257,7 +247,7 @@ function upsertAssistantMessage(
       role: 'assistant',
       text,
       at,
-    },
+    } satisfies StoredMessage,
   ].slice(-MAX_THREAD_MESSAGES);
 }
 
@@ -551,7 +541,6 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
         const streamResult = await postAssistantChatStream(
           {
             thread_id: currentActiveId,
-            messages: toAssistantChatMessages(nextMessages),
             completion_messages: nextCompletionMessages,
             context,
           },

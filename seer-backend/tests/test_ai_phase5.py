@@ -367,7 +367,7 @@ def test_ai_assistant_chat_returns_generic_envelope_and_thread_id() -> None:
     response = client.post(
         "/api/v1/ai/assistant/chat",
         json={
-            "messages": [
+            "completion_messages": [
                 {"role": "user", "content": "Summarize what this module does."},
             ],
             "context": {
@@ -405,6 +405,29 @@ def test_ai_assistant_chat_returns_generic_envelope_and_thread_id() -> None:
     assert final["evidence"]
     assert len(final["completion_messages"]) >= 2
     assert final["completion_messages"][-1]["role"] == "assistant"
+    assert "error" not in event_types
+
+
+def test_ai_assistant_chat_rejects_legacy_messages_only_payload() -> None:
+    client = build_client()
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "Summarize what this module does."},
+            ]
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    loc_entries = [
+        entry.get("loc", ())
+        for entry in detail
+        if isinstance(entry, dict)
+    ]
+    assert any("completion_messages" in loc for loc in loc_entries)
 
 
 def test_ai_assistant_chat_accepts_completions_format_messages() -> None:
@@ -437,13 +460,34 @@ def test_ai_assistant_chat_accepts_completions_format_messages() -> None:
     assert events[-1][0] == "done"
 
 
+def test_ai_assistant_chat_rejects_completion_messages_without_user_turn() -> None:
+    client = build_client()
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "assistant", "content": "No user turn is present."},
+            ],
+        },
+    )
+
+    assert response.status_code == 422, response.text
+    detail = response.json()["detail"]
+    messages = [entry.get("msg", "") for entry in detail if isinstance(entry, dict)]
+    assert any(
+        "completion_messages must include at least one user message" in message
+        for message in messages
+    )
+
+
 def test_ai_assistant_chat_surfaces_read_only_policy_block_caveat() -> None:
     client = build_client_with_copilot(StubOntologyCopilotWithPolicyBlock())
 
     response = client.post(
         "/api/v1/ai/assistant/chat",
         json={
-            "messages": [
+            "completion_messages": [
                 {"role": "user", "content": "Please run an ontology mutation query."},
             ],
         },
@@ -475,7 +519,7 @@ def test_ai_assistant_chat_streams_error_event_without_done_on_failure() -> None
     response = client.post(
         "/api/v1/ai/assistant/chat",
         json={
-            "messages": [
+            "completion_messages": [
                 {"role": "user", "content": "What is the latest ontology release?"},
             ]
         },
@@ -486,6 +530,7 @@ def test_ai_assistant_chat_streams_error_event_without_done_on_failure() -> None
     events = _parse_sse_events(response.text)
     assert len(events) == 1
     assert events[0][0] == "error"
+    assert not any(event_name == "done" for event_name, _ in events)
     assert events[0][1]["status_code"] == 409
     assert events[0][1]["code"] == "ontology_not_ready"
     assert "initializing" in str(events[0][1]["message"]).lower()

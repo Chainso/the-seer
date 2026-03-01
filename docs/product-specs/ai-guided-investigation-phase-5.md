@@ -2,7 +2,7 @@
 
 **Status:** completed  
 **Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`  
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-01
 
 ---
 
@@ -32,7 +32,7 @@ Define user-facing behavior for unified AI interactions and the guided ontology 
 3. `POST /api/v1/ai/root-cause/setup`
 4. `POST /api/v1/ai/root-cause/interpret`
 5. `POST /api/v1/ai/guided-investigation`
-6. `POST /api/v1/ai/assistant/chat` (global shell assistant, route-independent context)
+6. `POST /api/v1/ai/assistant/chat` (global shell assistant, route-independent context, SSE stream contract)
 
 ## Acceptance Expectations
 
@@ -44,6 +44,13 @@ Define user-facing behavior for unified AI interactions and the guided ontology 
 6. Assistant conversations are shared across both assistant surfaces:
    - shell-level slide-over panel, and
    - dedicated `/assistant` page workspace.
+7. Assistant turns are streamed over SSE events in this order:
+   - `meta`,
+   - `assistant_delta` chunks,
+   - optional `tool_status`,
+   - terminal `final` then `done` on success.
+8. On assistant failure, stream emits terminal `error` and closes without `done`.
+9. Assistant request/replay model uses canonical `completion_messages[]` (OpenAI-style) as persisted thread history.
 
 ## Out of Scope (Phase 5)
 
