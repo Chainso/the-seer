@@ -31,8 +31,9 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
    - root-cause repository.
 3. Optimize backend contracts and semantics for the target architecture, even when legacy behavior must break.
 4. Enable typed query helpers for row results and dataframe/arrow retrieval paths.
-5. Evaluate `clickhouse-connect` SQLAlchemy dialect usage and define allowed usage boundaries for Seer.
-6. Update tests and docs to reflect the new client stack.
+5. Adopt SQLAlchemy integration (`clickhousedb` dialect) in all production ClickHouse repository code, not only as a spike.
+6. Make SQLAlchemy Core the default query/execution path for all ClickHouse repositories.
+7. Update tests and docs to reflect the new client stack.
 
 ## Non-Goals
 
@@ -54,12 +55,11 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 2. Remove duplicated JSON response parsing boilerplate in repositories.
 3. Standardize on one client path instead of mixed ad hoc transport patterns.
 
-## SQLAlchemy Exploration Goal
+## SQLAlchemy Adoption Goal
 
-1. Determine whether the `clickhousedb` SQLAlchemy dialect should be adopted for:
-   - selective query construction/reflection utilities, or
-   - no production path (driver-only path only).
-2. Produce a written decision with rationale based on dialect scope/limitations and Seer async repository architecture.
+1. Use the `clickhousedb` SQLAlchemy dialect in all runtime ClickHouse repository code for query construction and execution.
+2. Keep forward-only scope: if adopting SQLAlchemy changes query shape or behavior, update tests/contracts/docs rather than preserving legacy quirks.
+3. Record explicit boundaries for unsupported ORM/transaction semantics.
 
 ## Phase Map
 
@@ -119,7 +119,30 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 1. `cd seer-backend && uv run pytest -q tests/test_process_phase3.py`
 2. `cd seer-backend && uv run pytest -q tests/test_root_cause_phase4.py`
 
-## Phase 4: Regression Hardening + Docs
+## Phase 4: SQLAlchemy Integration in Runtime Repositories
+
+### Scope
+
+1. Add `sqlalchemy` dependency and wire a shared ClickHouse SQLAlchemy utility module.
+2. Integrate SQLAlchemy Core + `clickhousedb` dialect into all production repository code:
+   - history repository read/write query paths,
+   - process mining repository extraction/query paths,
+   - root-cause repository extraction/query paths.
+3. Remove optional transport branches in runtime repository code so SQLAlchemy-backed execution is the single production path.
+4. Encode non-supported semantics (transactions/ORM assumptions) as guardrail documentation in code/docs.
+
+### Exit Criteria
+
+1. SQLAlchemy is used across all runtime ClickHouse repository paths (not only a spike file/test).
+2. Query behavior remains deterministic and tests pass.
+3. Integration boundaries are documented.
+
+### Validation
+
+1. `cd seer-backend && uv run ruff check src/seer_backend`
+2. `cd seer-backend && uv run pytest -q tests/test_process_phase3.py tests/test_root_cause_phase4.py`
+
+## Phase 5: Regression Hardening + Docs
 
 ### Scope
 
@@ -137,31 +160,6 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 1. `cd seer-backend && uv run pytest -q`
 2. `cd seer-backend && uv run ruff check src tests`
 
-## Phase 5: SQLAlchemy Dialect Spike and Decision
-
-### Scope
-
-1. Build a minimal spike using `clickhousedb://` with SQLAlchemy Core on a non-critical path.
-2. Validate practical fit for Seer repository patterns:
-   - Core `SELECT`/JOIN composition,
-   - insert ergonomics,
-   - async compatibility constraints.
-3. Record explicit allow/deny policy for production usage:
-   - allowed for targeted tooling/query composition, or
-   - restricted to non-production helper use.
-
-### Exit Criteria
-
-1. Decision log includes a clear recommendation and constraints.
-2. Plan/docs capture whether SQLAlchemy is:
-   - adopted for limited use, or
-   - intentionally excluded from runtime repositories.
-
-### Validation
-
-1. `cd seer-backend && uv run pytest -q tests/test_process_phase3.py tests/test_root_cause_phase4.py`
-2. `cd seer-backend && uv run ruff check src/seer_backend`
-
 ## Risks and Mitigations
 
 1. **Risk:** behavioral drift in datetime/UUID parsing when switching client result formats.  
@@ -171,7 +169,7 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 3. **Risk:** mixed client usage lingers after migration.  
    **Mitigation:** explicit grep gate in phase close checklist to remove legacy transport code.
 4. **Risk:** SQLAlchemy dialect overreach introduces unsupported ORM/transaction expectations.  
-   **Mitigation:** constrain evaluation to documented dialect capabilities and record strict usage boundaries.
+   **Mitigation:** restrict to SQLAlchemy Core patterns and document explicit non-goals for ORM/transaction semantics.
 
 ## Plan/Doc Updates Required
 
@@ -185,13 +183,14 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 - [x] Phase 1 complete
 - [x] Phase 2 complete
 - [x] Phase 3 complete
-- [ ] Phase 4 complete
+- [x] Phase 4 complete
 - [ ] Phase 5 complete
 
 ## Decision Log
 
 1. 2026-03-01: Created dedicated migration plan to decouple transport modernization from OC-DFG feature delivery and reduce execution risk.
-2. 2026-03-01: Added explicit SQLAlchemy dialect spike phase to evaluate `clickhousedb` integration with documented scope limits before adoption.
+2. 2026-03-01: Initial SQLAlchemy work was scoped as a spike, then upgraded to mandatory runtime integration per execution replan.
 3. 2026-03-01: Shared client now raises explicit transport exceptions (`ClickHouseQueryExecutionError`, `ClickHouseCommandExecutionError`); repositories map these to module domain errors (`HistoryError` now, Process/RCA in later phases).
 4. 2026-03-01: Phase 2 migrated `ClickHouseHistoryRepository` read/write execution to `AsyncClickHouseClient`, removed direct `httpx` transport helpers, and kept repository-level `HistoryError` mapping stable for query/statement failure paths.
 5. 2026-03-01: Phase 3 migrated `ClickHouseProcessMiningRepository` and `ClickHouseRootCauseRepository` transport paths to `AsyncClickHouseClient`, removed repository-local `httpx.AsyncClient` usage, and preserved deterministic ordering plus repository-level domain error mapping.
+6. 2026-03-01: Phase 4 made SQLAlchemy Core (`clickhousedb` dialect) the single runtime ClickHouse path by introducing a shared SQLAlchemy utility, switching shared client execution to that utility, removing `FORMAT JSON` query-shape dependencies from history/process/RCA repositories, and retaining repository-level domain error translation and deterministic ordering semantics.

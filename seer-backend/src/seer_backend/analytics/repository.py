@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -43,16 +43,23 @@ class ClickHouseProcessMiningRepository:
     password: str
     timeout_seconds: float
     migrations_dir: Path
+    _clickhouse_client: AsyncClickHouseClient | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def _shared_clickhouse_client(self) -> AsyncClickHouseClient:
-        return AsyncClickHouseClient(
-            host=self.host,
-            port=self.port,
-            database=self.database,
-            user=self.user,
-            password=self.password,
-            timeout_seconds=self.timeout_seconds,
-        )
+        if self._clickhouse_client is None:
+            self._clickhouse_client = AsyncClickHouseClient(
+                host=self.host,
+                port=self.port,
+                database=self.database,
+                user=self.user,
+                password=self.password,
+                timeout_seconds=self.timeout_seconds,
+            )
+        return self._clickhouse_client
 
     async def ensure_schema(self) -> None:
         if not self.migrations_dir.exists():
@@ -86,7 +93,6 @@ class ClickHouseProcessMiningRepository:
                 [
                     "SELECT count() AS cnt",
                     f"FROM ({anchor_events_subquery}) AS anchor_events",
-                    "FORMAT JSON",
                 ]
             )
         )
@@ -106,7 +112,6 @@ class ClickHouseProcessMiningRepository:
                 f"INNER JOIN ({anchor_events_subquery}) AS anchor_events",
                 "  ON anchor_events.event_id = l.event_id",
                 relation_filter_clause,
-                "FORMAT JSON",
             ]
         )
         relation_count_rows = await self._select_rows(relation_count_query)
@@ -130,7 +135,6 @@ class ClickHouseProcessMiningRepository:
                 f"INNER JOIN ({anchor_events_subquery}) AS anchor_events",
                 "  ON anchor_events.event_id = e.event_id",
                 "ORDER BY e.occurred_at, e.event_id",
-                "FORMAT JSON",
             ]
         )
 
@@ -148,7 +152,6 @@ class ClickHouseProcessMiningRepository:
                 "  ON anchor_events.event_id = l.event_id",
                 relation_filter_clause,
                 "ORDER BY l.event_id, l.object_type, l.object_ref_hash, l.object_history_id",
-                "FORMAT JSON",
             ]
         )
 
@@ -171,7 +174,6 @@ class ClickHouseProcessMiningRepository:
                 ") AS relation_objects",
                 "  ON relation_objects.object_history_id = o.object_history_id",
                 "ORDER BY o.object_type, o.object_ref_hash, o.object_history_id",
-                "FORMAT JSON",
             ]
         )
 

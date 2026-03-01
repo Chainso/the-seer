@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -109,6 +109,11 @@ class ClickHouseHistoryRepository:
     password: str
     timeout_seconds: float
     migrations_dir: Path
+    _clickhouse_client: AsyncClickHouseClient | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     async def ensure_schema(self) -> None:
         if not self.migrations_dir.exists():
@@ -135,14 +140,16 @@ class ClickHouseHistoryRepository:
         return int(rows[0].get("cnt", 0)) > 0
 
     def _shared_clickhouse_client(self) -> AsyncClickHouseClient:
-        return AsyncClickHouseClient(
-            host=self.host,
-            port=self.port,
-            database=self.database,
-            user=self.user,
-            password=self.password,
-            timeout_seconds=self.timeout_seconds,
-        )
+        if self._clickhouse_client is None:
+            self._clickhouse_client = AsyncClickHouseClient(
+                host=self.host,
+                port=self.port,
+                database=self.database,
+                user=self.user,
+                password=self.password,
+                timeout_seconds=self.timeout_seconds,
+            )
+        return self._clickhouse_client
 
     async def insert_event_history(self, record: EventHistoryRecord) -> None:
         await self._insert_json_each_row(
@@ -249,7 +256,6 @@ FROM event_history
 {where_clause}
 ORDER BY occurred_at, event_id
 LIMIT {int(limit)}
-FORMAT JSON
 """.strip()
         rows = await self._select_rows(query)
         return [_event_row_from_clickhouse(row) for row in rows]
@@ -286,7 +292,6 @@ FROM object_history
 WHERE {' AND '.join(conditions)}
 ORDER BY object_type, object_ref_hash, recorded_at, object_history_id
 LIMIT {int(limit)}
-FORMAT JSON
 """.strip()
         rows = await self._select_rows(query)
         return [_object_row_from_clickhouse(row) for row in rows]
@@ -353,7 +358,6 @@ FROM latest
 {base_latest_cte}
 {latest_select}
 ORDER BY latest_recorded_at DESC, object_type, object_ref_hash
-FORMAT JSON
 """.strip()
             data_rows = await self._select_rows(unbounded_query)
             all_rows = [_latest_object_row_from_clickhouse(row) for row in data_rows]
@@ -372,7 +376,6 @@ FORMAT JSON
 SELECT count() AS cnt
 FROM latest
 {latest_where}
-FORMAT JSON
 """.strip()
         count_rows = await self._select_rows(count_query)
         total = int(count_rows[0].get("cnt", 0)) if count_rows else 0
@@ -384,7 +387,6 @@ FORMAT JSON
 {latest_select}
 ORDER BY latest_recorded_at DESC, object_type, object_ref_hash
 LIMIT {int(limit)} OFFSET {int(offset)}
-FORMAT JSON
 """.strip()
         data_rows = await self._select_rows(data_query)
         return ([_latest_object_row_from_clickhouse(row) for row in data_rows], total)
@@ -436,7 +438,6 @@ SELECT count() AS cnt
 FROM event_object_links AS l
 LEFT JOIN event_history AS e ON e.event_id = l.event_id
 WHERE {' AND '.join(count_conditions)}
-FORMAT JSON
 """.strip()
         count_rows = await self._select_rows(count_query)
         total = int(count_rows[0].get("cnt", 0)) if count_rows else 0
@@ -463,7 +464,6 @@ LEFT JOIN object_history AS o ON o.object_history_id = l.object_history_id
 WHERE {' AND '.join(link_conditions)}
 ORDER BY coalesce(e.occurred_at, l.linked_at) DESC, l.event_id DESC, l.object_history_id DESC
 LIMIT {int(limit)} OFFSET {int(offset)}
-FORMAT JSON
 """.strip()
         data_rows = await self._select_rows(data_query)
         return ([_object_event_row_from_clickhouse(row) for row in data_rows], total)
@@ -506,7 +506,6 @@ LEFT JOIN object_history AS o ON o.object_history_id = l.object_history_id
 {where_clause}
 ORDER BY coalesce(e.occurred_at, l.linked_at), l.event_id, l.object_history_id
 LIMIT {int(limit)}
-FORMAT JSON
 """.strip()
         rows = await self._select_rows(query)
         return [_relation_row_from_clickhouse(row) for row in rows]

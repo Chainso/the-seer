@@ -6,10 +6,12 @@ from seer_backend.clickhouse.errors import (
     ClickHouseCommandExecutionError,
     ClickHouseQueryExecutionError,
 )
+from seer_backend.clickhouse.sqlalchemy import ClickHouseSqlAlchemyCoreClient
 
 __all__ = [
     "AsyncClickHouseClient",
     "ClickHouseClientError",
     "ClickHouseCommandExecutionError",
     "ClickHouseQueryExecutionError",
+    "ClickHouseSqlAlchemyCoreClient",
 ]

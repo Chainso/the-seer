@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
@@ -44,16 +44,23 @@ class ClickHouseRootCauseRepository:
     password: str
     timeout_seconds: float
     migrations_dir: Path
+    _clickhouse_client: AsyncClickHouseClient | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def _shared_clickhouse_client(self) -> AsyncClickHouseClient:
-        return AsyncClickHouseClient(
-            host=self.host,
-            port=self.port,
-            database=self.database,
-            user=self.user,
-            password=self.password,
-            timeout_seconds=self.timeout_seconds,
-        )
+        if self._clickhouse_client is None:
+            self._clickhouse_client = AsyncClickHouseClient(
+                host=self.host,
+                port=self.port,
+                database=self.database,
+                user=self.user,
+                password=self.password,
+                timeout_seconds=self.timeout_seconds,
+            )
+        return self._clickhouse_client
 
     async def ensure_schema(self) -> None:
         if not self.migrations_dir.exists():
@@ -168,7 +175,6 @@ class ClickHouseRootCauseRepository:
                 f"  AND e.occurred_at >= {_datetime_literal(payload.start_at)}",
                 f"  AND e.occurred_at <= {_datetime_literal(payload.end_at)}",
                 "ORDER BY l.object_ref_hash, l.object_ref_canonical",
-                "FORMAT JSON",
             ]
         )
         rows = await self._select_rows(query)
@@ -201,7 +207,6 @@ class ClickHouseRootCauseRepository:
                     f"  {_instance_tuple_predicate(chunk)}",
                     f"  AND e.occurred_at >= {_datetime_literal(payload.start_at)}",
                     f"  AND e.occurred_at <= {_datetime_literal(payload.end_at)}",
-                    "FORMAT JSON",
                 ]
             )
             rows = await self._select_rows(query)
@@ -230,7 +235,6 @@ class ClickHouseRootCauseRepository:
                     "FROM event_object_links",
                     f"WHERE event_id IN ({', '.join(_uuid_literal(value) for value in chunk)})",
                     "ORDER BY event_id, object_type, object_ref_hash, object_history_id",
-                    "FORMAT JSON",
                 ]
             )
             rows = await self._select_rows(query)
@@ -255,7 +259,6 @@ class ClickHouseRootCauseRepository:
                     "FROM event_history",
                     f"WHERE event_id IN ({', '.join(_uuid_literal(value) for value in chunk)})",
                     "ORDER BY occurred_at, event_id",
-                    "FORMAT JSON",
                 ]
             )
             rows = await self._select_rows(query)
@@ -287,7 +290,6 @@ class ClickHouseRootCauseRepository:
                     "WHERE",
                     f"  object_history_id IN ({ids_clause})",
                     "ORDER BY object_type, object_ref_hash, recorded_at, object_history_id",
-                    "FORMAT JSON",
                 ]
             )
             rows = await self._select_rows(query)
