@@ -308,8 +308,21 @@ class ClickHouseProcessMiningRepository:
         if include_object_types:
             relations_stmt = relations_stmt.where(links.c.object_type.in_(include_object_types))
 
+        objects_stmt = (
+            select(
+                links.c.object_type.label("ocel_type"),
+                links.c.object_ref_hash.label("object_ref_hash"),
+            )
+            .select_from(links.join(anchor_events, anchor_events.c.event_id == links.c.event_id))
+            .distinct()
+            .order_by(links.c.object_type, links.c.object_ref_hash)
+        )
+        if include_object_types:
+            objects_stmt = objects_stmt.where(links.c.object_type.in_(include_object_types))
+
         event_frame = await self._select_dataframe(events_stmt)
         relation_frame = await self._select_dataframe(relations_stmt)
+        object_frame = await self._select_dataframe(objects_stmt)
 
         event_frame = event_frame.rename(
             columns={
@@ -332,14 +345,17 @@ class ClickHouseProcessMiningRepository:
             + relation_frame["object_ref_hash"].astype(str)
         )
         relation_frame = relation_frame.drop(columns=["object_ref_hash"])
-        object_frame = relation_frame[["ocel:oid", "ocel:type"]].drop_duplicates(
-            subset=["ocel:oid", "ocel:type"],
-            keep="first",
+        object_frame = object_frame.rename(
+            columns={
+                "ocel_type": "ocel:type",
+            }
         )
-        object_frame = object_frame.sort_values(
-            ["ocel:type", "ocel:oid"],
-            kind="mergesort",
-        ).reset_index(drop=True)
+        object_frame["ocel:oid"] = (
+            object_frame["ocel:type"].astype(str)
+            + ":"
+            + object_frame["object_ref_hash"].astype(str)
+        )
+        object_frame = object_frame.drop(columns=["object_ref_hash"])
 
         return ExtractedOcdfgFrames(
             events=event_frame,

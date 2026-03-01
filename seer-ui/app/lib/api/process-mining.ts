@@ -16,6 +16,8 @@ import type {
   ProcessTraceDrilldownResponseContract,
 } from '@/app/types/process-mining';
 
+export type { ProcessMineResponseContract } from '@/app/types/process-mining';
+
 export interface ProcessMiningRequest {
   modelUri?: string;
   modelUris?: string[];

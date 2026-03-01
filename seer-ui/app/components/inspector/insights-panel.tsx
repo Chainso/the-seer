@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
@@ -14,11 +14,11 @@ interface InsightsPanelProps {
 }
 
 export function InsightsPanel({ defaultTab = "process-insights" }: InsightsPanelProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
 
   if (!mounted) {
     return <div className="h-11 w-full max-w-[480px] animate-pulse rounded-lg bg-muted" />;

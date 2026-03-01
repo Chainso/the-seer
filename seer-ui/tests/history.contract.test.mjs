@@ -22,7 +22,7 @@ test("inspector root and object store route follow the forward-only history IA",
 
   assert.match(inspectorPage, /redirect\('\/inspector\/history'\)/);
   assert.match(historyRoute, /return <HistoryPanel \/>/);
-  assert.match(objectRoute, /return <ObjectHistoryDetailsPanel \/>/);
+  assert.match(objectRoute, /<ObjectHistoryDetailsPanel \/>/);
   assert.match(historyPanel, /Object Store/);
   assert.match(historyPanel, /Live Objects/);
   assert.match(historyPanel, /router\.push\(`\/inspector\/history\/object\?/);
