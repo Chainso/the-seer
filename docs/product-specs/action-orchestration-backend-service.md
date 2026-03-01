@@ -16,6 +16,28 @@ This spec covers:
 3. completion/failure lifecycle behavior with retries/dead-letter transitions,
 4. status visibility for UI/operator surfaces.
 
+## Who Interacts With This
+
+1. Submitter client: any API client that creates actions for a user queue.
+2. Executor instance: a user-owned worker process that polls (`claim`) and executes actions.
+3. Operator/UI: reads action state via status/list/SSE endpoints.
+
+## End-To-End Interaction Model
+
+1. Submitter calls `POST /api/v1/actions/submit`.
+2. User-owned instance polls `POST /api/v1/actions/claim`.
+3. Backend leases eligible actions to the polling instance for a bounded lease window.
+4. Instance executes action payload and reports terminal attempt outcome via:
+   - `POST /api/v1/actions/{action_id}/complete`, or
+   - `POST /api/v1/actions/{action_id}/fail`.
+5. If lease expires without callback, dedicated sweeper runtime reconciles:
+   - to `retry_wait` (attempt budget remaining), or
+   - to `dead_letter` (attempt budget exhausted).
+6. UI/operator clients track state through:
+   - `GET /api/v1/actions/{action_id}`,
+   - `GET /api/v1/actions`,
+   - `GET /api/v1/actions/{action_id}/stream` (SSE).
+
 ## Canonical Lifecycle
 
 1. `queued`
@@ -48,6 +70,12 @@ Notes:
 5. Claimed actions are leased to the caller instance with `lease_expires_at` and incremented `attempt_count`.
 6. Draining instances (`status=draining`) receive zero new claims.
 
+## Instance Heartbeat Flow
+
+1. Instance may call `POST /api/v1/actions/instances/heartbeat` to set liveness/capacity/metadata explicitly.
+2. Claim requests also refresh liveness implicitly.
+3. `status=draining` should be set before instance shutdown to stop new claims.
+
 ## Lifecycle Callback Flow
 
 1. Lease owner calls `POST /api/v1/actions/{action_id}/complete` to complete action.
@@ -66,6 +94,71 @@ Notes:
    - `snapshot` as initial state,
    - `update` when tracked status token changes,
    - `terminal` once terminal state is reached.
+
+## API Usage Playbook (Client Contract)
+
+1. Submit action
+
+```bash
+curl -sS -X POST http://localhost:8000/api/v1/actions/submit \
+  -H 'content-type: application/json' \
+  -d '{
+    "user_id": "user-123",
+    "action_uri": "urn:seer:action:notify-customer",
+    "payload": {"ticket_id": "T-9001"},
+    "idempotency_key": "notify-T-9001",
+    "priority": 5
+  }'
+```
+
+2. Poll for work from an instance
+
+```bash
+curl -sS -X POST http://localhost:8000/api/v1/actions/claim \
+  -H 'content-type: application/json' \
+  -d '{
+    "user_id": "user-123",
+    "instance_id": "instance-a",
+    "capacity": 4,
+    "max_actions": 2
+  }'
+```
+
+3. Complete successful execution
+
+```bash
+curl -sS -X POST http://localhost:8000/api/v1/actions/<action_id>/complete \
+  -H 'content-type: application/json' \
+  -d '{"instance_id":"instance-a"}'
+```
+
+4. Report failure
+
+```bash
+curl -sS -X POST http://localhost:8000/api/v1/actions/<action_id>/fail \
+  -H 'content-type: application/json' \
+  -d '{
+    "instance_id":"instance-a",
+    "error_code":"upstream_timeout",
+    "error_detail":"dependency timeout after 10s"
+  }'
+```
+
+5. Read status and stream updates
+
+```bash
+curl -sS "http://localhost:8000/api/v1/actions/<action_id>"
+curl -sS "http://localhost:8000/api/v1/actions?user_id=user-123&status=retry_wait&page=1&size=20"
+curl -N "http://localhost:8000/api/v1/actions/<action_id>/stream"
+```
+
+## Executor Responsibilities
+
+1. Treat `action_id` as the execution idempotency key for side effects.
+2. Call exactly one terminal callback per attempt (`complete` or `fail`) before lease expiry.
+3. Use canonical failure codes only for `/fail`.
+4. Handle duplicate deliveries safely (at-least-once contract).
+5. Respect `status=draining` operationally before shutdown.
 
 ## Failure Taxonomy (Accepted `error_code`)
 
@@ -97,7 +190,7 @@ Terminal:
 2. Unknown/non-executable action URIs are rejected at submit with actionable `422` response.
 3. Invalid payload fields/cardinality/type are rejected at submit with actionable `422` response.
 4. Competing claimers cannot hold the same active lease simultaneously.
-5. Expired leases are reclaimable, preserving at-least-once delivery behavior.
+5. Expired leases are proactively reconciled by sweeper and reclaimable through retry eligibility, preserving at-least-once delivery behavior.
 6. Complete/fail callbacks are accepted only from current lease owner while lease is active.
 7. Retry progression is deterministic and reaches `dead_letter` when retryable failures exhaust max attempts.
 8. Status list/detail/stream contracts expose consistent lifecycle state transitions.
@@ -106,5 +199,5 @@ Terminal:
 
 1. Exactly-once side-effect guarantees (executor must dedupe by `action_id`).
 2. Push-first delivery/webhook orchestration as canonical path.
-3. Dedicated sweeper/maintenance runtime service in this phase.
+3. Platform-wide auth policy finalization (auth seams exist; enforcement model is tracked separately).
 4. Broker-first queue architecture (Kafka/SQS/Celery) in this phase.
