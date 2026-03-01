@@ -35,11 +35,20 @@ and are applied lazily on first history API usage.
 ## Phase 3 Process Mining APIs
 
 1. `POST /api/v1/process/mine`
-2. `GET /api/v1/process/traces`
+2. `POST /api/v1/process/ocdfg/mine`
+3. `GET /api/v1/process/traces`
 
 Mining requests require `anchor_object_type`, `start_at`, and `end_at`.
 Responses include the UI payload fields (`nodes`, `edges`, `object_types`, `path_stats`)
 plus trace drill-down handles for model elements.
+
+`POST /api/v1/process/ocdfg/mine` returns OC-DFG payload fields (`nodes`, `edges`,
+`start_activities`, `end_activities`, `object_types`, `warnings`) with trace handles
+compatible with `GET /api/v1/process/traces`.
+
+OC-DFG extraction uses the ClickHouse dataframe path (`select_dataframe`) with Arrow-backed
+`chdb.datastore` frames (`convert_dtypes(dtype_backend="pyarrow")`) with datastore-native
+transforms before OCEL handoff (`to_df()`) for pm4py OC-DFG discovery.
 
 ## Phase 4 Root-Cause Analysis APIs
 

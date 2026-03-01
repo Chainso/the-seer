@@ -41,6 +41,9 @@ class AsyncClickHouseClient:
     async def select_rows(self, query: str | Any) -> list[dict[str, Any]]:
         return await asyncio.to_thread(self._core_client.select_rows, query)
 
+    async def select_dataframe(self, query: str | Any) -> Any:
+        return await asyncio.to_thread(self._core_client.select_dataframe, query)
+
     async def execute(
         self,
         statement: str | Any,

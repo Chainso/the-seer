@@ -16,6 +16,8 @@ dependencies = [
   "pm4py>=2.7.19.8",
   "clickhouse-connect>=0.13.0",
   "sqlalchemy>=2.0.47,<3",
+  "chdb>=4.0.2",
+  "pyarrow>=23.0.1",
 ]
 
 [project.optional-dependencies]

@@ -6,6 +6,8 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from seer_backend.analytics import service as process_service_module
+from seer_backend.analytics.errors import ProcessMiningDependencyUnavailableError
 from seer_backend.analytics.repository import InMemoryProcessMiningRepository
 from seer_backend.analytics.service import OcpnMiningWrapper, ProcessMiningService
 from seer_backend.history.repository import InMemoryHistoryRepository
@@ -301,3 +303,135 @@ def test_process_mining_no_data_returns_not_found() -> None:
 
     assert response.status_code == 404
     assert "no process-mining data" in response.text
+
+
+def test_ocdfg_mining_returns_ui_payload_and_trace_handles() -> None:
+    client = build_client()
+    _seed_phase2_style_dataset(client)
+
+    response = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["nodes"]
+    assert body["edges"]
+    assert body["start_activities"]
+    assert body["end_activities"]
+    assert _ORDER_URI in body["object_types"]
+    assert all(node["trace_handle"] for node in body["nodes"])
+    assert all(edge["trace_handle"] for edge in body["edges"])
+    assert all(item["trace_handle"] for item in body["start_activities"])
+    assert all(item["trace_handle"] for item in body["end_activities"])
+
+    edge_handle = body["edges"][0]["trace_handle"]
+    drilldown = client.get("/api/v1/process/traces", params={"handle": edge_handle, "limit": 10})
+    assert drilldown.status_code == 200, drilldown.text
+    drilldown_body = drilldown.json()
+    assert drilldown_body["matched_count"] >= 1
+    assert drilldown_body["traces"]
+
+
+def test_ocdfg_mining_is_deterministic_for_same_snapshot() -> None:
+    client = build_client()
+    _seed_phase2_style_dataset(client)
+
+    payload = {
+        "anchor_object_type": _ORDER_URI,
+        "start_at": "2026-02-22T09:00:00Z",
+        "end_at": "2026-02-22T11:00:00Z",
+    }
+
+    first = client.post("/api/v1/process/ocdfg/mine", json=payload)
+    second = client.post("/api/v1/process/ocdfg/mine", json=payload)
+
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+
+    first_body = first.json()
+    second_body = second.json()
+
+    assert first_body["nodes"] == second_body["nodes"]
+    assert first_body["edges"] == second_body["edges"]
+    assert first_body["start_activities"] == second_body["start_activities"]
+    assert first_body["end_activities"] == second_body["end_activities"]
+    assert first_body["object_types"] == second_body["object_types"]
+    assert first_body["warnings"] == second_body["warnings"]
+
+
+def test_ocdfg_mining_validation_errors_are_actionable() -> None:
+    client = build_client()
+
+    response = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": "2026-02-22T12:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "start_at must be earlier than end_at" in response.text
+
+
+def test_ocdfg_mining_oversized_scope_returns_guidance() -> None:
+    client = build_client()
+    _seed_phase2_style_dataset(client)
+
+    response = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+            "max_events": 1,
+        },
+    )
+
+    assert response.status_code == 413
+    assert "narrow time window" in response.json()["detail"]
+
+
+def test_ocdfg_mining_no_data_returns_not_found() -> None:
+    client = build_client()
+
+    response = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": datetime(2026, 2, 22, 0, 0, tzinfo=UTC).isoformat(),
+            "end_at": datetime(2026, 2, 22, 1, 0, tzinfo=UTC).isoformat(),
+        },
+    )
+
+    assert response.status_code == 404
+    assert "no process-mining data" in response.text
+
+
+def test_ocdfg_returns_503_when_pm4py_runtime_is_unavailable(monkeypatch) -> None:
+    client = build_client()
+    _seed_phase2_style_dataset(client)
+
+    def _missing_pm4py() -> None:
+        raise ProcessMiningDependencyUnavailableError("pm4py is required for OC-DFG mining")
+
+    monkeypatch.setattr(process_service_module, "_load_pm4py_ocdfg_apply", _missing_pm4py)
+
+    response = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+        },
+    )
+
+    assert response.status_code == 503
+    assert "pm4py is required for OC-DFG mining" in response.text

@@ -53,6 +53,18 @@ class ClickHouseSqlAlchemyCoreClient:
         except Exception as exc:
             raise ClickHouseQueryExecutionError(self._build_error_message("query", exc)) from exc
 
+    def select_dataframe(self, query: str | Any) -> Any:
+        pd = _load_pandas()
+        try:
+            with self._engine_instance().connect() as connection:
+                frame = pd.read_sql(
+                    _to_statement(query, strip_format_json=True),
+                    con=connection,
+                )
+                return frame.convert_dtypes(dtype_backend="pyarrow")
+        except Exception as exc:
+            raise ClickHouseQueryExecutionError(self._build_error_message("query", exc)) from exc
+
     def execute(self, statement: str | Any) -> None:
         try:
             # ClickHouse does not expose transactional guarantees through this path.
@@ -150,3 +162,11 @@ def _to_statement(value: str | Any, *, strip_format_json: bool) -> Any:
         statement = _strip_format_json_clause(value) if strip_format_json else value
         return text(statement)
     return value
+
+
+def _load_pandas() -> Any:
+    try:
+        from chdb import datastore as pd
+    except ImportError as exc:  # pragma: no cover - environment dependency
+        raise RuntimeError("chdb datastore is required for dataframe query paths") from exc
+    return pd

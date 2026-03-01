@@ -14,6 +14,7 @@ from sqlalchemy import column, func, select, table
 
 from seer_backend.analytics.errors import ProcessMiningError, ProcessMiningLimitExceededError
 from seer_backend.analytics.models import (
+    ExtractedOcdfgFrames,
     ExtractedProcessFrames,
     ProcessEventRow,
     ProcessMiningRequest,
@@ -61,6 +62,14 @@ class ProcessMiningRepository(Protocol):
         max_events: int,
         max_relations: int,
     ) -> ExtractedProcessFrames: ...
+
+    async def extract_ocdfg_frames(
+        self,
+        payload: ProcessMiningRequest,
+        *,
+        max_events: int,
+        max_relations: int,
+    ) -> ExtractedOcdfgFrames: ...
 
 
 @dataclass(slots=True)
@@ -228,9 +237,127 @@ class ClickHouseProcessMiningRepository:
             relations=relation_rows,
         )
 
+    async def extract_ocdfg_frames(
+        self,
+        payload: ProcessMiningRequest,
+        *,
+        max_events: int,
+        max_relations: int,
+    ) -> ExtractedOcdfgFrames:
+        include_object_types = payload.include_object_types
+        anchor_events = _anchor_events_subquery(payload)
+        events = _EVENT_HISTORY.alias("e")
+        links = _EVENT_OBJECT_LINKS.alias("l")
+
+        event_count_stmt = select(func.count().label("cnt")).select_from(anchor_events)
+        event_count_rows = await self._select_rows(event_count_stmt)
+        event_count = int(event_count_rows[0].get("cnt", 0)) if event_count_rows else 0
+        if event_count > max_events:
+            raise ProcessMiningLimitExceededError(
+                "process mining scope is too large: "
+                f"{event_count} events exceeds max_events={max_events}; "
+                "narrow time window or object-type filters"
+            )
+
+        relation_source = links.join(anchor_events, anchor_events.c.event_id == links.c.event_id)
+        relation_count_stmt = select(func.count().label("cnt")).select_from(relation_source)
+        if include_object_types:
+            relation_count_stmt = relation_count_stmt.where(
+                links.c.object_type.in_(include_object_types)
+            )
+        relation_count_rows = await self._select_rows(relation_count_stmt)
+        relation_count = int(relation_count_rows[0].get("cnt", 0)) if relation_count_rows else 0
+        if relation_count > max_relations:
+            raise ProcessMiningLimitExceededError(
+                "process mining scope is too large: "
+                f"{relation_count} relations exceeds max_relations={max_relations}; "
+                "narrow time window or include_object_types"
+            )
+
+        events_stmt = (
+            select(
+                events.c.event_id.label("ocel_eid"),
+                events.c.event_type.label("ocel_activity"),
+                events.c.occurred_at.label("ocel_timestamp"),
+            )
+            .select_from(events.join(anchor_events, anchor_events.c.event_id == events.c.event_id))
+            .order_by(events.c.occurred_at, events.c.event_id)
+        )
+
+        relations_stmt = (
+            select(
+                links.c.event_id.label("ocel_eid"),
+                events.c.event_type.label("ocel_activity"),
+                events.c.occurred_at.label("ocel_timestamp"),
+                links.c.object_type.label("ocel_type"),
+                links.c.object_ref_hash.label("object_ref_hash"),
+            )
+            .select_from(
+                links.join(anchor_events, anchor_events.c.event_id == links.c.event_id).join(
+                    events,
+                    events.c.event_id == links.c.event_id,
+                )
+            )
+            .order_by(
+                events.c.occurred_at,
+                links.c.event_id,
+                links.c.object_type,
+                links.c.object_ref_hash,
+            )
+        )
+        if include_object_types:
+            relations_stmt = relations_stmt.where(links.c.object_type.in_(include_object_types))
+
+        event_frame = await self._select_dataframe(events_stmt)
+        relation_frame = await self._select_dataframe(relations_stmt)
+
+        event_frame = event_frame.rename(
+            columns={
+                "ocel_eid": "ocel:eid",
+                "ocel_activity": "ocel:activity",
+                "ocel_timestamp": "ocel:timestamp",
+            }
+        )
+        relation_frame = relation_frame.rename(
+            columns={
+                "ocel_eid": "ocel:eid",
+                "ocel_activity": "ocel:activity",
+                "ocel_timestamp": "ocel:timestamp",
+                "ocel_type": "ocel:type",
+            }
+        )
+        relation_frame["ocel:oid"] = (
+            relation_frame["ocel:type"].astype(str)
+            + ":"
+            + relation_frame["object_ref_hash"].astype(str)
+        )
+        relation_frame = relation_frame.drop(columns=["object_ref_hash"])
+        object_frame = relation_frame[["ocel:oid", "ocel:type"]].drop_duplicates(
+            subset=["ocel:oid", "ocel:type"],
+            keep="first",
+        )
+        object_frame = object_frame.sort_values(
+            ["ocel:type", "ocel:oid"],
+            kind="mergesort",
+        ).reset_index(drop=True)
+
+        return ExtractedOcdfgFrames(
+            events=event_frame,
+            objects=object_frame,
+            relations=relation_frame,
+        )
+
     async def _select_rows(self, query: Any) -> list[dict[str, Any]]:
         try:
             return await self._shared_clickhouse_client().select_rows(query)
+        except ClickHouseClientError as exc:
+            raise ProcessMiningError(
+                f"ClickHouse failed to execute ClickHouse query: {exc}"
+            ) from exc
+
+    async def _select_dataframe(self, query: Any) -> Any:
+        try:
+            return await self._shared_clickhouse_client().select_dataframe(query)
         except ClickHouseClientError as exc:
             raise ProcessMiningError(
                 f"ClickHouse failed to execute ClickHouse query: {exc}"
@@ -389,6 +516,70 @@ class InMemoryProcessMiningRepository:
             relations=selected_relations,
         )
 
+    async def extract_ocdfg_frames(
+        self,
+        payload: ProcessMiningRequest,
+        *,
+        max_events: int,
+        max_relations: int,
+    ) -> ExtractedOcdfgFrames:
+        frames = await self.extract_frames(
+            payload,
+            max_events=max_events,
+            max_relations=max_relations,
+        )
+
+        event_rows = [
+            {
+                "ocel:eid": str(row.event_id),
+                "ocel:activity": row.event_type,
+                "ocel:timestamp": _ensure_utc(row.occurred_at),
+            }
+            for row in frames.events
+        ]
+        event_index = {str(row.event_id): row for row in frames.events}
+        relation_rows: list[dict[str, Any]] = []
+        object_pairs: set[tuple[str, str]] = set()
+        for relation in frames.relations:
+            event = event_index.get(str(relation.event_id))
+            if event is None:
+                continue
+            object_id = _ocdfg_object_id(relation.object_type, relation.object_ref_hash)
+            object_pairs.add((relation.object_type, object_id))
+            relation_rows.append(
+                {
+                    "ocel:eid": str(relation.event_id),
+                    "ocel:activity": event.event_type,
+                    "ocel:timestamp": _ensure_utc(event.occurred_at),
+                    "ocel:oid": object_id,
+                    "ocel:type": relation.object_type,
+                }
+            )
+        object_rows = [
+            {
+                "ocel:oid": object_id,
+                "ocel:type": object_type,
+            }
+            for object_type, object_id in sorted(object_pairs)
+        ]
+        event_frame = _to_arrow_dataframe(
+            event_rows,
+            columns=["ocel:eid", "ocel:activity", "ocel:timestamp"],
+        )
+        relation_frame = _to_arrow_dataframe(
+            relation_rows,
+            columns=["ocel:eid", "ocel:activity", "ocel:timestamp", "ocel:oid", "ocel:type"],
+        )
+        object_frame = _to_arrow_dataframe(
+            object_rows,
+            columns=["ocel:oid", "ocel:type"],
+        )
+        return ExtractedOcdfgFrames(
+            events=event_frame,
+            objects=object_frame,
+            relations=relation_frame,
+        )
+
 
 def _anchor_events_subquery(payload: ProcessMiningRequest) -> Any:
     links = _EVENT_OBJECT_LINKS.alias("l")
@@ -447,6 +638,10 @@ def _relation_row_from_clickhouse(row: dict[str, Any]) -> ProcessRelationRow:
     )
 
 
+def _ocdfg_object_id(object_type: str, object_ref_hash: int) -> str:
+    return f"{object_type}:{object_ref_hash}"
+
+
 def _parse_clickhouse_datetime(value: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -474,6 +669,20 @@ def _to_optional_string(raw: Any) -> str | None:
         return None
     value = str(raw)
     return value if value else None
+
+
+def _to_arrow_dataframe(rows: list[dict[str, Any]], *, columns: list[str]) -> Any:
+    pd = _load_pandas()
+    frame = pd.DataFrame(rows, columns=columns)
+    return frame.convert_dtypes(dtype_backend="pyarrow")
+
+
+def _load_pandas() -> Any:
+    try:
+        from chdb import datastore as pd
+    except ImportError as exc:
+        raise ProcessMiningError("chdb datastore is required for OC-DFG extraction") from exc
+    return pd
 
 
 def _ensure_utc(value: datetime) -> datetime:

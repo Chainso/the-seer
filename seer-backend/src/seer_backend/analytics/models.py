@@ -96,6 +96,52 @@ class ProcessMiningResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class OcdfgMiningRequest(ProcessMiningRequest):
+    """Input contract for OC-DFG process mining runs."""
+
+
+class OcdfgNode(BaseModel):
+    id: str
+    activity: str
+    count: int = Field(ge=0)
+    trace_handle: str
+
+
+class OcdfgEdge(BaseModel):
+    id: str
+    source: str
+    target: str
+    source_activity: str
+    target_activity: str
+    object_type: str
+    count: int = Field(ge=0)
+    share: float = Field(ge=0.0, le=1.0)
+    p50_seconds: float | None = Field(default=None, ge=0.0)
+    p95_seconds: float | None = Field(default=None, ge=0.0)
+    trace_handle: str
+
+
+class OcdfgBoundaryActivity(BaseModel):
+    id: str
+    object_type: str
+    activity: str
+    count: int = Field(ge=0)
+    trace_handle: str
+
+
+class OcdfgMiningResponse(BaseModel):
+    run_id: str
+    anchor_object_type: str
+    start_at: datetime
+    end_at: datetime
+    nodes: list[OcdfgNode] = Field(default_factory=list)
+    edges: list[OcdfgEdge] = Field(default_factory=list)
+    start_activities: list[OcdfgBoundaryActivity] = Field(default_factory=list)
+    end_activities: list[OcdfgBoundaryActivity] = Field(default_factory=list)
+    object_types: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class ProcessTraceRecord(BaseModel):
     object_type: str
     object_ref_hash: int
@@ -149,6 +195,13 @@ class ExtractedProcessFrames:
     events: list[ProcessEventRow]
     objects: list[ProcessObjectRow]
     relations: list[ProcessRelationRow]
+
+
+@dataclass(slots=True)
+class ExtractedOcdfgFrames:
+    events: Any
+    objects: Any
+    relations: Any
 
 
 @dataclass(slots=True)

@@ -11,6 +11,29 @@
 1. Previously blocked on `docs/exec-plans/completed/clickhouse-connect-migration.md`.
 2. Unblocked on 2026-03-01 after migration Phase 5 validation passed (`pytest -q` full suite + `ruff check src tests`) and plan status moved to completed.
 
+## Progress Log
+
+### 2026-03-01 - Phase A Backend (Completed)
+
+1. Added `POST /api/v1/process/ocdfg/mine` and OC-DFG request/response contracts.
+2. Implemented OC-DFG extraction in process-mining repository with ClickHouse dataframe runtime (`select_dataframe`) and Arrow-backed `chdb.datastore` frames.
+3. Implemented OC-DFG mining service path:
+   - Arrow-backed frame normalization,
+   - datastore-native transforms with OCEL handoff via `to_df()`,
+   - pm4py OC-DFG discovery + deterministic normalization for nodes/edges/start/end payload arrays,
+   - trace-handle generation compatible with existing `/api/v1/process/traces`.
+4. Extended trace selector compatibility to include OC-DFG `start` and `end` selectors.
+5. Added backend tests for OC-DFG contract, determinism, and error paths.
+6. Updated backend README process API documentation for OC-DFG endpoint and Arrow-backed extraction path.
+
+## Decision Log
+
+### 2026-03-01
+
+1. OC-DFG primary extraction path is dataframe-first: ClickHouse query -> Arrow-backed `chdb.datastore` frames via `select_dataframe`; row-by-row extraction is not the primary OC-DFG path.
+2. Arrow-backed datastore frames are kept as the primary transform substrate; pm4py OCEL handoff uses datastore `to_df()` only at discovery boundary while preserving deterministic sorting/schema normalization.
+3. OC-DFG drill-down uses existing stateless trace handles and `/api/v1/process/traces`; no separate trace endpoint is introduced.
+
 ## Objective
 
 Make Object-Centric Directly-Follows Graphs (OC-DFG) the first process diagram in the Inspector Insights experience, powered by a new backend endpoint that runs `pm4py` OC-DFG discovery from ClickHouse-extracted data via Polars-to-pandas transformation.

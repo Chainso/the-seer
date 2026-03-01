@@ -16,6 +16,8 @@ from seer_backend.analytics.errors import (
     ProcessMiningValidationError,
 )
 from seer_backend.analytics.models import (
+    OcdfgMiningRequest,
+    OcdfgMiningResponse,
     ProcessMiningRequest,
     ProcessMiningResponse,
     ProcessTraceDrilldownResponse,
@@ -84,6 +86,26 @@ async def mine_process(
     service = get_process_service(request)
     try:
         return await service.mine(payload)
+    except ProcessMiningValidationError as exc:
+        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    except ProcessMiningLimitExceededError as exc:
+        raise _http_error(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(exc)) from exc
+    except ProcessMiningNoDataError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except ProcessMiningDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ProcessMiningError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@router.post("/ocdfg/mine", response_model=OcdfgMiningResponse)
+async def mine_ocdfg_process(
+    payload: OcdfgMiningRequest,
+    request: Request,
+) -> OcdfgMiningResponse:
+    service = get_process_service(request)
+    try:
+        return await service.mine_ocdfg(payload)
     except ProcessMiningValidationError as exc:
         raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     except ProcessMiningLimitExceededError as exc:
