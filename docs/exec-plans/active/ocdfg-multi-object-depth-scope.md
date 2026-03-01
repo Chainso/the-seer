@@ -143,6 +143,15 @@ Validation:
 4. Added phase tests proving multi-object inclusion changes mined output for both endpoints.
 5. Ran Phase 1 validation gates for targeted lint and tests; both passed.
 
+### 2026-03-01 - Phase 2 Completed (Frontend Depth Resolver + Included Objects Display)
+
+1. Added a Process Mining depth dropdown (`depth=1` default) and wired it into the shared scope filters surface.
+2. Implemented frontend-owned depth scope resolution from ontology relationships using event-sharing semantics derived from ontology graph edges.
+3. Changed Process Mining requests to always pass explicit resolved `modelUris[]` scope for both OC-DFG and OCPN calls.
+4. Added a visible included-object-models scope panel that updates immediately when anchor model or depth changes.
+5. Kept OC-DFG first and OCPN/BPMN as secondary panels; no regressions in primary/secondary panel ordering or labels.
+6. Ran Phase 2 validation gates (`lint`, contract tests, build); all passed.
+
 ## Decision Log
 
 ### 2026-03-01
@@ -154,6 +163,9 @@ Validation:
    - `include_object_types[]` when provided (with anchor normalization by request model), else
    - `[anchor_object_type]` fallback for anchor-only behavior.
 5. Event selection and relation/object extraction must use the same effective object-type scope in both OCPN and OC-DFG paths.
+6. Frontend depth traversal is a bounded breadth-first expansion over object models, where model adjacency is defined by shared event references in ontology relationships.
+7. Event-sharing scope resolution includes direct event-to-model links and action-produced-event propagation so derived references stay aligned with ontology semantics.
+8. Process Mining UI now treats explicit multi-object scope as the default request shape, replacing anchor-only frontend request behavior.
 
 ## Required Docs Updates In This Plan
 

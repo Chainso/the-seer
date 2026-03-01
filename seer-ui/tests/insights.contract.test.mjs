@@ -42,6 +42,7 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
   assert.match(processApi, /max_events/);
   assert.match(processApi, /max_relations/);
   assert.match(processApi, /max_traces_per_handle/);
+  assert.match(processApi, /include_object_types/);
   assert.match(processApi, /\/process\/ocdfg\/mine/);
   assert.match(rootCauseApi, /\/root-cause\/run/);
   assert.match(rootCauseApi, /\/root-cause\/evidence/);
@@ -68,14 +69,20 @@ test("process insights panel consumes shared ontology display resolver contract"
 
 test("process mining panel consumes shared ontology display resolver contract", () => {
   const processMiningPanel = read("app/components/inspector/process-mining-panel.tsx");
+  const processApi = read("app/lib/api/process-mining.ts");
 
   assert.match(processMiningPanel, /useOntologyDisplay/);
+  assert.match(processMiningPanel, /buildReferenceEdges/);
   assert.match(processMiningPanel, /\.displayObjectType\(/);
   assert.match(processMiningPanel, /\.displayEventType\(/);
   assert.match(processMiningPanel, /catalog\.objectModels/);
+  assert.match(processMiningPanel, /Depth/);
+  assert.match(processMiningPanel, /Included object models/);
+  assert.match(processMiningPanel, /modelUris:\s*resolvedModelUris/);
   assert.match(processMiningPanel, /Object-Centric Directly-Follows Graph \(Primary\)/);
   assert.match(processMiningPanel, /Object-Centric Petri Net \(Secondary\)/);
   assert.match(processMiningPanel, /OC-DFG First/);
+  assert.match(processApi, /include_object_types:\s*includeObjectTypes/);
   assert.match(processMiningPanel, /getOcdfgGraph/);
   assert.doesNotMatch(processMiningPanel, /const iriLocalName =/);
   assert.doesNotMatch(processMiningPanel, /const ontologyNodeName =/);

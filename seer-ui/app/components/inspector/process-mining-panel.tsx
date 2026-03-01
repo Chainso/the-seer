@@ -8,10 +8,14 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 
 import { getOcdfgGraph, getOcpnGraph, toOcpnGraphFromOcdfg } from "@/app/lib/api/process-mining";
 import { useOntologyDisplay } from "@/app/lib/ontology-display";
+import { buildReferenceEdges } from "@/app/components/ontology/graph-reference-edges";
+import { useOntologyGraphContext } from "@/app/components/providers/ontology-graph-provider";
+import type { OntologyGraph } from "@/app/types/ontology";
 import type { OcdfgGraph, OcpnGraph } from "@/app/types/process-mining";
 import { OcpnGraph as OcpnGraphView } from "./ocpn-graph";
 import { BpmnGraph as BpmnGraphView } from "./bpmn-graph";
@@ -175,9 +179,145 @@ const toDatetimeLocalValue = (date: Date): string => {
   return withOffset.toISOString().slice(0, 16);
 };
 
+const EVENT_NODE_LABELS = new Set(["Event", "Signal", "Transition"]);
+const ACTION_NODE_LABELS = new Set(["Action", "Process", "Workflow"]);
+const DEPTH_OPTIONS = ["1", "2", "3", "4", "5"];
+
+function resolveDepthScopedModels(options: {
+  anchorModelUri: string;
+  depth: number;
+  graph: OntologyGraph | null;
+  knownModelUris: Set<string>;
+}): string[] {
+  const { anchorModelUri, depth, graph, knownModelUris } = options;
+  if (!anchorModelUri) {
+    return [];
+  }
+  if (!graph || depth <= 1) {
+    return [anchorModelUri];
+  }
+
+  const nodeByUri = new Map(graph.nodes.map((node) => [node.uri, node]));
+  const allEdges = [...graph.edges, ...buildReferenceEdges(graph.nodes, graph.edges)];
+  const eventToModels = new Map<string, Set<string>>();
+  const actionToModels = new Map<string, Set<string>>();
+  const actionToProducedEvents = new Map<string, Set<string>>();
+
+  const addEventModelLink = (eventUri: string, modelUri: string) => {
+    const eventNode = nodeByUri.get(eventUri);
+    if (!eventNode || !EVENT_NODE_LABELS.has(eventNode.label) || !knownModelUris.has(modelUri)) {
+      return;
+    }
+    const scoped = eventToModels.get(eventUri);
+    if (scoped) {
+      scoped.add(modelUri);
+      return;
+    }
+    eventToModels.set(eventUri, new Set([modelUri]));
+  };
+
+  allEdges.forEach((edge) => {
+    if (edge.type === "transitionOf") {
+      addEventModelLink(edge.fromUri, edge.toUri);
+      return;
+    }
+    if (edge.type === "referencesObjectModel") {
+      const sourceNode = nodeByUri.get(edge.fromUri);
+      if (!sourceNode) {
+        return;
+      }
+      if (EVENT_NODE_LABELS.has(sourceNode.label)) {
+        addEventModelLink(edge.fromUri, edge.toUri);
+      }
+      if (ACTION_NODE_LABELS.has(sourceNode.label) && knownModelUris.has(edge.toUri)) {
+        const models = actionToModels.get(edge.fromUri);
+        if (models) {
+          models.add(edge.toUri);
+        } else {
+          actionToModels.set(edge.fromUri, new Set([edge.toUri]));
+        }
+      }
+      return;
+    }
+    if (edge.type === "producesEvent") {
+      const sourceNode = nodeByUri.get(edge.fromUri);
+      const targetNode = nodeByUri.get(edge.toUri);
+      if (
+        !sourceNode ||
+        !targetNode ||
+        !ACTION_NODE_LABELS.has(sourceNode.label) ||
+        !EVENT_NODE_LABELS.has(targetNode.label)
+      ) {
+        return;
+      }
+      const produced = actionToProducedEvents.get(edge.fromUri);
+      if (produced) {
+        produced.add(edge.toUri);
+      } else {
+        actionToProducedEvents.set(edge.fromUri, new Set([edge.toUri]));
+      }
+    }
+  });
+
+  actionToModels.forEach((modelUris, actionUri) => {
+    const producedEvents = actionToProducedEvents.get(actionUri);
+    if (!producedEvents || producedEvents.size === 0) {
+      return;
+    }
+    producedEvents.forEach((eventUri) => {
+      modelUris.forEach((modelUri) => {
+        addEventModelLink(eventUri, modelUri);
+      });
+    });
+  });
+
+  const adjacency = new Map<string, Set<string>>();
+  eventToModels.forEach((models) => {
+    const scopedModels = [...models];
+    scopedModels.forEach((sourceModel) => {
+      const neighbors = adjacency.get(sourceModel);
+      const bucket = neighbors ?? new Set<string>();
+      scopedModels.forEach((targetModel) => {
+        if (targetModel !== sourceModel) {
+          bucket.add(targetModel);
+        }
+      });
+      if (!neighbors) {
+        adjacency.set(sourceModel, bucket);
+      }
+    });
+  });
+
+  const included = new Set<string>([anchorModelUri]);
+  let frontier = new Set<string>([anchorModelUri]);
+
+  for (let layer = 2; layer <= depth; layer += 1) {
+    const nextFrontier = new Set<string>();
+    frontier.forEach((model) => {
+      adjacency.get(model)?.forEach((neighbor) => {
+        if (!included.has(neighbor)) {
+          included.add(neighbor);
+          nextFrontier.add(neighbor);
+        }
+      });
+    });
+    if (nextFrontier.size === 0) {
+      break;
+    }
+    frontier = nextFrontier;
+  }
+
+  const extras = [...included]
+    .filter((uri) => uri !== anchorModelUri)
+    .sort((a, b) => a.localeCompare(b));
+  return [anchorModelUri, ...extras];
+}
+
 export function ProcessMiningPanel() {
   const ontologyDisplay = useOntologyDisplay();
+  const { graph: ontologyGraph } = useOntologyGraphContext();
   const [modelUri, setModelUri] = useState("");
+  const [depth, setDepth] = useState("1");
   const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>("24h");
   const [from, setFrom] = useState(() => {
     const now = new Date();
@@ -221,6 +361,36 @@ export function ProcessMiningPanel() {
       return acc;
     }, {});
   }, [modelOptions]);
+
+  const resolvedDepth = useMemo(() => {
+    const parsed = Number.parseInt(depth, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+  }, [depth]);
+
+  const knownModelUris = useMemo(() => new Set(modelOptions.map((option) => option.uri)), [modelOptions]);
+
+  const resolvedModelUris = useMemo(() => {
+    return resolveDepthScopedModels({
+      anchorModelUri: modelUri,
+      depth: resolvedDepth,
+      graph: ontologyGraph,
+      knownModelUris,
+    });
+  }, [knownModelUris, modelUri, ontologyGraph, resolvedDepth]);
+
+  const includedModels = useMemo(() => {
+    return resolvedModelUris
+      .map((uri) => ({
+        uri,
+        name: modelLabels[uri] ?? ontologyDisplay.displayObjectType(uri),
+        isAnchor: uri === modelUri,
+      }))
+      .sort((a, b) => {
+        if (a.isAnchor) return -1;
+        if (b.isAnchor) return 1;
+        return a.name.localeCompare(b.name);
+      });
+  }, [modelLabels, modelUri, ontologyDisplay, resolvedModelUris]);
 
   const ocdfgRenderGraph = useMemo(() => {
     if (!ocdfgGraph) {
@@ -299,6 +469,7 @@ export function ProcessMiningPanel() {
     try {
       const requestPayload = {
         modelUri,
+        modelUris: resolvedModelUris,
         from: resolvedFrom,
         to: resolvedTo,
         traceId: traceId || undefined,
@@ -489,7 +660,48 @@ export function ProcessMiningPanel() {
             isRunning={loading}
             runDisabled={!modelUri || loading}
             onRun={loadProcessMining}
+            extraControl={
+              <div className="space-y-2">
+                <Label htmlFor="mining-depth">Depth</Label>
+                <Select value={depth} onValueChange={setDepth}>
+                  <SelectTrigger id="mining-depth">
+                    <SelectValue placeholder="Select depth" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEPTH_OPTIONS.map((value) => (
+                      <SelectItem key={value} value={value}>
+                        Depth {value}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            }
           />
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-border bg-muted/40 p-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Included object models
+          </div>
+          <div className="mt-2 text-xs text-muted-foreground">
+            Depth {resolvedDepth} scope from ontology event-sharing relationships.
+          </div>
+          {includedModels.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {includedModels.map((model) => (
+                <Badge
+                  key={model.uri}
+                  variant={model.isAnchor ? "default" : "outline"}
+                  className="rounded-full px-3 py-1 text-[0.65rem] uppercase tracking-[0.15em]"
+                >
+                  {model.isAnchor ? `Anchor · ${model.name}` : model.name}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-3 text-xs text-muted-foreground">Select an object model to resolve scope.</div>
+          )}
         </div>
 
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
