@@ -5,9 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 JsonObject = dict[str, Any]
 PropertyFilterOperator = Literal["eq", "contains", "gt", "gte", "lt", "lte"]
@@ -18,15 +19,15 @@ class UpdatedObjectPayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
-    object_type: str = Field(min_length=1, max_length=160)
-    object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
+    object_type: str = Field(min_length=1, max_length=400)
     object_ref: JsonObject
     object_payload: JsonObject = Field(alias="object")
     relation_role: str | None = Field(default=None, max_length=120)
 
-    @property
-    def canonical_object_type(self) -> str:
-        return self.object_type_uri or self.object_type
+    @field_validator("object_type")
+    @classmethod
+    def validate_object_type_uri(cls, value: str) -> str:
+        return _validate_uri_identifier("updated_objects.object_type", value)
 
     @model_validator(mode="after")
     def validate_declared_object_type(self) -> UpdatedObjectPayload:
@@ -46,8 +47,7 @@ class EventIngestRequest(BaseModel):
 
     event_id: UUID
     occurred_at: datetime
-    event_type: str = Field(min_length=1, max_length=200)
-    event_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
+    event_type: str = Field(min_length=1, max_length=400)
     source: str = Field(min_length=1, max_length=200)
     payload: JsonObject
     trace_id: str | None = Field(default=None, max_length=200)
@@ -55,9 +55,10 @@ class EventIngestRequest(BaseModel):
     attributes: JsonObject | None = None
     updated_objects: list[UpdatedObjectPayload] | None = None
 
-    @property
-    def canonical_event_type(self) -> str:
-        return self.event_type_uri or self.event_type
+    @field_validator("event_type")
+    @classmethod
+    def validate_event_type_uri(cls, value: str) -> str:
+        return _validate_uri_identifier("event_type", value)
 
 
 class IngestedObjectSummary(BaseModel):
@@ -266,3 +267,13 @@ class ObjectEventRecord:
     object_history_id: UUID
     recorded_at: datetime | None
     object_payload: JsonObject | None
+
+
+def _validate_uri_identifier(field_name: str, value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} must not be blank")
+    parsed = urlparse(cleaned)
+    if not parsed.scheme or not (parsed.netloc or parsed.path):
+        raise ValueError(f"{field_name} must be a URI identifier")
+    return cleaned

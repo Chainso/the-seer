@@ -54,7 +54,7 @@ class HistoryService:
         event_record = EventHistoryRecord(
             event_id=payload.event_id,
             occurred_at=occurred_at,
-            event_type=payload.canonical_event_type,
+            event_type=payload.event_type,
             source=payload.source,
             payload=payload.payload,
             trace_id=payload.trace_id,
@@ -70,11 +70,10 @@ class HistoryService:
             canonical = canonicalize_object_ref(obj.object_ref)
             object_ref_hash = xxhash64_uint64(canonical)
             object_history_id = uuid4()
-            canonical_object_type = obj.canonical_object_type
 
             object_record = ObjectHistoryRecord(
                 object_history_id=object_history_id,
-                object_type=canonical_object_type,
+                object_type=obj.object_type,
                 object_ref=obj.object_ref,
                 object_ref_canonical=canonical,
                 object_ref_hash=object_ref_hash,
@@ -85,7 +84,7 @@ class HistoryService:
             link_record = EventObjectLinkRecord(
                 event_id=payload.event_id,
                 object_history_id=object_history_id,
-                object_type=canonical_object_type,
+                object_type=obj.object_type,
                 object_ref=obj.object_ref,
                 object_ref_canonical=canonical,
                 object_ref_hash=object_ref_hash,
@@ -98,7 +97,7 @@ class HistoryService:
             linked_objects.append(
                 IngestedObjectSummary(
                     object_history_id=object_history_id,
-                    object_type=canonical_object_type,
+                    object_type=obj.object_type,
                     object_ref_canonical=canonical,
                     object_ref_hash=object_ref_hash,
                 )

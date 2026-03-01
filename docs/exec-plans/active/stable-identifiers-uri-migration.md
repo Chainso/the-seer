@@ -1,11 +1,11 @@
 # Post-MVP Exec Plan: Stable URI Identifiers for Event/Process/RCA Contracts
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 3  
 **Agent slot:** DATA-RCA-1  
 **Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
 **Successor:** TBD  
-**Last updated:** 2026-02-28
+**Last updated:** 2026-03-01
 
 ---
 
@@ -139,7 +139,7 @@ Deliverables:
 Exit criteria:
 
 1. Fake-data workflow and RCA checks pass with URI identifiers.
-2. CI covers URI and fallback behavior.
+2. CI covers URI-only behavior.
 
 ## Phase 4: Strict Mode and Legacy Deprecation
 
@@ -240,3 +240,32 @@ Decisions recorded:
 
 1. Phase 3 resolves identifiers from ontology concept local IDs (`obj_*`, `aout_*`, `sig_*`, `trans_*`) instead of `prophet:name` display labels.
 2. Compatibility handling remains in fake-data verification/test loaders to support legacy tokenized fixture inputs while validating URI-first RCA execution.
+
+### 2026-03-01 - Phase 4 strict URI enforcement (no backward compatibility)
+
+Status: completed.
+
+Implemented:
+
+1. Removed compatibility fields and fallback accessors from backend request contracts:
+   - History ingest no longer accepts `event_type_uri` / `updated_objects[].object_type_uri`.
+   - Process mining no longer accepts `anchor_object_type_uri` / `include_object_type_uris`.
+   - RCA no longer accepts `anchor_object_type_uri`, `outcome.event_type_uri`, or `outcome.object_type_uri`.
+2. Enforced URI validation for semantic identifier fields across history/process/RCA request models.
+3. Updated backend services/repositories to use direct URI fields only (no canonical fallback indirection).
+4. Updated frontend process/RCA clients to send only stable URI identifiers.
+5. Updated fake-data generator/verifier and phase tests to align on URI-only contracts.
+
+Acceptance evidence:
+
+1. `python3 -m py_compile` on touched backend/models/scripts/tests passed.
+2. Targeted suite passed:
+   - `seer-backend/tests/test_history_phase2.py`
+   - `seer-backend/tests/test_process_phase3.py`
+   - `seer-backend/tests/test_root_cause_phase4.py`
+   - `seer-backend/tests/test_ai_phase5.py`
+   - `seer-backend/tests/test_root_cause_fake_data.py`
+
+Closeout decision:
+
+1. Legacy identifier compatibility was intentionally removed to enforce stable URI semantics end-to-end.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -18,18 +19,20 @@ class OutcomeDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     kind: Literal["event_type"] = "event_type"
-    event_type: str = Field(min_length=1, max_length=200)
-    event_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
-    object_type: str | None = Field(default=None, min_length=1, max_length=160)
-    object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
+    event_type: str = Field(min_length=1, max_length=400)
+    object_type: str | None = Field(default=None, min_length=1, max_length=400)
 
-    @property
-    def canonical_event_type(self) -> str:
-        return self.event_type_uri or self.event_type
+    @field_validator("event_type")
+    @classmethod
+    def validate_event_type_uri(cls, value: str) -> str:
+        return _validate_uri_identifier("outcome.event_type", value)
 
-    @property
-    def canonical_object_type(self) -> str | None:
-        return self.object_type_uri or self.object_type
+    @field_validator("object_type")
+    @classmethod
+    def validate_object_type_uri(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_uri_identifier("outcome.object_type", value)
 
 
 class RcaFilterCondition(BaseModel):
@@ -55,8 +58,7 @@ class RootCauseRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    anchor_object_type: str = Field(min_length=1, max_length=160)
-    anchor_object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
+    anchor_object_type: str = Field(min_length=1, max_length=400)
     start_at: datetime
     end_at: datetime
     depth: int = Field(default=1, ge=1, le=3)
@@ -68,9 +70,10 @@ class RootCauseRequest(BaseModel):
     mi_cardinality_threshold: int = Field(default=8, ge=2, le=500)
     max_insights: int = Field(default=25, ge=1, le=100)
 
-    @property
-    def canonical_anchor_object_type(self) -> str:
-        return self.anchor_object_type_uri or self.anchor_object_type
+    @field_validator("anchor_object_type")
+    @classmethod
+    def validate_anchor_object_type_uri(cls, value: str) -> str:
+        return _validate_uri_identifier("anchor_object_type", value)
 
     @model_validator(mode="after")
     def validate_time_window(self) -> RootCauseRequest:
@@ -158,14 +161,14 @@ class RootCauseEvidenceResponse(BaseModel):
 class RootCauseAssistSetupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    anchor_object_type: str = Field(min_length=1, max_length=160)
-    anchor_object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
+    anchor_object_type: str = Field(min_length=1, max_length=400)
     start_at: datetime
     end_at: datetime
 
-    @property
-    def canonical_anchor_object_type(self) -> str:
-        return self.anchor_object_type_uri or self.anchor_object_type
+    @field_validator("anchor_object_type")
+    @classmethod
+    def validate_anchor_object_type_uri(cls, value: str) -> str:
+        return _validate_uri_identifier("anchor_object_type", value)
 
     @model_validator(mode="after")
     def validate_window(self) -> RootCauseAssistSetupRequest:
@@ -240,3 +243,13 @@ class ExtractedRcaNeighborhood:
     events: list[RcaEventRow]
     objects: list[RcaObjectRow]
     relations: list[RcaRelationRow]
+
+
+def _validate_uri_identifier(field_name: str, value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} must not be blank")
+    parsed = urlparse(cleaned)
+    if not parsed.scheme or not (parsed.netloc or parsed.path):
+        raise ValueError(f"{field_name} must be a URI identifier")
+    return cleaned

@@ -18,11 +18,9 @@ export interface ProcessMiningRequest {
 
 interface ProcessMineRequestContract {
   anchor_object_type: string;
-  anchor_object_type_uri?: string;
   start_at: string;
   end_at: string;
   include_object_types?: string[];
-  include_object_type_uris?: string[];
   max_events?: number;
   max_relations?: number;
   max_traces_per_handle?: number;
@@ -127,34 +125,6 @@ function resolveCanonicalWindow(from: string | undefined, to: string | undefined
   };
 }
 
-function iriLocalName(iri: string): string {
-  const hashIndex = iri.lastIndexOf('#');
-  if (hashIndex >= 0 && hashIndex < iri.length - 1) {
-    return iri.slice(hashIndex + 1);
-  }
-  const slashIndex = iri.lastIndexOf('/');
-  if (slashIndex >= 0 && slashIndex < iri.length - 1) {
-    return iri.slice(slashIndex + 1);
-  }
-  return iri;
-}
-
-function fallbackObjectTypeFromModelUri(modelUri: string): string {
-  const localName = iriLocalName(modelUri).replace(/^obj[_:-]?/i, '');
-  const tokens = localName
-    .split(/[^a-zA-Z0-9]+/)
-    .map((token) => token.trim())
-    .filter(Boolean);
-
-  if (tokens.length === 0) {
-    return modelUri;
-  }
-
-  return tokens
-    .map((token) => token[0].toUpperCase() + token.slice(1))
-    .join('');
-}
-
 function normalizeModelUris(modelUris: string[] | undefined): string[] | undefined {
   if (!Array.isArray(modelUris) || modelUris.length === 0) {
     return undefined;
@@ -162,18 +132,6 @@ function normalizeModelUris(modelUris: string[] | undefined): string[] | undefin
 
   const normalized = Array.from(new Set(modelUris.map((value) => value.trim()).filter(Boolean)));
   return normalized.length > 0 ? normalized : undefined;
-}
-
-function resolveIncludeObjectTypes(modelUris: string[] | undefined): string[] | undefined {
-  const normalizedModelUris = normalizeModelUris(modelUris);
-  if (!normalizedModelUris) {
-    return undefined;
-  }
-
-  const unique = Array.from(
-    new Set(normalizedModelUris.map((modelUri) => fallbackObjectTypeFromModelUri(modelUri)))
-  );
-  return unique.length > 0 ? unique : undefined;
 }
 
 function toTransitionNode(node: ProcessMineNodeContract): OcpnNode {
@@ -282,9 +240,7 @@ function toMineRequestContract(payload: ProcessMiningRequest): ProcessMineReques
     throw new Error('Process mining requires an ontology object model selection.');
   }
 
-  const anchorObjectType = fallbackObjectTypeFromModelUri(modelUri);
-  const includeObjectTypeUris = normalizeModelUris(payload.modelUris);
-  const includeObjectTypes = resolveIncludeObjectTypes(includeObjectTypeUris);
+  const includeObjectTypes = normalizeModelUris(payload.modelUris);
   const { startAt, endAt } = resolveCanonicalWindow(payload.from, payload.to);
   const maxEvents =
     typeof payload.maxEvents === 'number' && Number.isFinite(payload.maxEvents)
@@ -300,12 +256,10 @@ function toMineRequestContract(payload: ProcessMiningRequest): ProcessMineReques
       : undefined;
 
   return {
-    anchor_object_type: anchorObjectType,
-    anchor_object_type_uri: modelUri,
+    anchor_object_type: modelUri,
     start_at: startAt,
     end_at: endAt,
     include_object_types: includeObjectTypes,
-    include_object_type_uris: includeObjectTypeUris,
     max_events: maxEvents,
     max_relations: maxRelations,
     max_traces_per_handle: maxTracesPerHandle,

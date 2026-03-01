@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -10,6 +11,45 @@ from seer_backend.analytics.service import OcpnMiningWrapper, ProcessMiningServi
 from seer_backend.history.repository import InMemoryHistoryRepository
 from seer_backend.history.service import HistoryService
 from seer_backend.main import create_app
+
+_ORDER_URI = "urn:seer:test:order"
+
+
+def _to_uri_identifier(value: str) -> str:
+    cleaned = value.strip()
+    if "://" in cleaned or cleaned.startswith("urn:"):
+        return cleaned
+    token = re.sub(r"[^a-zA-Z0-9]+", "_", cleaned).strip("_").lower()
+    return f"urn:seer:test:{token}" if token else "urn:seer:test:unknown"
+
+
+def _normalize_event_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    event_type = normalized.get("event_type")
+    if isinstance(event_type, str):
+        normalized["event_type"] = _to_uri_identifier(event_type)
+
+    updated_objects = normalized.get("updated_objects")
+    if not isinstance(updated_objects, list):
+        return normalized
+
+    normalized_objects: list[dict[str, object]] = []
+    for item in updated_objects:
+        if not isinstance(item, dict):
+            continue
+        updated = dict(item)
+        object_type = updated.get("object_type")
+        if isinstance(object_type, str):
+            uri = _to_uri_identifier(object_type)
+            updated["object_type"] = uri
+            payload_object = updated.get("object")
+            if isinstance(payload_object, dict):
+                payload_object_copy = dict(payload_object)
+                payload_object_copy["object_type"] = uri
+                updated["object"] = payload_object_copy
+        normalized_objects.append(updated)
+    normalized["updated_objects"] = normalized_objects
+    return normalized
 
 
 def build_client() -> TestClient:
@@ -135,7 +175,10 @@ def _seed_phase2_style_dataset(client: TestClient) -> None:
     ]
 
     for payload in events:
-        response = client.post("/api/v1/history/events/ingest", json=payload)
+        response = client.post(
+            "/api/v1/history/events/ingest",
+            json=_normalize_event_payload(payload),
+        )
         assert response.status_code == 200, response.text
 
 
@@ -146,7 +189,7 @@ def test_process_mining_returns_ui_payload_and_trace_handles() -> None:
     response = client.post(
         "/api/v1/process/mine",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-02-22T09:00:00Z",
             "end_at": "2026-02-22T11:00:00Z",
         },
@@ -157,7 +200,7 @@ def test_process_mining_returns_ui_payload_and_trace_handles() -> None:
     assert body["nodes"]
     assert body["edges"]
     assert body["path_stats"]
-    assert "Order" in body["object_types"]
+    assert _ORDER_URI in body["object_types"]
     assert all(edge["trace_handle"] for edge in body["edges"])
 
 
@@ -166,7 +209,7 @@ def test_process_mining_is_deterministic_for_same_snapshot() -> None:
     _seed_phase2_style_dataset(client)
 
     payload = {
-        "anchor_object_type": "Order",
+        "anchor_object_type": _ORDER_URI,
         "start_at": "2026-02-22T09:00:00Z",
         "end_at": "2026-02-22T11:00:00Z",
     }
@@ -192,7 +235,7 @@ def test_process_mining_validation_errors_are_actionable() -> None:
     window_error = client.post(
         "/api/v1/process/mine",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-02-22T12:00:00Z",
             "end_at": "2026-02-22T11:00:00Z",
         },
@@ -209,7 +252,7 @@ def test_process_mining_oversized_scope_returns_guidance() -> None:
     response = client.post(
         "/api/v1/process/mine",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-02-22T09:00:00Z",
             "end_at": "2026-02-22T11:00:00Z",
             "max_events": 1,
@@ -227,7 +270,7 @@ def test_trace_drilldown_returns_supporting_traces() -> None:
     run = client.post(
         "/api/v1/process/mine",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-02-22T09:00:00Z",
             "end_at": "2026-02-22T11:00:00Z",
         },
@@ -250,7 +293,7 @@ def test_process_mining_no_data_returns_not_found() -> None:
     response = client.post(
         "/api/v1/process/mine",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": datetime(2026, 2, 22, 0, 0, tzinfo=UTC).isoformat(),
             "end_at": datetime(2026, 2, 22, 1, 0, tzinfo=UTC).isoformat(),
         },

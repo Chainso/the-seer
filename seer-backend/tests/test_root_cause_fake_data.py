@@ -185,7 +185,6 @@ def _canonicalize_events_for_uris(events: list[dict[str, Any]]) -> None:
         )
         if event_type is not None:
             event["event_type"] = event_type
-            event["event_type_uri"] = event_type
 
         updated_objects = event.get("updated_objects")
         if not isinstance(updated_objects, list):
@@ -200,7 +199,6 @@ def _canonicalize_events_for_uris(events: list[dict[str, Any]]) -> None:
             )
             if object_type is not None:
                 updated_object["object_type"] = object_type
-                updated_object["object_type_uri"] = object_type
             object_payload = updated_object.get("object")
             if isinstance(object_payload, dict) and object_type is not None:
                 object_payload["object_type"] = object_type
@@ -274,13 +272,11 @@ def test_fake_data_sales_order_cancel_rca_has_actionable_insights(
         "/api/v1/root-cause/run",
         json={
             "anchor_object_type": identifiers["sales_order_anchor_uri"],
-            "anchor_object_type_uri": identifiers["sales_order_anchor_uri"],
             "start_at": start_at,
             "end_at": end_at,
             "depth": 2,
             "outcome": {
                 "event_type": identifiers["sales_order_cancel_event_uri"],
-                "event_type_uri": identifiers["sales_order_cancel_event_uri"],
             },
             "max_insights": 10,
             "min_coverage_ratio": 0.02,
@@ -305,13 +301,11 @@ def test_fake_data_invoice_overdue_rca_surfaces_high_lift_signal(
         "/api/v1/root-cause/run",
         json={
             "anchor_object_type": identifiers["invoice_anchor_uri"],
-            "anchor_object_type_uri": identifiers["invoice_anchor_uri"],
             "start_at": start_at,
             "end_at": end_at,
             "depth": 2,
             "outcome": {
                 "event_type": identifiers["invoice_overdue_event_uri"],
-                "event_type_uri": identifiers["invoice_overdue_event_uri"],
             },
             "max_insights": 10,
             "min_coverage_ratio": 0.02,

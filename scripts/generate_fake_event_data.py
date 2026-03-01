@@ -263,7 +263,6 @@ def _updated_object(
 ) -> dict[str, object]:
     return {
         "object_type": object_type,
-        "object_type_uri": object_type,
         "object_ref": object_ref,
         "object": object_payload,
         "relation_role": relation_role,
@@ -1040,7 +1039,6 @@ def _materialize_event(
         "event_id": str(uuid4()),
         "occurred_at": _to_zulu(occurred_at),
         "event_type": draft.event_type,
-        "event_type_uri": draft.event_type,
         "source": draft.source,
         "payload": draft.payload,
         "trace_id": draft.trace_id,

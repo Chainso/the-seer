@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -22,6 +23,44 @@ from seer_backend.ontology.models import (
 )
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "rca_phase4_orders.json"
+_ORDER_URI = "urn:seer:test:order"
+
+
+def _to_uri_identifier(value: str) -> str:
+    cleaned = value.strip()
+    if "://" in cleaned or cleaned.startswith("urn:"):
+        return cleaned
+    token = re.sub(r"[^a-zA-Z0-9]+", "_", cleaned).strip("_").lower()
+    return f"urn:seer:test:{token}" if token else "urn:seer:test:unknown"
+
+
+def _normalize_event_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    event_type = normalized.get("event_type")
+    if isinstance(event_type, str):
+        normalized["event_type"] = _to_uri_identifier(event_type)
+
+    updated_objects = normalized.get("updated_objects")
+    if not isinstance(updated_objects, list):
+        return normalized
+
+    normalized_objects: list[dict[str, object]] = []
+    for item in updated_objects:
+        if not isinstance(item, dict):
+            continue
+        updated = dict(item)
+        object_type = updated.get("object_type")
+        if isinstance(object_type, str):
+            uri = _to_uri_identifier(object_type)
+            updated["object_type"] = uri
+            payload_object = updated.get("object")
+            if isinstance(payload_object, dict):
+                payload_object_copy = dict(payload_object)
+                payload_object_copy["object_type"] = uri
+                updated["object"] = payload_object_copy
+        normalized_objects.append(updated)
+    normalized["updated_objects"] = normalized_objects
+    return normalized
 
 
 class StubOntologyCopilotService:
@@ -29,8 +68,9 @@ class StubOntologyCopilotService:
         self,
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
+        completion_conversation: list[dict[str, object]] | None = None,
     ) -> CopilotChatResponse:
-        del conversation
+        del conversation, completion_conversation
         return CopilotChatResponse(
             mode="direct_answer",
             answer=f"Ontology context for: {question}",
@@ -43,6 +83,12 @@ class StubOntologyCopilotService:
             current_release_id="phase5-test-release",
             tool_call=None,
             tool_result=None,
+            completion_messages_delta=[
+                {
+                    "role": "assistant",
+                    "content": f"Ontology context for: {question}",
+                }
+            ],
         )
 
 
@@ -51,8 +97,9 @@ class StubOntologyCopilotWithPolicyBlock:
         self,
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
+        completion_conversation: list[dict[str, object]] | None = None,
     ) -> CopilotChatResponse:
-        del question, conversation
+        del question, conversation, completion_conversation
         return CopilotChatResponse(
             mode="direct_answer",
             answer="Blocked a mutating SPARQL attempt and continued with safe guidance.",
@@ -68,6 +115,15 @@ class StubOntologyCopilotWithPolicyBlock:
                 query="INSERT DATA { <urn:test:s> <urn:test:p> \"x\" . }",
                 error="SPARQL update operations are not allowed",
             ),
+            completion_messages_delta=[
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Blocked a mutating SPARQL attempt and continued with safe "
+                        "guidance."
+                    ),
+                }
+            ],
         )
 
 
@@ -126,7 +182,10 @@ def build_client_with_copilot(copilot_service: object) -> TestClient:
 def seed_fixture_dataset(client: TestClient) -> None:
     payloads = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     for payload in payloads:
-        response = client.post("/api/v1/history/events/ingest", json=payload)
+        response = client.post(
+            "/api/v1/history/events/ingest",
+            json=_normalize_event_payload(payload),
+        )
         assert response.status_code == 200, response.text
 
 
@@ -158,7 +217,7 @@ def test_ai_gateway_process_interpretation_returns_analytical_caveats() -> None:
     run = client.post(
         "/api/v1/process/mine",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-02-22T07:00:00Z",
             "end_at": "2026-02-22T11:00:00Z",
         },
@@ -185,7 +244,7 @@ def test_guided_investigation_runs_ontology_to_process_to_root_cause() -> None:
 
     payload = GuidedInvestigationRequest(
         question="Investigate why Orders become delayed in this window.",
-        anchor_object_type="Order",
+        anchor_object_type=_ORDER_URI,
         start_at="2026-02-22T07:00:00Z",
         end_at="2026-02-22T11:00:00Z",
         depth=2,
@@ -216,7 +275,7 @@ def test_ai_assistant_chat_returns_generic_envelope_and_thread_id() -> None:
             "context": {
                 "route": "/inspector/insights",
                 "module": "insights",
-                "anchor_object_type": "Order",
+                "anchor_object_type": _ORDER_URI,
             },
             "thread_id": "thread-seeded-1",
         },
@@ -231,6 +290,33 @@ def test_ai_assistant_chat_returns_generic_envelope_and_thread_id() -> None:
     assert body["answer"].startswith("Ontology context")
     assert "ontology.query(read_only)" in body["tool_permissions"]
     assert body["evidence"]
+    assert len(body["completion_messages"]) >= 2
+    assert body["completion_messages"][-1]["role"] == "assistant"
+
+
+def test_ai_assistant_chat_accepts_completions_format_messages() -> None:
+    client = build_client()
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "First question"},
+                {"role": "assistant", "content": "First answer"},
+                {"role": "tool", "tool_call_id": "call_1", "content": "{\"row_count\":1}"},
+                {"role": "user", "content": "Second question"},
+            ],
+            "thread_id": "thread-completion-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["thread_id"] == "thread-completion-1"
+    assert body["answer"].startswith("Ontology context")
+    assert len(body["completion_messages"]) >= 5
+    assert body["completion_messages"][0]["role"] == "user"
+    assert body["completion_messages"][-1]["role"] == "assistant"
 
 
 def test_ai_assistant_chat_surfaces_read_only_policy_block_caveat() -> None:

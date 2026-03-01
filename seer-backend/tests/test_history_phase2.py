@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -11,6 +12,43 @@ from seer_backend.history.service import HistoryService
 from seer_backend.main import create_app
 
 
+def _to_uri_identifier(value: str) -> str:
+    cleaned = value.strip()
+    if "://" in cleaned or cleaned.startswith("urn:"):
+        return cleaned
+    token = re.sub(r"[^a-zA-Z0-9]+", "_", cleaned).strip("_").lower()
+    return f"urn:seer:test:{token}" if token else "urn:seer:test:unknown"
+
+
+def _normalize_event_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    event_type = normalized.get("event_type")
+    if isinstance(event_type, str):
+        normalized["event_type"] = _to_uri_identifier(event_type)
+
+    updated_objects = normalized.get("updated_objects")
+    if not isinstance(updated_objects, list):
+        return normalized
+
+    normalized_objects: list[dict[str, object]] = []
+    for item in updated_objects:
+        if not isinstance(item, dict):
+            continue
+        updated = dict(item)
+        object_type = updated.get("object_type")
+        if isinstance(object_type, str):
+            uri = _to_uri_identifier(object_type)
+            updated["object_type"] = uri
+            payload_object = updated.get("object")
+            if isinstance(payload_object, dict):
+                payload_object_copy = dict(payload_object)
+                payload_object_copy["object_type"] = uri
+                updated["object"] = payload_object_copy
+        normalized_objects.append(updated)
+    normalized["updated_objects"] = normalized_objects
+    return normalized
+
+
 def build_client() -> TestClient:
     app = create_app()
     app.state.history_service = HistoryService(repository=InMemoryHistoryRepository())
@@ -18,7 +56,7 @@ def build_client() -> TestClient:
 
 
 def _ingest_event(client: TestClient, payload: dict[str, object]) -> dict[str, object]:
-    response = client.post("/api/v1/history/events/ingest", json=payload)
+    response = client.post("/api/v1/history/events/ingest", json=_normalize_event_payload(payload))
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -75,7 +113,7 @@ def test_ingest_supports_composite_object_refs_and_stable_hashes() -> None:
     hash_value = first_linked["object_ref_hash"]
     object_timeline = client.get(
         "/api/v1/history/objects/timeline",
-        params={"object_type": "Order", "object_ref_hash": hash_value},
+        params={"object_type": _to_uri_identifier("Order"), "object_ref_hash": hash_value},
     )
 
     assert object_timeline.status_code == 200, object_timeline.text
@@ -85,7 +123,7 @@ def test_ingest_supports_composite_object_refs_and_stable_hashes() -> None:
 
     relations = client.get(
         "/api/v1/history/relations",
-        params={"object_type": "Order", "object_ref_hash": hash_value},
+        params={"object_type": _to_uri_identifier("Order"), "object_ref_hash": hash_value},
     )
     assert relations.status_code == 200, relations.text
     relation_event_ids = {item["event_id"] for item in relations.json()["items"]}
@@ -124,13 +162,13 @@ def test_duplicate_event_id_is_rejected_with_conflict() -> None:
     payload = {
         "event_id": event_id,
         "occurred_at": "2026-02-22T13:00:00Z",
-        "event_type": "invoice.created",
+        "event_type": _to_uri_identifier("invoice.created"),
         "source": "billing",
         "payload": {"invoice": "INV-1"},
     }
 
-    first = client.post("/api/v1/history/events/ingest", json=payload)
-    second = client.post("/api/v1/history/events/ingest", json=payload)
+    first = client.post("/api/v1/history/events/ingest", json=_normalize_event_payload(payload))
+    second = client.post("/api/v1/history/events/ingest", json=_normalize_event_payload(payload))
 
     assert first.status_code == 200
     assert second.status_code == 409
@@ -155,7 +193,7 @@ def test_ingest_rejects_invalid_event_uuid() -> None:
         json={
             "event_id": "not-a-uuid",
             "occurred_at": "2026-02-22T13:30:00Z",
-            "event_type": "invoice.created",
+            "event_type": _to_uri_identifier("invoice.created"),
             "source": "billing",
             "payload": {"invoice": "INV-1"},
         },
@@ -172,15 +210,15 @@ def test_object_type_mismatch_in_updated_objects_is_rejected() -> None:
         json={
             "event_id": str(uuid4()),
             "occurred_at": "2026-02-22T14:00:00Z",
-            "event_type": "order.updated",
+            "event_type": _to_uri_identifier("order.updated"),
             "source": "erp",
             "payload": {"order": "O-1"},
             "updated_objects": [
                 {
-                    "object_type": "Order",
+                    "object_type": _to_uri_identifier("Order"),
                     "object_ref": {"order_id": "O-1"},
                     "object": {
-                        "object_type": "Invoice",
+                        "object_type": _to_uri_identifier("Invoice"),
                         "status": "incorrect-type",
                     },
                 }
@@ -224,7 +262,7 @@ def test_event_timeline_uses_occurred_at_ordering() -> None:
         params={
             "start_at": datetime(2026, 2, 22, 0, 0, tzinfo=UTC).isoformat(),
             "end_at": datetime(2026, 2, 23, 0, 0, tzinfo=UTC).isoformat(),
-            "event_type": "shipment.created",
+            "event_type": _to_uri_identifier("shipment.created"),
         },
     )
 
@@ -325,7 +363,7 @@ def test_latest_objects_returns_latest_snapshot_per_identity_with_pagination() -
     filtered = client.post(
         "/api/v1/history/objects/latest/search",
         json={
-            "object_type": "Order",
+            "object_type": _to_uri_identifier("Order"),
             "property_filters": [
                 {"key": "status", "op": "eq", "value": "approved"},
                 {"key": "amount", "op": "gte", "value": "80"},
@@ -338,7 +376,7 @@ def test_latest_objects_returns_latest_snapshot_per_identity_with_pagination() -
     filtered_body = filtered.json()
     assert filtered_body["total"] == 1
     assert len(filtered_body["items"]) == 1
-    assert filtered_body["items"][0]["object_type"] == "Order"
+    assert filtered_body["items"][0]["object_type"] == _to_uri_identifier("Order")
     assert filtered_body["items"][0]["object_ref_hash"] == order_hash
     assert filtered_body["items"][0]["object_payload"]["status"] == "approved"
 
@@ -413,7 +451,7 @@ def test_latest_objects_supports_temporal_property_filter_ranges() -> None:
     date_filtered = client.post(
         "/api/v1/history/objects/latest/search",
         json={
-            "object_type": "Truck",
+            "object_type": _to_uri_identifier("Truck"),
             "property_filters": [
                 {"key": "next_service_at", "op": "gt", "value": "2026-02-26T00:00:00Z"},
             ],
@@ -429,7 +467,7 @@ def test_latest_objects_supports_temporal_property_filter_ranges() -> None:
     duration_filtered = client.post(
         "/api/v1/history/objects/latest/search",
         json={
-            "object_type": "Truck",
+            "object_type": _to_uri_identifier("Truck"),
             "property_filters": [
                 {"key": "max_downtime", "op": "gte", "value": "P1D"},
             ],
@@ -540,14 +578,14 @@ def test_relation_row_parser_accepts_qualified_join_keys() -> None:
     row = {
         "l.event_id": str(event_id),
         "l.object_history_id": str(object_history_id),
-        "l.object_type": "Order",
+        "l.object_type": "urn:seer:test:order",
         "l.object_ref": '{"order_id":"O-100"}',
         "l.object_ref_canonical": '{"order_id":"O-100"}',
         "l.object_ref_hash": 12345,
         "l.relation_role": "primary",
         "l.linked_at": "2026-02-22T10:00:00Z",
         "e.occurred_at": "2026-02-22T10:00:00Z",
-        "e.event_type": "order.created",
+        "e.event_type": "urn:seer:test:order_created",
         "e.source": "erp",
         "o.object_payload": '{"status":"created"}',
         "o.recorded_at": "2026-02-22T10:00:00Z",
@@ -557,8 +595,8 @@ def test_relation_row_parser_accepts_qualified_join_keys() -> None:
 
     assert parsed.event_id == UUID(str(event_id))
     assert parsed.object_history_id == UUID(str(object_history_id))
-    assert parsed.object_type == "Order"
+    assert parsed.object_type == "urn:seer:test:order"
     assert parsed.object_ref == {"order_id": "O-100"}
-    assert parsed.event_type == "order.created"
+    assert parsed.event_type == "urn:seer:test:order_created"
     assert parsed.source == "erp"
     assert parsed.object_payload == {"status": "created"}

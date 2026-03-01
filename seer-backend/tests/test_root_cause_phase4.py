@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -12,6 +13,45 @@ from seer_backend.history.service import HistoryService
 from seer_backend.main import create_app
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "rca_phase4_orders.json"
+_ORDER_URI = "urn:seer:test:order"
+_ORDER_DELAYED_EVENT_URI = "urn:seer:test:order_delayed"
+
+
+def _to_uri_identifier(value: str) -> str:
+    cleaned = value.strip()
+    if "://" in cleaned or cleaned.startswith("urn:"):
+        return cleaned
+    token = re.sub(r"[^a-zA-Z0-9]+", "_", cleaned).strip("_").lower()
+    return f"urn:seer:test:{token}" if token else "urn:seer:test:unknown"
+
+
+def _normalize_event_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    event_type = normalized.get("event_type")
+    if isinstance(event_type, str):
+        normalized["event_type"] = _to_uri_identifier(event_type)
+
+    updated_objects = normalized.get("updated_objects")
+    if not isinstance(updated_objects, list):
+        return normalized
+
+    normalized_objects: list[dict[str, object]] = []
+    for item in updated_objects:
+        if not isinstance(item, dict):
+            continue
+        updated = dict(item)
+        object_type = updated.get("object_type")
+        if isinstance(object_type, str):
+            uri = _to_uri_identifier(object_type)
+            updated["object_type"] = uri
+            payload_object = updated.get("object")
+            if isinstance(payload_object, dict):
+                payload_object_copy = dict(payload_object)
+                payload_object_copy["object_type"] = uri
+                updated["object"] = payload_object_copy
+        normalized_objects.append(updated)
+    normalized["updated_objects"] = normalized_objects
+    return normalized
 
 
 def build_client() -> TestClient:
@@ -30,7 +70,10 @@ def build_client() -> TestClient:
 def seed_fixture_dataset(client: TestClient) -> None:
     payloads = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     for payload in payloads:
-        response = client.post("/api/v1/history/events/ingest", json=payload)
+        response = client.post(
+            "/api/v1/history/events/ingest",
+            json=_normalize_event_payload(payload),
+        )
         assert response.status_code == 200, response.text
 
 
@@ -39,10 +82,10 @@ def test_rca_extraction_lifts_depth_specific_features() -> None:
     seed_fixture_dataset(client)
 
     base_payload = {
-        "anchor_object_type": "Order",
+        "anchor_object_type": _ORDER_URI,
         "start_at": "2026-02-22T07:00:00Z",
         "end_at": "2026-02-22T11:00:00Z",
-        "outcome": {"event_type": "order.delayed"},
+        "outcome": {"event_type": _ORDER_DELAYED_EVENT_URI},
     }
 
     depth1 = client.post(
@@ -51,8 +94,8 @@ def test_rca_extraction_lifts_depth_specific_features() -> None:
     )
     assert depth1.status_code == 200, depth1.text
     depth1_titles = [item["title"] for item in depth1.json()["insights"]]
-    assert any("present.d1.Invoice.risk=high" in title for title in depth1_titles)
-    assert all("present.d2.Supplier.region=overseas" not in title for title in depth1_titles)
+    assert any("present.d1." in title and "risk=high" in title for title in depth1_titles)
+    assert all("region=overseas" not in title for title in depth1_titles)
 
     depth2 = client.post(
         "/api/v1/root-cause/run",
@@ -60,7 +103,7 @@ def test_rca_extraction_lifts_depth_specific_features() -> None:
     )
     assert depth2.status_code == 200, depth2.text
     depth2_titles = [item["title"] for item in depth2.json()["insights"]]
-    assert any("present.d2.Supplier.region=overseas" in title for title in depth2_titles)
+    assert any("present.d2." in title and "region=overseas" in title for title in depth2_titles)
 
 
 def test_rca_ranking_is_stable_for_identical_snapshot() -> None:
@@ -68,11 +111,11 @@ def test_rca_ranking_is_stable_for_identical_snapshot() -> None:
     seed_fixture_dataset(client)
 
     payload = {
-        "anchor_object_type": "Order",
+        "anchor_object_type": _ORDER_URI,
         "start_at": "2026-02-22T07:00:00Z",
         "end_at": "2026-02-22T11:00:00Z",
         "depth": 2,
-        "outcome": {"event_type": "order.delayed"},
+        "outcome": {"event_type": _ORDER_DELAYED_EVENT_URI},
     }
 
     first = client.post("/api/v1/root-cause/run", json=payload)
@@ -99,11 +142,11 @@ def test_rca_evidence_and_ai_assist_endpoints_return_actionable_payloads() -> No
     run = client.post(
         "/api/v1/root-cause/run",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-02-22T07:00:00Z",
             "end_at": "2026-02-22T11:00:00Z",
             "depth": 2,
-            "outcome": {"event_type": "order.delayed"},
+            "outcome": {"event_type": _ORDER_DELAYED_EVENT_URI},
             "filters": [{"field": "anchor.order_id", "op": "contains", "value": "O-10"}],
         },
     )
@@ -124,7 +167,7 @@ def test_rca_evidence_and_ai_assist_endpoints_return_actionable_payloads() -> No
     setup = client.post(
         "/api/v1/root-cause/assist/setup",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-02-22T07:00:00Z",
             "end_at": "2026-02-22T11:00:00Z",
         },
@@ -151,14 +194,14 @@ def test_rca_filters_support_numeric_comparison_operators() -> None:
     response = client.post(
         "/api/v1/root-cause/run",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-02-22T07:00:00Z",
             "end_at": "2026-02-22T11:00:00Z",
             "depth": 2,
-            "outcome": {"event_type": "order.delayed"},
+            "outcome": {"event_type": _ORDER_DELAYED_EVENT_URI},
             "filters": [
-                {"field": "event.count.order.delayed", "op": "gte", "value": "1"},
-                {"field": "object_type.count.Invoice", "op": "lt", "value": "4+"},
+                {"field": f"event.count.{_ORDER_DELAYED_EVENT_URI}", "op": "gte", "value": "1"},
+                {"field": f"object_type.count.{_to_uri_identifier('Invoice')}", "op": "lt", "value": "4+"},
             ],
         },
     )
@@ -234,17 +277,20 @@ def test_rca_filters_support_temporal_comparison_operators() -> None:
     ]
 
     for payload in events:
-        ingest = client.post("/api/v1/history/events/ingest", json=payload)
+        ingest = client.post(
+            "/api/v1/history/events/ingest",
+            json=_normalize_event_payload(payload),
+        )
         assert ingest.status_code == 200, ingest.text
 
     response = client.post(
         "/api/v1/root-cause/run",
         json={
-            "anchor_object_type": "Order",
+            "anchor_object_type": _ORDER_URI,
             "start_at": "2026-03-01T07:00:00Z",
             "end_at": "2026-03-01T12:00:00Z",
             "depth": 1,
-            "outcome": {"event_type": "order.delayed"},
+            "outcome": {"event_type": _ORDER_DELAYED_EVENT_URI},
             "filters": [
                 {"field": "anchor.scheduled_at", "op": "gt", "value": "2026-03-06T00:00:00Z"},
                 {"field": "anchor.sla_duration", "op": "gte", "value": "PT2H"},

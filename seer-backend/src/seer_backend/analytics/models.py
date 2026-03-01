@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -17,25 +18,20 @@ class ProcessMiningRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    anchor_object_type: str = Field(min_length=1, max_length=160)
-    anchor_object_type_uri: str | None = Field(default=None, min_length=1, max_length=400)
+    anchor_object_type: str = Field(min_length=1, max_length=400)
     start_at: datetime
     end_at: datetime
     include_object_types: list[str] | None = None
-    include_object_type_uris: list[str] | None = None
     max_events: int | None = Field(default=None, ge=1, le=200_000)
     max_relations: int | None = Field(default=None, ge=1, le=500_000)
     max_traces_per_handle: int | None = Field(default=None, ge=1, le=500)
 
-    @property
-    def canonical_anchor_object_type(self) -> str:
-        return self.anchor_object_type_uri or self.anchor_object_type
+    @field_validator("anchor_object_type")
+    @classmethod
+    def validate_anchor_object_type_uri(cls, value: str) -> str:
+        return _validate_uri_identifier("anchor_object_type", value)
 
-    @property
-    def canonical_include_object_types(self) -> list[str] | None:
-        return self.include_object_type_uris or self.include_object_types
-
-    @field_validator("include_object_types", "include_object_type_uris")
+    @field_validator("include_object_types")
     @classmethod
     def validate_include_object_types(
         cls,
@@ -46,9 +42,7 @@ class ProcessMiningRequest(BaseModel):
         normalized: list[str] = []
         seen: set[str] = set()
         for item in value:
-            cleaned = item.strip()
-            if not cleaned:
-                raise ValueError("include_object_types must not contain blank values")
+            cleaned = _validate_uri_identifier("include_object_types", item)
             if cleaned not in seen:
                 normalized.append(cleaned)
                 seen.add(cleaned)
@@ -59,16 +53,10 @@ class ProcessMiningRequest(BaseModel):
         if self.start_at >= self.end_at:
             raise ValueError("start_at must be earlier than end_at")
 
-        anchor_object_type = self.canonical_anchor_object_type
-        include_object_types = self.canonical_include_object_types
+        anchor_object_type = self.anchor_object_type
+        include_object_types = self.include_object_types
         if include_object_types and anchor_object_type not in include_object_types:
-            if self.include_object_type_uris is not None:
-                self.include_object_type_uris = [
-                    anchor_object_type,
-                    *self.include_object_type_uris,
-                ]
-            else:
-                self.include_object_types = [anchor_object_type, *self.include_object_types]
+            self.include_object_types = [anchor_object_type, *self.include_object_types]
         return self
 
 
@@ -170,3 +158,13 @@ class Pm4pyObjectCentricInput:
     events: list[dict[str, Any]]
     objects: list[dict[str, Any]]
     relations: list[dict[str, Any]]
+
+
+def _validate_uri_identifier(field_name: str, value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} must not be blank")
+    parsed = urlparse(cleaned)
+    if not parsed.scheme or not (parsed.netloc or parsed.path):
+        raise ValueError(f"{field_name} must be a URI identifier")
+    return cleaned
