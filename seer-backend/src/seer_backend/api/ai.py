@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import AsyncIterator, Iterator
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 
 from seer_backend.ai.gateway import (
     AiAssistantChatRequest,
-    AiAssistantChatResponse,
     AiGatewayService,
     AiOntologyQuestionRequest,
     AiOntologyQuestionResponse,
@@ -46,22 +48,52 @@ def get_ai_gateway_service(request: Request) -> AiGatewayService:
     return request.app.state.ai_gateway_service
 
 
-@router.post("/assistant/chat", response_model=AiAssistantChatResponse)
+@router.post("/assistant/chat")
 async def assistant_chat(
     payload: AiAssistantChatRequest,
     request: Request,
-) -> AiAssistantChatResponse:
+) -> StreamingResponse:
     service = get_ai_gateway_service(request)
-    try:
-        return await service.assistant_chat(payload)
-    except ValueError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
-    except OntologyDependencyUnavailableError as exc:
-        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
-    except OntologyNotReadyError as exc:
-        raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
-    except OntologyError as exc:
-        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    async def event_stream() -> AsyncIterator[str]:
+        try:
+            response = await service.assistant_chat(payload)
+        except Exception as exc:  # pragma: no cover - fallback guardrail
+            status_code, error_code, detail = _assistant_stream_error(exc)
+            yield _sse_event(
+                "error",
+                {
+                    "status_code": status_code,
+                    "code": error_code,
+                    "message": detail,
+                },
+            )
+            return
+
+        yield _sse_event(
+            "meta",
+            {
+                "thread_id": response.thread_id,
+                "module": response.module,
+                "task": response.task,
+                "response_policy": response.response_policy,
+                "tool_permissions": response.tool_permissions,
+            },
+        )
+        for chunk in _iter_answer_chunks(response.answer):
+            yield _sse_event("assistant_delta", {"text": chunk})
+        yield _sse_event("final", response.model_dump(mode="json"))
+        yield _sse_event("done", {"status": "ok"})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/ontology/question", response_model=AiOntologyQuestionResponse)
@@ -178,3 +210,36 @@ def inject_ai_gateway_service(app: Any) -> None:
 
 def _http_error(status_code: int, detail: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail=detail)
+
+
+def _assistant_stream_error(exc: Exception) -> tuple[int, str, str]:
+    if isinstance(exc, ValueError):
+        return status.HTTP_422_UNPROCESSABLE_ENTITY, "validation_error", str(exc)
+    if isinstance(exc, OntologyDependencyUnavailableError):
+        return status.HTTP_503_SERVICE_UNAVAILABLE, "dependency_unavailable", str(exc)
+    if isinstance(exc, OntologyNotReadyError):
+        return status.HTTP_409_CONFLICT, "ontology_not_ready", str(exc)
+    if isinstance(exc, OntologyError):
+        return status.HTTP_502_BAD_GATEWAY, "ontology_error", str(exc)
+    return (
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+        "internal_error",
+        "assistant chat request failed",
+    )
+
+
+def _iter_answer_chunks(answer: str, chunk_size: int = 120) -> Iterator[str]:
+    if not answer:
+        yield ""
+        return
+    for index in range(0, len(answer), chunk_size):
+        yield answer[index : index + chunk_size]
+
+
+def _sse_event(event: str, payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, separators=(",", ":"))
+    lines = [f"event: {event}"]
+    for line in serialized.splitlines() or [""]:
+        lines.append(f"data: {line}")
+    lines.append("")
+    return "\n".join(lines) + "\n"

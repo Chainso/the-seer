@@ -14,6 +14,7 @@ from seer_backend.analytics.service import OcpnMiningWrapper, ProcessMiningServi
 from seer_backend.history.repository import InMemoryHistoryRepository
 from seer_backend.history.service import HistoryService
 from seer_backend.main import create_app
+from seer_backend.ontology.errors import OntologyNotReadyError
 from seer_backend.ontology.models import (
     CopilotChatResponse,
     CopilotConversationMessage,
@@ -125,6 +126,41 @@ class StubOntologyCopilotWithPolicyBlock:
                 }
             ],
         )
+
+
+class StubOntologyCopilotNotReady:
+    async def answer(
+        self,
+        question: str,
+        conversation: list[CopilotConversationMessage] | None = None,
+        completion_conversation: list[dict[str, object]] | None = None,
+    ) -> CopilotChatResponse:
+        del question, conversation, completion_conversation
+        raise OntologyNotReadyError("Ontology release is still initializing")
+
+
+def _parse_sse_events(raw_stream: str) -> list[tuple[str, dict[str, object]]]:
+    events: list[tuple[str, dict[str, object]]] = []
+    event_name: str | None = None
+    data_lines: list[str] = []
+
+    for line in raw_stream.splitlines():
+        if not line:
+            if event_name is not None:
+                payload_text = "\n".join(data_lines)
+                payload = json.loads(payload_text) if payload_text else {}
+                events.append((event_name, payload))
+            event_name = None
+            data_lines = []
+            continue
+
+        if line.startswith("event:"):
+            event_name = line.partition(":")[2].strip()
+            continue
+        if line.startswith("data:"):
+            data_lines.append(line.partition(":")[2].lstrip())
+
+    return events
 
 
 def build_client() -> TestClient:
@@ -282,16 +318,31 @@ def test_ai_assistant_chat_returns_generic_envelope_and_thread_id() -> None:
     )
 
     assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["module"] == "assistant"
-    assert body["task"] == "chat"
-    assert body["response_policy"] == "informational"
-    assert body["thread_id"] == "thread-seeded-1"
-    assert body["answer"].startswith("Ontology context")
-    assert "ontology.query(read_only)" in body["tool_permissions"]
-    assert body["evidence"]
-    assert len(body["completion_messages"]) >= 2
-    assert body["completion_messages"][-1]["role"] == "assistant"
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse_events(response.text)
+    event_types = [event for event, _ in events]
+    assert event_types[0] == "meta"
+    assert "assistant_delta" in event_types
+    assert event_types[-2] == "final"
+    assert event_types[-1] == "done"
+
+    meta = events[0][1]
+    assert meta["module"] == "assistant"
+    assert meta["task"] == "chat"
+    assert meta["response_policy"] == "informational"
+    assert meta["thread_id"] == "thread-seeded-1"
+    assert "ontology.query(read_only)" in meta["tool_permissions"]
+
+    deltas = [
+        payload["text"]
+        for event, payload in events
+        if event == "assistant_delta"
+    ]
+    final = events[-2][1]
+    assert "".join(deltas) == final["answer"]
+    assert final["evidence"]
+    assert len(final["completion_messages"]) >= 2
+    assert final["completion_messages"][-1]["role"] == "assistant"
 
 
 def test_ai_assistant_chat_accepts_completions_format_messages() -> None:
@@ -311,12 +362,17 @@ def test_ai_assistant_chat_accepts_completions_format_messages() -> None:
     )
 
     assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["thread_id"] == "thread-completion-1"
-    assert body["answer"].startswith("Ontology context")
-    assert len(body["completion_messages"]) >= 5
-    assert body["completion_messages"][0]["role"] == "user"
-    assert body["completion_messages"][-1]["role"] == "assistant"
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse_events(response.text)
+    assert [event for event, _ in events][:2] == ["meta", "assistant_delta"]
+
+    final_event = next(payload for event, payload in events if event == "final")
+    assert final_event["thread_id"] == "thread-completion-1"
+    assert final_event["answer"].startswith("Ontology context")
+    assert len(final_event["completion_messages"]) >= 5
+    assert final_event["completion_messages"][0]["role"] == "user"
+    assert final_event["completion_messages"][-1]["role"] == "assistant"
+    assert events[-1][0] == "done"
 
 
 def test_ai_assistant_chat_surfaces_read_only_policy_block_caveat() -> None:
@@ -332,10 +388,36 @@ def test_ai_assistant_chat_surfaces_read_only_policy_block_caveat() -> None:
     )
 
     assert response.status_code == 200, response.text
-    body = response.json()
-    assert body["module"] == "assistant"
-    assert any("read-only sparql policy blocked" in caveat.lower() for caveat in body["caveats"])
+    events = _parse_sse_events(response.text)
+    final_event = next(payload for event, payload in events if event == "final")
+    assert final_event["module"] == "assistant"
+    assert any(
+        "read-only sparql policy blocked" in caveat.lower()
+        for caveat in final_event["caveats"]
+    )
     assert any(
         evidence["label"] == "Read-only SPARQL policy block"
-        for evidence in body["evidence"]
+        for evidence in final_event["evidence"]
     )
+
+
+def test_ai_assistant_chat_streams_error_event_without_done_on_failure() -> None:
+    client = build_client_with_copilot(StubOntologyCopilotNotReady())
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "messages": [
+                {"role": "user", "content": "What is the latest ontology release?"},
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse_events(response.text)
+    assert len(events) == 1
+    assert events[0][0] == "error"
+    assert events[0][1]["status_code"] == 409
+    assert events[0][1]["code"] == "ontology_not_ready"
+    assert "initializing" in str(events[0][1]["message"]).lower()
