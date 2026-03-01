@@ -631,7 +631,7 @@ Rationale:
 - [x] Phase 0 complete
 - [x] Phase 1 complete
 - [x] Phase 2 complete
-- [ ] Phase 3 complete
+- [x] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
 - [ ] Phase 6 complete
@@ -639,9 +639,9 @@ Rationale:
 
 Current execution state:
 
-- `in_progress`: Phase 3 claim API + instance registry semantics
+- `in_progress`: Phase 4 complete/fail APIs + retry sweeper + dead letter
 - `blocked`: none
-- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue
+- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics
 
 ## Baseline Failure Ledger
 
@@ -665,6 +665,22 @@ Current execution state:
 5. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_submit.py` -> pass (`All checks passed!`).
 6. `cd seer-backend && uv run pytest -q tests/test_actions_submit.py` -> pass (`4 passed`).
 
+## Phase 3 Acceptance Evidence
+
+1. Added `POST /api/v1/actions/claim` with capacity-aware batch leasing (`capacity` + optional `max_actions`) and lease metadata in responses.
+2. Added explicit `POST /api/v1/actions/instances/heartbeat` endpoint with minimum viable liveness/status/capacity/metadata updates.
+3. Added claim-path heartbeat/upsert semantics in repository/service and enforced draining exclusion (`draining` instances receive zero new claims).
+4. Expanded claim eligibility to include reclaim after lease expiry and preserved lease exclusivity across competing instances.
+5. Added `tests/test_actions_claim.py` covering:
+   - lease exclusivity between two instances,
+   - reclaim after lease expiry,
+   - draining instance claim exclusion,
+   - heartbeat liveness/status updates,
+   - dependency unavailable `503` mapping for claim/heartbeat endpoints.
+6. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_claim.py` -> pass (`All checks passed!`).
+7. `cd seer-backend && uv run pytest -q tests/test_actions_claim.py` -> pass (`5 passed`).
+8. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py` -> pass (`13 passed`).
+
 ## Decision Log
 
 1. 2026-03-01: Selected pull-based claim routing with lease semantics as canonical delivery model.
@@ -684,6 +700,7 @@ Current execution state:
 15. 2026-03-01: Added plan guardrail requiring per-phase scoped commits (including worker-owned phase implementation slices).
 16. 2026-03-01: Phase 2 completed with best-available ontology input validation (`acceptsInput` + `hasProperty` + cardinality + basic type/object-reference checks) and deterministic contract hashing.
 17. 2026-03-01: Deferred deeper semantic type validation (enum/domain-specific constraints/date-format strictness) to later phases; current behavior returns actionable 422s for contract coverage available today.
+18. 2026-03-01: Phase 3 completed with claim transport, instance heartbeat transport, claim-path instance upsert, draining claim exclusion, and lease-expiry reclaim coverage.
 
 ## Next-Phase Starter Context
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -13,6 +14,7 @@ from seer_backend.actions.errors import (
     ActionError,
     ActionValidationError,
 )
+from seer_backend.actions.models import InstanceStatus
 from seer_backend.ontology.errors import OntologyDependencyUnavailableError, OntologyError
 from seer_backend.ontology.models import assert_valid_iri
 
@@ -58,6 +60,49 @@ class ActionSubmitResponse(BaseModel):
     dedupe_hit: bool
 
 
+class ActionClaimRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=255)
+    instance_id: str = Field(min_length=1, max_length=255)
+    capacity: int = Field(ge=1, le=10_000)
+    max_actions: int | None = Field(default=None, ge=1, le=10_000)
+
+
+class ClaimedAction(BaseModel):
+    action_id: UUID
+    action_uri: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    ontology_release_id: str
+    attempt_no: int
+    lease_owner_instance_id: str
+    lease_expires_at: datetime
+    priority: int
+
+
+class ActionClaimResponse(BaseModel):
+    user_id: str
+    instance_id: str
+    lease_seconds: int
+    claimed_count: int
+    actions: list[ClaimedAction] = Field(default_factory=list)
+
+
+class InstanceHeartbeatRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=255)
+    instance_id: str = Field(min_length=1, max_length=255)
+    status: Literal["active", "draining"] | None = None
+    capacity: int | None = Field(default=None, ge=1, le=10_000)
+    metadata: dict[str, Any] | None = None
+
+
+class InstanceHeartbeatResponse(BaseModel):
+    user_id: str
+    instance_id: str
+    status: Literal["active", "draining"]
+    last_seen_at: datetime
+    capacity: int | None
+    metadata: dict[str, Any] | None = None
+
+
 @router.post("/submit", response_model=ActionSubmitResponse)
 async def submit_action(
     payload: ActionSubmitRequest,
@@ -99,6 +144,85 @@ async def submit_action(
         status="queued",
         ontology_release_id=result.action.ontology_release_id,
         dedupe_hit=result.dedupe_hit,
+    )
+
+
+@router.post("/claim", response_model=ActionClaimResponse)
+async def claim_actions(
+    payload: ActionClaimRequest,
+    request: Request,
+) -> ActionClaimResponse:
+    actions_service = request.app.state.actions_service
+    settings = request.app.state.settings
+    claim_size = (
+        min(payload.capacity, payload.max_actions)
+        if payload.max_actions is not None
+        else payload.capacity
+    )
+    try:
+        claimed = await actions_service.claim_actions(
+            user_id=payload.user_id,
+            instance_id=payload.instance_id,
+            capacity=payload.capacity,
+            max_actions=claim_size,
+            lease_seconds=settings.actions_lease_seconds,
+        )
+    except ActionDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ActionError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    actions = [
+        ClaimedAction(
+            action_id=row.action_id,
+            action_uri=row.action_uri,
+            payload=row.input_payload,
+            ontology_release_id=row.ontology_release_id,
+            attempt_no=row.attempt_count,
+            lease_owner_instance_id=row.lease_owner_instance_id or payload.instance_id,
+            lease_expires_at=row.lease_expires_at or row.updated_at,
+            priority=row.priority,
+        )
+        for row in claimed
+    ]
+    return ActionClaimResponse(
+        user_id=payload.user_id,
+        instance_id=payload.instance_id,
+        lease_seconds=settings.actions_lease_seconds,
+        claimed_count=len(actions),
+        actions=actions,
+    )
+
+
+@router.post("/instances/heartbeat", response_model=InstanceHeartbeatResponse)
+async def heartbeat_instance(
+    payload: InstanceHeartbeatRequest,
+    request: Request,
+) -> InstanceHeartbeatResponse:
+    actions_service = request.app.state.actions_service
+    heartbeat_status = (
+        InstanceStatus(payload.status) if payload.status is not None else None
+    )
+    try:
+        instance = await actions_service.heartbeat_instance(
+            user_id=payload.user_id,
+            instance_id=payload.instance_id,
+            status=heartbeat_status,
+            capacity=payload.capacity,
+            metadata=payload.metadata,
+        )
+    except ActionDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ActionError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    return InstanceHeartbeatResponse(
+        user_id=instance.user_id,
+        instance_id=instance.instance_id,
+        status=instance.status.value,
+        last_seen_at=instance.last_seen_at,
+        capacity=instance.capacity,
+        metadata=instance.metadata,
     )
 
 

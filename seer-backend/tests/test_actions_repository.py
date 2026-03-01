@@ -74,6 +74,7 @@ def test_claim_enforces_lease_exclusivity_and_supports_reclaim_after_expiry() ->
     first_claim = repository.claim_actions(
         user_id="user-2",
         instance_id="instance-a",
+        capacity=1,
         max_actions=1,
         lease_seconds=60,
         now=now,
@@ -81,6 +82,7 @@ def test_claim_enforces_lease_exclusivity_and_supports_reclaim_after_expiry() ->
     second_claim_during_lease = repository.claim_actions(
         user_id="user-2",
         instance_id="instance-b",
+        capacity=1,
         max_actions=1,
         lease_seconds=60,
         now=now + timedelta(seconds=10),
@@ -88,6 +90,7 @@ def test_claim_enforces_lease_exclusivity_and_supports_reclaim_after_expiry() ->
     third_claim_after_expiry = repository.claim_actions(
         user_id="user-2",
         instance_id="instance-b",
+        capacity=1,
         max_actions=1,
         lease_seconds=60,
         now=now + timedelta(seconds=61),

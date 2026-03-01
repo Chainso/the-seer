@@ -118,10 +118,22 @@ class ActionsRepository(Protocol):
         *,
         user_id: str,
         instance_id: str,
+        capacity: int,
         max_actions: int,
         lease_seconds: int,
         now: datetime | None = None,
     ) -> list[ActionRecord]: ...
+
+    def heartbeat_instance(
+        self,
+        *,
+        user_id: str,
+        instance_id: str,
+        status: InstanceStatus | None = None,
+        capacity: int | None = None,
+        metadata: Mapping[str, object] | None = None,
+        now: datetime | None = None,
+    ) -> InstanceRecord: ...
 
 
 @dataclass(slots=True)
@@ -243,11 +255,12 @@ class PostgresActionsRepository:
         *,
         user_id: str,
         instance_id: str,
+        capacity: int,
         max_actions: int,
         lease_seconds: int,
         now: datetime | None = None,
     ) -> list[ActionRecord]:
-        if max_actions < 1:
+        if max_actions < 1 or capacity < 1:
             return []
 
         now_utc = _ensure_utc(now or datetime.now(UTC))
@@ -261,16 +274,54 @@ class PostgresActionsRepository:
                     user_id=user_id,
                     instance_id=instance_id,
                     now=now_utc,
-                    capacity=max_actions,
+                    capacity=capacity,
+                    preserve_status_on_conflict=True,
+                    status=None,
+                    metadata=None,
                 )
+                instance_row = (
+                    connection.execute(
+                        select(*instances_table.c)
+                        .where(
+                            and_(
+                                instances_table.c.user_id == user_id,
+                                instances_table.c.instance_id == instance_id,
+                            )
+                        )
+                        .with_for_update()
+                    )
+                    .mappings()
+                    .first()
+                )
+                if instance_row is None:
+                    raise ActionRepositoryError(
+                        f"instance heartbeat upsert failed for '{instance_id}' user '{user_id}'"
+                    )
+                instance_record = _instance_from_row(instance_row)
+                if instance_record.status == InstanceStatus.DRAINING:
+                    return []
                 candidate_rows = (
                     connection.execute(
                         select(actions_table.c.action_id, actions_table.c.attempt_count)
                         .where(
                             and_(
                                 actions_table.c.user_id == user_id,
-                                actions_table.c.status.in_(queued_statuses),
-                                actions_table.c.next_visible_at <= now_utc,
+                                (
+                                    and_(
+                                        actions_table.c.status.in_(queued_statuses),
+                                        actions_table.c.next_visible_at <= now_utc,
+                                    )
+                                    | and_(
+                                        actions_table.c.status.in_(
+                                            (
+                                                ActionStatus.LEASED.value,
+                                                ActionStatus.RUNNING.value,
+                                            )
+                                        ),
+                                        actions_table.c.lease_expires_at.is_not(None),
+                                        actions_table.c.lease_expires_at <= now_utc,
+                                    )
+                                ),
                             )
                         )
                         .order_by(
@@ -331,6 +382,49 @@ class PostgresActionsRepository:
         leased.sort(key=lambda row: (-row.priority, row.submitted_at, str(row.action_id)))
         return leased
 
+    def heartbeat_instance(
+        self,
+        *,
+        user_id: str,
+        instance_id: str,
+        status: InstanceStatus | None = None,
+        capacity: int | None = None,
+        metadata: Mapping[str, object] | None = None,
+        now: datetime | None = None,
+    ) -> InstanceRecord:
+        now_utc = _ensure_utc(now or datetime.now(UTC))
+        try:
+            with self._engine_instance().begin() as connection:
+                self._upsert_instance(
+                    connection=connection,
+                    user_id=user_id,
+                    instance_id=instance_id,
+                    now=now_utc,
+                    capacity=capacity,
+                    preserve_status_on_conflict=False,
+                    status=status,
+                    metadata=metadata,
+                )
+                instance_row = (
+                    connection.execute(
+                        select(*instances_table.c).where(
+                            and_(
+                                instances_table.c.user_id == user_id,
+                                instances_table.c.instance_id == instance_id,
+                            )
+                        )
+                    )
+                    .mappings()
+                    .first()
+                )
+        except SQLAlchemyError as exc:
+            raise ActionRepositoryError(f"Postgres instance heartbeat failed: {exc}") from exc
+        if instance_row is None:
+            raise ActionRepositoryError(
+                f"instance heartbeat upsert failed for '{instance_id}' user '{user_id}'"
+            )
+        return _instance_from_row(instance_row)
+
     def _upsert_instance(
         self,
         *,
@@ -338,23 +432,49 @@ class PostgresActionsRepository:
         user_id: str,
         instance_id: str,
         now: datetime,
-        capacity: int,
+        capacity: int | None,
+        preserve_status_on_conflict: bool,
+        status: InstanceStatus | None,
+        metadata: Mapping[str, object] | None,
     ) -> None:
+        upsert_status = status.value if status is not None else InstanceStatus.ACTIVE.value
+        normalized_metadata = dict(metadata) if metadata is not None else None
         upsert_stmt = postgresql.insert(instances_table).values(
             instance_id=instance_id,
             user_id=user_id,
-            status=InstanceStatus.ACTIVE.value,
+            status=upsert_status,
             last_seen_at=now,
             capacity=capacity,
-            metadata=None,
+            metadata=normalized_metadata,
         )
+        status_update: str | Column[str]
+        if preserve_status_on_conflict:
+            status_update = instances_table.c.status
+        elif status is not None:
+            status_update = status.value
+        else:
+            status_update = instances_table.c.status
+
+        capacity_update: int | Column[int]
+        if capacity is not None:
+            capacity_update = int(capacity)
+        else:
+            capacity_update = instances_table.c.capacity
+
+        metadata_update: Mapping[str, object] | Column[object] | None
+        if metadata is not None:
+            metadata_update = normalized_metadata
+        else:
+            metadata_update = instances_table.c.metadata
+
         connection.execute(
             upsert_stmt.on_conflict_do_update(
                 index_elements=[instances_table.c.instance_id, instances_table.c.user_id],
                 set_={
-                    "status": InstanceStatus.ACTIVE.value,
+                    "status": status_update,
                     "last_seen_at": now,
-                    "capacity": capacity,
+                    "capacity": capacity_update,
+                    "metadata": metadata_update,
                 },
             )
         )
@@ -496,26 +616,28 @@ class InMemoryActionsRepository:
         *,
         user_id: str,
         instance_id: str,
+        capacity: int,
         max_actions: int,
         lease_seconds: int,
         now: datetime | None = None,
     ) -> list[ActionRecord]:
-        if max_actions < 1:
+        if max_actions < 1 or capacity < 1:
             return []
 
         now_utc = _ensure_utc(now or datetime.now(UTC))
         lease_expires_at = now_utc + timedelta(seconds=max(int(lease_seconds), 1))
+        instance = self.heartbeat_instance(
+            user_id=user_id,
+            instance_id=instance_id,
+            status=None,
+            capacity=capacity,
+            metadata=None,
+            now=now_utc,
+        )
+        if instance.status == InstanceStatus.DRAINING:
+            return []
 
         with self._lock:
-            self._instances[(instance_id, user_id)] = InstanceRecord(
-                instance_id=instance_id,
-                user_id=user_id,
-                status=InstanceStatus.ACTIVE,
-                last_seen_at=now_utc,
-                capacity=max_actions,
-                metadata=None,
-            )
-
             eligible = [
                 action
                 for action in self._actions.values()
@@ -547,6 +669,44 @@ class InMemoryActionsRepository:
                 )
                 leased.append(_clone_action(action))
             return leased
+
+    def heartbeat_instance(
+        self,
+        *,
+        user_id: str,
+        instance_id: str,
+        status: InstanceStatus | None = None,
+        capacity: int | None = None,
+        metadata: Mapping[str, object] | None = None,
+        now: datetime | None = None,
+    ) -> InstanceRecord:
+        now_utc = _ensure_utc(now or datetime.now(UTC))
+        with self._lock:
+            key = (instance_id, user_id)
+            existing = self._instances.get(key)
+            resolved_status = status or (existing.status if existing else InstanceStatus.ACTIVE)
+            resolved_capacity = (
+                int(capacity)
+                if capacity is not None
+                else (existing.capacity if existing is not None else None)
+            )
+            if metadata is not None:
+                resolved_metadata: dict[str, object] | None = dict(metadata)
+            elif existing is not None and existing.metadata is not None:
+                resolved_metadata = dict(existing.metadata)
+            else:
+                resolved_metadata = None
+
+            record = InstanceRecord(
+                instance_id=instance_id,
+                user_id=user_id,
+                status=resolved_status,
+                last_seen_at=now_utc,
+                capacity=resolved_capacity,
+                metadata=resolved_metadata,
+            )
+            self._instances[key] = record
+            return _clone_instance(record)
 
 
 def _is_claim_eligible(action: ActionRecord, now_utc: datetime) -> bool:
@@ -583,6 +743,24 @@ def _action_from_row(row: Mapping[str, object] | RowMapping) -> ActionRecord:
 
 def _clone_action(action: ActionRecord) -> ActionRecord:
     return replace(action, input_payload=dict(action.input_payload))
+
+
+def _instance_from_row(row: Mapping[str, object] | RowMapping) -> InstanceRecord:
+    metadata = row["metadata"]
+    metadata_copy = dict(metadata) if isinstance(metadata, Mapping) else None
+    return InstanceRecord(
+        instance_id=str(row["instance_id"]),
+        user_id=str(row["user_id"]),
+        status=InstanceStatus(str(row["status"])),
+        last_seen_at=_ensure_utc(_to_datetime(row["last_seen_at"])),
+        capacity=int(row["capacity"]) if row["capacity"] is not None else None,
+        metadata=metadata_copy,
+    )
+
+
+def _clone_instance(instance: InstanceRecord) -> InstanceRecord:
+    metadata_copy = dict(instance.metadata) if instance.metadata is not None else None
+    return replace(instance, metadata=metadata_copy)
 
 
 def _optional_string(raw: object) -> str | None:

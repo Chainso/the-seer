@@ -16,7 +16,13 @@ from seer_backend.actions.errors import (
     ActionValidationError,
     ActionValidationIssue,
 )
-from seer_backend.actions.models import ActionCreate, ActionRecord, ActionSubmitResult
+from seer_backend.actions.models import (
+    ActionCreate,
+    ActionRecord,
+    ActionSubmitResult,
+    InstanceRecord,
+    InstanceStatus,
+)
 from seer_backend.actions.repository import (
     ActionsRepository,
     PostgresActionsRepository,
@@ -232,6 +238,7 @@ class ActionsService:
         *,
         user_id: str,
         instance_id: str,
+        capacity: int,
         max_actions: int,
         lease_seconds: int,
     ) -> list[ActionRecord]:
@@ -240,8 +247,28 @@ class ActionsService:
             self._repository.claim_actions,
             user_id=user_id,
             instance_id=instance_id,
+            capacity=capacity,
             max_actions=max_actions,
             lease_seconds=lease_seconds,
+        )
+
+    async def heartbeat_instance(
+        self,
+        *,
+        user_id: str,
+        instance_id: str,
+        status: InstanceStatus | None = None,
+        capacity: int | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> InstanceRecord:
+        await self.ensure_schema()
+        return await asyncio.to_thread(
+            self._repository.heartbeat_instance,
+            user_id=user_id,
+            instance_id=instance_id,
+            status=status,
+            capacity=capacity,
+            metadata=metadata,
         )
 
     async def submit_action(
@@ -336,10 +363,23 @@ class UnavailableActionsService:
         *,
         user_id: str,
         instance_id: str,
+        capacity: int,
         max_actions: int,
         lease_seconds: int,
     ) -> list[ActionRecord]:
-        del user_id, instance_id, max_actions, lease_seconds
+        del user_id, instance_id, capacity, max_actions, lease_seconds
+        raise ActionDependencyUnavailableError(self.reason)
+
+    async def heartbeat_instance(
+        self,
+        *,
+        user_id: str,
+        instance_id: str,
+        status: InstanceStatus | None = None,
+        capacity: int | None = None,
+        metadata: Mapping[str, Any] | None = None,
+    ) -> InstanceRecord:
+        del user_id, instance_id, status, capacity, metadata
         raise ActionDependencyUnavailableError(self.reason)
 
     async def submit_action(
