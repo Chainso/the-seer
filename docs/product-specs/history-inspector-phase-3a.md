@@ -1,7 +1,7 @@
 # History Inspector Phase 3A Spec
 
 **Status:** completed  
-**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/object-centric-history-inspector-consolidation.md`  
+**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/object-centric-history-inspector-consolidation.md`  
 **Last updated:** 2026-02-28
 
 ---

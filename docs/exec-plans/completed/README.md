@@ -23,3 +23,4 @@ Each completed plan should preserve:
 11. `adaptive-lifecycle-label-display.md` - completed (2026-02-28)
 12. `post-mvp-ontology-process-readonly-adaptation.md` - completed (2026-02-28)
 13. `stable-identifiers-uri-migration.md` - completed (2026-03-01)
+14. `object-centric-history-inspector-consolidation.md` - completed (2026-02-28)

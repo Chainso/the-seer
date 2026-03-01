@@ -122,9 +122,16 @@ For workflows that change behavior/invariants, final phase must:
 
 1. Update canonical product/design/architecture docs.
 2. Update relevant specs.
-3. Move active plan to completed (if lifecycle requires).
-4. Update active/completed indexes.
-5. Verify links and status coherence.
+3. Update active/completed indexes.
+4. Verify links and status coherence.
+
+## Step 7: Archive The Plan
+
+When the plan lifecycle is complete:
+
+1. Move the finished plan from `docs/exec-plans/active/` to `docs/exec-plans/completed/`.
+2. Update all references that still point to the active-path location.
+3. Confirm completed indexes include the moved file and active indexes no longer list it as active.
 
 ## Critical Improvements To Apply (Based On Real Execution)
 
