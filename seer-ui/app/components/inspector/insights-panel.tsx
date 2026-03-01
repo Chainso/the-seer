@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
 import { ProcessMiningPanel } from "./process-mining-panel";
@@ -12,6 +14,16 @@ interface InsightsPanelProps {
 }
 
 export function InsightsPanel({ defaultTab = "process-insights" }: InsightsPanelProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <div className="h-11 w-full max-w-[480px] animate-pulse rounded-lg bg-muted" />;
+  }
+
   return (
     <Tabs defaultValue={defaultTab} className="space-y-4">
       <TabsList className="grid h-11 w-full max-w-[480px] grid-cols-2">
