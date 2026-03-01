@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     clickhouse_compression: str | None = "lz4"
     clickhouse_query_limit: int | None = Field(default=None, ge=1, le=1_000_000)
     clickhouse_migrations_dir: str = "migrations/clickhouse"
+    actions_db_dsn: str = "postgresql+psycopg://seer:seer@postgres:5432/seer_actions"
+    actions_db_pool_size: int = Field(default=5, ge=1, le=100)
+    actions_db_max_overflow: int = Field(default=10, ge=0, le=100)
+    actions_db_migrations_dir: str = "migrations/postgres"
+    actions_lease_seconds: int = Field(default=60, ge=5, le=3600)
+    actions_heartbeat_seconds: int = Field(default=20, ge=5, le=3600)
+    actions_stale_instance_seconds: int = Field(default=90, ge=10, le=3600)
+    actions_sweeper_interval_seconds: int = Field(default=20, ge=1, le=3600)
+    actions_schema_bootstrap_on_startup: bool = False
     process_mining_max_events: int = Field(default=5_000, ge=100, le=200_000)
     process_mining_max_relations: int = Field(default=40_000, ge=100, le=500_000)
     process_mining_max_traces_per_handle: int = Field(default=100, ge=10, le=500)

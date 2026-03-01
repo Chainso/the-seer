@@ -18,6 +18,7 @@ dependencies = [
   "sqlalchemy>=2.0.47,<3",
   "chdb>=4.0.2",
   "pyarrow>=23.0.1",
+  "psycopg[binary]>=3.2.10,<4",
 ]
 
 [project.optional-dependencies]

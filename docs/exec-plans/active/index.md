@@ -38,6 +38,7 @@ Every completed phase must provide:
 3. `Doc updates`: list of changed docs and why.
 4. `Known issues`: blockers, deferred work, and risk notes.
 5. `Next-phase starter context`: exact pointers to code paths, APIs, and fixtures needed by the next phase.
+6. `Phase commit`: commit hash for the phase implementation commit (or explicit reason if intentionally deferred).
 
 ## Status Tracking
 
@@ -64,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. none
+1. `docs/exec-plans/active/action-orchestration-backend-service.md` (`agent_slot: ORCH-ACT-1`, in_progress)
 
 ## Post-MVP Status Tracking
 
@@ -76,10 +77,11 @@ Current execution state:
 - [x] Assistant dedicated page rewrite + surface unification complete
 - [x] Ontology-driven field display centralization complete
 - [x] Global assistant shell layer + generic AI assistant endpoint complete
+- [ ] Action orchestration backend service in progress
 
 Current post-MVP execution state:
 
-- `in_progress`: none
+- `in_progress`: `docs/exec-plans/active/action-orchestration-backend-service.md` (Phase 2 submit/validation/enqueue in progress as of 2026-03-01; Phase 0-1 complete)
 - `blocked`: none
 - `completed`: `docs/exec-plans/completed/ocdfg-ui-layout-engine-upgrade.md` (all phases complete; validation/docs/archive ratified on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/ocdfg-multi-object-depth-scope.md` (all phases complete; ratified and archived on 2026-03-01)

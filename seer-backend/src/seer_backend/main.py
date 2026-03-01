@@ -7,6 +7,10 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from seer_backend.actions.service import (
+    UnavailableActionsService,
+    inject_actions_service,
+)
 from seer_backend.api.ai import inject_ai_gateway_service
 from seer_backend.api.ai import router as ai_router
 from seer_backend.api.health import router as health_router
@@ -51,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     inject_process_service(app, settings)
     inject_root_cause_service(app, settings)
     inject_ai_gateway_service(app)
+    inject_actions_service(app, settings)
 
     logger = logging.getLogger(__name__)
 
@@ -63,6 +68,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "api_prefix": settings.api_prefix,
             },
         )
+        if settings.actions_schema_bootstrap_on_startup:
+            try:
+                await app.state.actions_service.ensure_schema()
+            except Exception as exc:  # pragma: no cover - exercised in integration/runtime
+                reason = f"actions schema bootstrap failed: {exc}"
+                app.state.actions_service = UnavailableActionsService(reason)
+                logger.warning("actions_schema_bootstrap_failed", extra={"reason": reason})
 
     return app
 

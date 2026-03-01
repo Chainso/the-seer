@@ -15,6 +15,15 @@ services:
       SEER_FUSEKI_PASSWORD: ${FUSEKI_ADMIN_PASSWORD:-admin}
       SEER_CLICKHOUSE_HOST: clickhouse
       SEER_CLICKHOUSE_PORT: 8123
+      SEER_ACTIONS_DB_DSN: ${SEER_ACTIONS_DB_DSN:-postgresql+psycopg://seer:seer@postgres:5432/seer_actions}
+      SEER_ACTIONS_DB_POOL_SIZE: ${SEER_ACTIONS_DB_POOL_SIZE:-5}
+      SEER_ACTIONS_DB_MAX_OVERFLOW: ${SEER_ACTIONS_DB_MAX_OVERFLOW:-10}
+      SEER_ACTIONS_DB_MIGRATIONS_DIR: ${SEER_ACTIONS_DB_MIGRATIONS_DIR:-migrations/postgres}
+      SEER_ACTIONS_LEASE_SECONDS: ${SEER_ACTIONS_LEASE_SECONDS:-60}
+      SEER_ACTIONS_HEARTBEAT_SECONDS: ${SEER_ACTIONS_HEARTBEAT_SECONDS:-20}
+      SEER_ACTIONS_STALE_INSTANCE_SECONDS: ${SEER_ACTIONS_STALE_INSTANCE_SECONDS:-90}
+      SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS: ${SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS:-20}
+      SEER_ACTIONS_SCHEMA_BOOTSTRAP_ON_STARTUP: "true"
       SEER_PROPHET_METAMODEL_PATH: /prophet/prophet.ttl
       SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-http://host.docker.internal:8787/v1}
       SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gemini-3-flash-preview}
@@ -26,6 +35,7 @@ services:
     depends_on:
       - fuseki
       - clickhouse
+      - postgres
 
   seer-ui:
     build:
@@ -65,6 +75,19 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: seer-postgres
+    ports:
+      - "${SEER_ACTIONS_DB_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${SEER_ACTIONS_POSTGRES_DB:-seer_actions}
+      POSTGRES_USER: ${SEER_ACTIONS_POSTGRES_USER:-seer}
+      POSTGRES_PASSWORD: ${SEER_ACTIONS_POSTGRES_PASSWORD:-seer}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
 volumes:
   fuseki-data:
   clickhouse-data:
+  postgres-data:

@@ -53,6 +53,7 @@ export SEER_CLICKHOUSE_PORT="${SEER_CLICKHOUSE_PORT:-${SEER_CLICKHOUSE_HTTP_PORT
 export SEER_CLICKHOUSE_DATABASE="${SEER_CLICKHOUSE_DATABASE:-${CLICKHOUSE_DB:-seer}}"
 export SEER_CLICKHOUSE_USER="${SEER_CLICKHOUSE_USER:-${CLICKHOUSE_USER:-seer}}"
 export SEER_CLICKHOUSE_PASSWORD="${SEER_CLICKHOUSE_PASSWORD:-${CLICKHOUSE_PASSWORD:-seer}}"
+export SEER_ACTIONS_DB_DSN="${SEER_ACTIONS_DB_DSN:-postgresql+psycopg://${SEER_ACTIONS_POSTGRES_USER:-seer}:${SEER_ACTIONS_POSTGRES_PASSWORD:-seer}@localhost:${SEER_ACTIONS_DB_PORT:-5432}/${SEER_ACTIONS_POSTGRES_DB:-seer_actions}}"
 export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}"
 
 docker compose -f docker-compose.db.yml up -d
@@ -95,8 +96,13 @@ layout {
         pane name="fuseki-logs" command="bash" cwd="${ROOT_DIR}" {
           args "-lc" "docker compose -f docker-compose.db.yml logs -f fuseki"
         }
-        pane name="clickhouse-logs" command="bash" cwd="${ROOT_DIR}" {
-          args "-lc" "docker compose -f docker-compose.db.yml logs -f clickhouse"
+        pane split_direction="Vertical" {
+          pane name="clickhouse-logs" command="bash" cwd="${ROOT_DIR}" {
+            args "-lc" "docker compose -f docker-compose.db.yml logs -f clickhouse"
+          }
+          pane name="postgres-logs" command="bash" cwd="${ROOT_DIR}" {
+            args "-lc" "docker compose -f docker-compose.db.yml logs -f postgres"
+          }
         }
       }
     }
