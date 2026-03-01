@@ -5,7 +5,11 @@ import { ArrowLeft, Clock3, GitBranch, Network } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { listEventObjectRelations, listObjectEvents } from "@/app/lib/api/history";
-import { type OntologyDisplayValueContext, useOntologyDisplay } from "@/app/lib/ontology-display";
+import {
+  normalizeComparableToken,
+  type OntologyDisplayValueContext,
+  useOntologyDisplay,
+} from "@/app/lib/ontology-display";
 import type {
   EventObjectRelationItem,
   EventObjectRelationsResponse,
@@ -18,6 +22,10 @@ import {
   type ObjectHistoryGraphEventNode,
   type ObjectHistoryGraphObjectNode,
 } from "./object-history-activity-graph";
+import {
+  ObjectHistoryTimeline,
+  type ObjectHistoryTimelineGroup,
+} from "./object-history-timeline";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
@@ -595,15 +603,186 @@ export function ObjectHistoryDetailsPanel() {
     });
   }, [anchorIdentity, objectRefCanonical, ontologyDisplay]);
 
-  const renderFieldValue = (value: unknown): string => {
-    if (value === null || value === undefined) {
-      return "-";
-    }
-    if (typeof value === "object") {
-      return JSON.stringify(value);
-    }
-    return String(value);
+  const summarizeTimelinePayload = useCallback(
+    (item: ObjectEventItem) =>
+      ontologyDisplay.summarizePayload(item.payload || item.object_payload || null, {
+        objectType,
+        eventType: item.event_type,
+        stateLabelByToken,
+      }),
+    [objectType, ontologyDisplay, stateLabelByToken]
+  );
+
+  const buildTimelineHighlights = useCallback(
+    (item: ObjectEventItem, payload: Record<string, unknown>) => {
+      const eventFieldKeys = Array.from(
+        ontologyDisplay.fieldLabelsForEventType(item.event_type)?.keys() || []
+      );
+      const objectFieldKeys = objectModel?.canonicalFieldKeys || [];
+      const payloadKeys = Object.keys(payload);
+
+      const prioritized = [
+        "from_state",
+        "to_state",
+        "state",
+        "status",
+        ...eventFieldKeys,
+        ...objectFieldKeys,
+        ...payloadKeys,
+      ];
+
+      const selectedKeys: string[] = [];
+      const seenNormalized = new Set<string>();
+      for (const key of prioritized) {
+        const normalized = normalizeComparableToken(key);
+        if (!normalized || seenNormalized.has(normalized)) {
+          continue;
+        }
+        const payloadKey = payloadKeys.find(
+          (candidate) => normalizeComparableToken(candidate) === normalized
+        );
+        if (!payloadKey) {
+          continue;
+        }
+        const value = payload[payloadKey];
+        if (
+          value === null ||
+          value === undefined ||
+          typeof value === "object" ||
+          (typeof value === "string" && !value.trim())
+        ) {
+          continue;
+        }
+        selectedKeys.push(payloadKey);
+        seenNormalized.add(normalized);
+        if (selectedKeys.length >= 4) {
+          break;
+        }
+      }
+
+      return selectedKeys.map((key) => {
+        const rawValue = payload[key];
+        const displayed = ontologyDisplay.displayFieldValue(key, rawValue, {
+          objectType,
+          eventType: item.event_type,
+          stateLabelByToken,
+        } satisfies OntologyDisplayValueContext);
+        return {
+          key,
+          label: ontologyDisplay.displayFieldLabel(key, {
+            objectType,
+            eventType: item.event_type,
+          }),
+          value:
+            typeof displayed === "string" ||
+            typeof displayed === "number" ||
+            typeof displayed === "boolean"
+              ? String(displayed)
+              : JSON.stringify(displayed),
+        };
+      });
+    },
+    [objectModel?.canonicalFieldKeys, objectType, ontologyDisplay, stateLabelByToken]
+  );
+
+  const resolveStateTransition = useCallback(
+    (item: ObjectEventItem, payload: Record<string, unknown>) => {
+      const fromKey = Object.keys(payload).find(
+        (key) => normalizeComparableToken(key) === "fromstate"
+      );
+      const toKey = Object.keys(payload).find(
+        (key) => normalizeComparableToken(key) === "tostate"
+      );
+      if (!fromKey && !toKey) {
+        return null;
+      }
+
+      const fromValue = fromKey
+        ? ontologyDisplay.displayFieldValue(fromKey, payload[fromKey], {
+            objectType,
+            eventType: item.event_type,
+            stateLabelByToken,
+          })
+        : null;
+      const toValue = toKey
+        ? ontologyDisplay.displayFieldValue(toKey, payload[toKey], {
+            objectType,
+            eventType: item.event_type,
+            stateLabelByToken,
+          })
+        : null;
+
+      return {
+        from: fromValue ? String(fromValue) : "Unknown",
+        to: toValue ? String(toValue) : "Unknown",
+      };
+    },
+    [objectType, ontologyDisplay, stateLabelByToken]
+  );
+
+  type TimelineBucket = ObjectHistoryTimelineGroup["entries"][number] & {
+    dayKey: string;
+    dayLabel: string;
   };
+
+  const timelineBuckets = useMemo<TimelineBucket[]>(() => {
+    return [...timelineItems]
+      .sort((a, b) => Date.parse(eventTimeIso(b)) - Date.parse(eventTimeIso(a)))
+      .map((item) => {
+        const payload = item.payload || item.object_payload || {};
+        const eventDate = new Date(eventTimeIso(item));
+        return {
+          timelineKey: timelineIdentityKey(item),
+          dayKey: Number.isNaN(eventDate.valueOf())
+            ? "unknown-day"
+            : `${eventDate.getFullYear()}-${eventDate.getMonth()}-${eventDate.getDate()}`,
+          dayLabel: Number.isNaN(eventDate.valueOf())
+            ? "Unknown day"
+            : eventDate.toLocaleDateString(undefined, {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              }),
+          eventName: ontologyDisplay.displayEventType(item.event_type, {
+            fallbackObjectType: objectType,
+          }),
+          role: item.relation_role || "linked",
+          time: formatDateTime(eventTimeIso(item)),
+          source: item.source || "Source unavailable",
+          shortEventId: item.event_id.slice(0, 8),
+          payloadSummary: summarizeTimelinePayload(item),
+          highlights: buildTimelineHighlights(item, payload),
+          stateTransition: resolveStateTransition(item, payload),
+        };
+      });
+  }, [
+    buildTimelineHighlights,
+    objectType,
+    ontologyDisplay,
+    resolveStateTransition,
+    summarizeTimelinePayload,
+    timelineItems,
+  ]);
+
+  const timelineGroups = useMemo<ObjectHistoryTimelineGroup[]>(() => {
+    const groups: ObjectHistoryTimelineGroup[] = [];
+
+    timelineBuckets.forEach((bucket) => {
+      const current = groups[groups.length - 1];
+      if (!current || current.dayKey !== bucket.dayKey) {
+        groups.push({
+          dayKey: bucket.dayKey,
+          dayLabel: bucket.dayLabel,
+          entries: [bucket],
+        });
+        return;
+      }
+      current.entries.push(bucket);
+    });
+
+    return groups;
+  }, [timelineBuckets]);
 
   if (!hasRequiredIdentity) {
     return (
@@ -618,10 +797,10 @@ export function ObjectHistoryDetailsPanel() {
       <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Object Activity</p>
-            <h1 className="font-display text-3xl">Object Timeline + Graph</h1>
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Object History</p>
+            <h1 className="font-display text-3xl">Object-Centric Timeline + Graph</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Timeline and graph are scoped to this object identity and canonical history relations.
+              Timeline cards are grouped by day and use ontology labels for event names, field highlights, and state transitions.
             </p>
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="rounded-full">
@@ -632,7 +811,7 @@ export function ObjectHistoryDetailsPanel() {
               </Badge>
             </div>
           </div>
-          <Button type="button" variant="outline" onClick={() => router.push("/inspector/history")}> 
+          <Button type="button" variant="outline" onClick={() => router.push("/inspector/history")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Object Store
           </Button>
@@ -768,12 +947,15 @@ export function ObjectHistoryDetailsPanel() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               <Clock3 className="h-4 w-4" />
-              Timeline
+              Timeline by Day
             </div>
             <Badge variant="outline" className="rounded-full">
               {timelineItems.length} loaded
             </Badge>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Event cards prioritize ontology-aware summaries, highlights, and state changes for this object identity.
+          </p>
 
           {timelineError && (
             <div className="mt-4 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -781,64 +963,12 @@ export function ObjectHistoryDetailsPanel() {
             </div>
           )}
 
-          <div className="mt-4 space-y-3">
-            {timelineItems.length === 0 && !timelineLoading ? (
-              <div className="rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                No events found for this object identity.
-              </div>
-            ) : (
-              timelineItems.map((item) => {
-                const valueContext: OntologyDisplayValueContext = {
-                  objectType,
-                  eventType: item.event_type,
-                  stateLabelByToken,
-                };
-
-                const highlightEntries = Object.entries(item.object_payload || item.payload || {}).slice(0, 4);
-
-                return (
-                  <div key={timelineIdentityKey(item)} className="rounded-2xl border border-border p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          {item.relation_role || "linked"}
-                        </div>
-                        <div className="mt-1 font-display text-sm">
-                          {ontologyDisplay.displayEventType(item.event_type, {
-                            fallbackObjectType: objectType,
-                          })}
-                        </div>
-                        <div className="mt-1 text-xs text-muted-foreground">{formatDateTime(eventTimeIso(item))}</div>
-                      </div>
-                      <Badge variant="outline" className="rounded-full">
-                        {item.source || "source-n/a"}
-                      </Badge>
-                    </div>
-
-                    {highlightEntries.length > 0 && (
-                      <dl className="mt-3 grid gap-1 text-xs">
-                        {highlightEntries.map(([key, value]) => (
-                          <div key={key} className="grid grid-cols-[minmax(90px,auto)_1fr] gap-2">
-                            <dt className="text-muted-foreground">
-                              {ontologyDisplay.displayFieldLabel(key, {
-                                objectType,
-                                eventType: item.event_type,
-                              })}
-                              :
-                            </dt>
-                            <dd className="break-all">
-                              {renderFieldValue(
-                                ontologyDisplay.displayFieldValue(key, value, valueContext)
-                              )}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )}
-                  </div>
-                );
-              })
-            )}
+          <div className="mt-4 space-y-5">
+            <ObjectHistoryTimeline
+              groups={timelineGroups}
+              hasAnyEvents={timelineItems.length > 0}
+              loading={timelineLoading}
+            />
           </div>
 
           <div className="mt-4 flex items-center justify-between">

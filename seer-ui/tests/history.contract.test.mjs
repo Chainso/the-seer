@@ -28,6 +28,10 @@ test("inspector root and object store route follow the forward-only history IA",
   assert.match(historyPanel, /router\.push\(`\/inspector\/history\/object\?/);
   assert.match(historyPanel, /object_type/);
   assert.match(historyPanel, /object_ref_canonical/);
+  assert.match(historyPanel, /<Table\.Root[\s\S]*striped/);
+  assert.doesNotMatch(historyPanel, /Graph Controls/);
+  assert.doesNotMatch(historyPanel, /Graph View/);
+  assert.doesNotMatch(historyPanel, /Load older/);
   assert.match(detailsPanel, /Graph time source/);
   assert.match(detailsPanel, /Follow Timeline/);
   assert.match(detailsPanel, /Custom Range/);
@@ -64,4 +68,14 @@ test("history surfaces consume shared ontology display resolver contracts", () =
   assert.match(detailsPanel, /\.displayFieldLabel\(/);
   assert.match(detailsPanel, /\.displayFieldValue\(/);
   assert.match(detailsPanel, /\.summarizeObjectRef\(/);
+  assert.match(detailsPanel, /\.summarizePayload\(/);
+  assert.match(detailsPanel, /buildTimelineHighlights/);
+  assert.match(detailsPanel, /resolveStateTransition/);
+  assert.match(detailsPanel, /Timeline by Day/);
+  assert.match(detailsPanel, /toLocaleDateString\(undefined,\s*\{\s*weekday:\s*"short"/);
+  assert.match(detailsPanel, /<ObjectHistoryTimeline/);
+  assert.match(detailsPanel, /groups=\{timelineGroups\}/);
+  assert.doesNotMatch(detailsPanel, /workflow/i);
+  assert.doesNotMatch(detailsPanel, /trace id/i);
+  assert.doesNotMatch(detailsPanel, /workflow id/i);
 });

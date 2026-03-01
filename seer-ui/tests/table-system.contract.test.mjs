@@ -31,6 +31,17 @@ test("table primitive exposes Radix-style namespace API", () => {
   assert.match(table, /RowHeaderCell: TableRowHeaderCell/);
 });
 
+test("table primitive supports optional striped rows and history discovery opts in", () => {
+  const table = read("app/components/ui/table.tsx");
+  const historyPanel = read("app/components/inspector/history-panel.tsx");
+
+  assert.match(table, /striped\?: boolean/);
+  assert.match(table, /striped = false/);
+  assert.match(table, /TableStyleContext\.Provider value=\{\{ size, variant, striped \}\}/);
+  assert.match(table, /striped && "\[&_tr:nth-child\(even\)\]:bg-muted\/20"/);
+  assert.match(historyPanel, /<Table\.Root[\s\S]*striped/);
+});
+
 test("table consumers use namespace primitives and semantic header cells", () => {
   const actionList = read("app/components/ontology/lists/action-list.tsx");
   const eventList = read("app/components/ontology/lists/event-list.tsx");

@@ -298,10 +298,7 @@ test("history details panel keeps object-local lifecycle naming in plain/default
   const resolver = buildResolver();
 
   assert.doesNotMatch(historySource, /lifecycleLabelMode:\s*['"]explicit['"]/);
-  assert.match(
-    detailsSource,
-    /displayFieldValue\(\s*key,\s*value,\s*valueContext\s*\)/
-  );
+  assert.match(detailsSource, /displayFieldValue\(/);
   assert.equal(
     resolver.displayFieldValue("from_state", "pending", { objectType: "order" }),
     "Pending Approval"

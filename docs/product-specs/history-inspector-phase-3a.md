@@ -2,7 +2,7 @@
 
 **Status:** completed  
 **Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/object-centric-history-inspector-consolidation.md`  
-**Last updated:** 2026-02-28
+**Last updated:** 2026-03-01
 
 ---
 
@@ -75,9 +75,14 @@ Define user-facing behavior for the object-centric History Inspector:
 2. Field labels should use ontology property labels where available.
 3. State-like payload values (`status`, `state`, `*_status`, `*_state`) should use ontology state labels where available.
 4. If no ontology label exists, raw key/value is shown.
-5. Event cards and object references use compact inline formatting:
-   - field display: `Key · Value`
-   - separator between fields: ` | `
+5. Timeline rendering is event-card based and grouped by day:
+   - day headers separate loaded event history into chronological sections,
+   - each event card shows ontology-aware event name, timestamp, relation role, and source.
+6. Event cards must prioritize ontology-first signal over raw payload dumps:
+   - state transitions render as explicit `from -> to` badges when present,
+   - highlights are limited to a small set of ontology-relevant fields (for scanability),
+   - payload summary text is generated via ontology display summarization.
+7. Object reference display should remain compact and human-readable via ontology summarization helpers.
 
 ## Backend Contracts Consumed by UI
 

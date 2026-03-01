@@ -591,7 +591,7 @@ export function HistoryPanel() {
         </div>
       </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
+      <div>
         <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <div>
@@ -609,6 +609,7 @@ export function HistoryPanel() {
             </div>
           ) : (
             <Table.Root
+              striped
               layout="fixed"
               style={{ width: "100%", minWidth: "100%" }}
               className="[&_th:nth-child(1)]:w-[22%] [&_th:nth-child(2)]:w-[53%] [&_th:nth-child(3)]:w-[25%] [&_td:nth-child(1)]:w-[22%] [&_td:nth-child(2)]:w-[53%] [&_td:nth-child(3)]:w-[25%]"
@@ -684,19 +685,6 @@ export function HistoryPanel() {
               >
                 Next
               </Button>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="space-y-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Object Activity</p>
-            <h2 className="font-display text-xl">Open Timeline + Graph</h2>
-            <p className="text-sm text-muted-foreground">
-              Click a row in Live Objects to open object-specific timeline and graph analysis.
-            </p>
-            <div className="rounded-xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground">
-              Object activity details moved into a dedicated object route to keep Object Store discovery-first.
             </div>
           </div>
         </Card>

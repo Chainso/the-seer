@@ -14,17 +14,20 @@ interface TableRootProps
   size?: TableSize
   variant?: TableVariant
   layout?: TableLayout
+  striped?: boolean
   containerClassName?: string
 }
 
 interface TableStyleContextValue {
   size: TableSize
   variant: TableVariant
+  striped: boolean
 }
 
 const TableStyleContext = React.createContext<TableStyleContextValue>({
   size: "2",
   variant: "surface",
+  striped: false,
 })
 
 const CELL_PADDING_BY_SIZE: Record<TableSize, string> = {
@@ -50,12 +53,13 @@ const TableRoot = React.forwardRef<
       size = "2",
       variant = "surface",
       layout = "auto",
+      striped = false,
       ...props
     },
     ref
   ) => {
     return (
-      <TableStyleContext.Provider value={{ size, variant }}>
+      <TableStyleContext.Provider value={{ size, variant, striped }}>
         <div
           data-slot="table-container"
           className={cn(
@@ -107,11 +111,17 @@ const TableBody = React.forwardRef<
   React.ElementRef<typeof RadixTable.Body>,
   React.ComponentPropsWithoutRef<typeof RadixTable.Body>
 >(({ className, ...props }, ref) => {
+  const { striped } = React.useContext(TableStyleContext)
+
   return (
     <RadixTable.Body
       ref={ref}
       data-slot="table-body"
-      className={cn("[&_tr:last-child]:border-0", className)}
+      className={cn(
+        "[&_tr:last-child]:border-0",
+        striped && "[&_tr:nth-child(even)]:bg-muted/20",
+        className
+      )}
       {...props}
     />
   )
