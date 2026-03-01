@@ -654,6 +654,7 @@ Current execution state:
 1. `cd seer-backend && uv run ruff check src/seer_backend/actions tests/test_actions_repository.py` -> pass.
 2. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py` -> pass (`4 passed`).
 3. Local schema bootstrap smoke against PostgreSQL -> pass (`actions schema bootstrap ok`).
+4. Phase 1 implementation commit: `29d258016c4def96b7524db7e20f14f5fc56a4ff`.
 
 ## Decision Log
 
