@@ -2,7 +2,7 @@
 
 **Status:** Canonical per-phase execution map  
 **Date:** 2026-03-01  
-**Parent roadmap:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-roadmap-2026.md`
+**Parent roadmap:** `docs/exec-plans/completed/mvp-roadmap-2026.md`
 
 ---
 
@@ -22,12 +22,12 @@ Each phase is owned by a different agent and must run in strict sequence.
 
 ## Sequence
 
-1. Phase 0: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md` (`agent_slot: A1`, completed)
-2. Phase 1: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md` (`agent_slot: A2`, completed)
-3. Phase 2: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-2-event-history-ingestion.md` (`agent_slot: A3`, completed)
-4. Phase 3: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md` (`agent_slot: A4`, completed)
-5. Phase 4: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md` (`agent_slot: A5`, completed)
-6. Phase 5: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md` (`agent_slot: A6`, completed)
+1. Phase 0: `docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md` (`agent_slot: A1`, completed)
+2. Phase 1: `docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md` (`agent_slot: A2`, completed)
+3. Phase 2: `docs/exec-plans/completed/mvp-phase-2-event-history-ingestion.md` (`agent_slot: A3`, completed)
+4. Phase 3: `docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md` (`agent_slot: A4`, completed)
+5. Phase 4: `docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md` (`agent_slot: A5`, completed)
+6. Phase 5: `docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md` (`agent_slot: A6`, completed)
 
 ## Shared Handoff Contract
 
@@ -64,7 +64,8 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. None
+1. `docs/exec-plans/active/clickhouse-connect-migration.md` - in_progress
+2. `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md` - blocked (depends on clickhouse-connect migration)
 
 ## Post-MVP Status Tracking
 
@@ -79,14 +80,15 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: none
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/object-centric-history-inspector-consolidation.md` (all phases complete and ratified as of 2026-02-28)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md` (all phases complete and plan closed as of 2026-02-28)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/adaptive-lifecycle-label-display.md` (Phases 1-3 complete and validated as of 2026-02-28)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/stable-identifiers-uri-migration.md` (all phases complete and validated as of 2026-03-01)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/assistant-page-surface-unification.md` (all phases complete as of 2026-02-28)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/assistant-chat-sse-streaming-migration.md` (all phases complete and archived as of 2026-03-01)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md` (all phases complete as of 2026-02-22)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-copilot-openai-client-migration.md` (all phases complete as of 2026-02-23)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/global-assistant-layer-and-generic-ai-endpoint.md` (all phases complete as of 2026-02-28)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ontology-driven-field-display-centralization.md` (all phases complete as of 2026-02-28)
+- `in_progress`: `docs/exec-plans/active/clickhouse-connect-migration.md`
+- `blocked`: `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md` (waiting on clickhouse-connect migration)
+- `completed`: `docs/exec-plans/completed/object-centric-history-inspector-consolidation.md` (all phases complete and ratified as of 2026-02-28)
+- `completed`: `docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md` (all phases complete and plan closed as of 2026-02-28)
+- `completed`: `docs/exec-plans/completed/adaptive-lifecycle-label-display.md` (Phases 1-3 complete and validated as of 2026-02-28)
+- `completed`: `docs/exec-plans/completed/stable-identifiers-uri-migration.md` (all phases complete and validated as of 2026-03-01)
+- `completed`: `docs/exec-plans/completed/assistant-page-surface-unification.md` (all phases complete as of 2026-02-28)
+- `completed`: `docs/exec-plans/completed/assistant-chat-sse-streaming-migration.md` (all phases complete and archived as of 2026-03-01)
+- `completed`: `docs/exec-plans/completed/ui-experience-replatform-2026.md` (all phases complete as of 2026-02-22)
+- `completed`: `docs/exec-plans/completed/post-mvp-ontology-copilot-openai-client-migration.md` (all phases complete as of 2026-02-23)
+- `completed`: `docs/exec-plans/completed/global-assistant-layer-and-generic-ai-endpoint.md` (all phases complete as of 2026-02-28)
+- `completed`: `docs/exec-plans/completed/ontology-driven-field-display-centralization.md` (all phases complete as of 2026-02-28)
