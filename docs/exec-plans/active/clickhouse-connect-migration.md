@@ -80,6 +80,10 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
    - no reliance on `RETURNING`, advanced isolation, or sequence semantics,
    - SQLAlchemy `primary_key=True` is identity metadata, not a server-enforced constraint.
 
+## Reference
+
+1. SQLAlchemy dialect reference source: `https://raw.githubusercontent.com/ClickHouse/clickhouse-docs/refs/heads/main/docs/integrations/language-clients/python/sqlalchemy.md`
+
 ## Phase Map
 
 ## Phase 1: Baseline and Client Design
