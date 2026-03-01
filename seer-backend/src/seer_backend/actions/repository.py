@@ -27,7 +27,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Connection, Engine, RowMapping
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from seer_backend.actions.errors import ActionRepositoryError
 from seer_backend.actions.models import (
@@ -102,7 +102,16 @@ class ActionsRepository(Protocol):
 
     def create_action(self, action: ActionCreate) -> ActionRecord: ...
 
+    def create_action_with_dedupe(self, action: ActionCreate) -> tuple[ActionRecord, bool]: ...
+
     def get_action(self, action_id: UUID) -> ActionRecord | None: ...
+
+    def get_action_by_idempotency_key(
+        self,
+        *,
+        user_id: str,
+        idempotency_key: str,
+    ) -> ActionRecord | None: ...
 
     def claim_actions(
         self,
@@ -146,6 +155,10 @@ class PostgresActionsRepository:
             raise ActionRepositoryError(f"Postgres schema migration failed: {exc}") from exc
 
     def create_action(self, action: ActionCreate) -> ActionRecord:
+        record, _dedupe_hit = self.create_action_with_dedupe(action)
+        return record
+
+    def create_action_with_dedupe(self, action: ActionCreate) -> tuple[ActionRecord, bool]:
         submitted_at = _ensure_utc(action.submitted_at)
         next_visible_at = _ensure_utc(action.next_visible_at or submitted_at)
         values = {
@@ -171,35 +184,56 @@ class PostgresActionsRepository:
         }
         try:
             with self._engine_instance().begin() as connection:
-                connection.execute(insert(actions_table).values(**values))
-                row = (
-                    connection.execute(
-                        select(*actions_table.c).where(
-                            actions_table.c.action_id == action.action_id
+                try:
+                    connection.execute(insert(actions_table).values(**values))
+                    row = self._load_action_row_by_id(connection, action.action_id)
+                    if row is None:
+                        raise ActionRepositoryError(
+                            f"created action '{action.action_id}' could not be loaded"
                         )
-                    )
-                    .mappings()
-                    .first()
-                )
+                    return _action_from_row(row), False
+                except IntegrityError as exc:
+                    if action.idempotency_key and _is_unique_violation(exc):
+                        row = self._load_action_row_by_idempotency_key(
+                            connection=connection,
+                            user_id=action.user_id,
+                            idempotency_key=action.idempotency_key,
+                        )
+                        if row is None:
+                            raise ActionRepositoryError(
+                                "idempotency collision detected but "
+                                "existing action could not be loaded"
+                            ) from exc
+                        return _action_from_row(row), True
+                    raise
         except SQLAlchemyError as exc:
             raise ActionRepositoryError(f"Postgres create action failed: {exc}") from exc
-
-        if row is None:
-            raise ActionRepositoryError(f"created action '{action.action_id}' could not be loaded")
-        return _action_from_row(row)
 
     def get_action(self, action_id: UUID) -> ActionRecord | None:
         try:
             with self._engine_instance().connect() as connection:
-                row = (
-                    connection.execute(
-                        select(*actions_table.c).where(actions_table.c.action_id == action_id)
-                    )
-                    .mappings()
-                    .first()
-                )
+                row = self._load_action_row_by_id(connection, action_id)
         except SQLAlchemyError as exc:
             raise ActionRepositoryError(f"Postgres get action failed: {exc}") from exc
+        if row is None:
+            return None
+        return _action_from_row(row)
+
+    def get_action_by_idempotency_key(
+        self,
+        *,
+        user_id: str,
+        idempotency_key: str,
+    ) -> ActionRecord | None:
+        try:
+            with self._engine_instance().connect() as connection:
+                row = self._load_action_row_by_idempotency_key(
+                    connection=connection,
+                    user_id=user_id,
+                    idempotency_key=idempotency_key,
+                )
+        except SQLAlchemyError as exc:
+            raise ActionRepositoryError(f"Postgres get by idempotency key failed: {exc}") from exc
         if row is None:
             return None
         return _action_from_row(row)
@@ -325,6 +359,39 @@ class PostgresActionsRepository:
             )
         )
 
+    def _load_action_row_by_id(
+        self,
+        connection: Connection,
+        action_id: UUID,
+    ) -> Mapping[str, object] | RowMapping | None:
+        return (
+            connection.execute(
+                select(*actions_table.c).where(actions_table.c.action_id == action_id)
+            )
+            .mappings()
+            .first()
+        )
+
+    def _load_action_row_by_idempotency_key(
+        self,
+        *,
+        connection: Connection,
+        user_id: str,
+        idempotency_key: str,
+    ) -> Mapping[str, object] | RowMapping | None:
+        return (
+            connection.execute(
+                select(*actions_table.c).where(
+                    and_(
+                        actions_table.c.user_id == user_id,
+                        actions_table.c.idempotency_key == idempotency_key,
+                    )
+                )
+            )
+            .mappings()
+            .first()
+        )
+
     def _engine_instance(self) -> Engine:
         if self._engine is not None:
             return self._engine
@@ -349,6 +416,7 @@ class InMemoryActionsRepository:
         self._actions: dict[UUID, ActionRecord] = {}
         self._attempts: list[ActionAttemptRecord] = []
         self._instances: dict[tuple[str, str], InstanceRecord] = {}
+        self._idempotency_index: dict[tuple[str, str], UUID] = {}
 
     @property
     def ensure_schema_calls(self) -> int:
@@ -358,7 +426,23 @@ class InMemoryActionsRepository:
         self._schema_ensure_calls += 1
 
     def create_action(self, action: ActionCreate) -> ActionRecord:
+        record, _dedupe_hit = self.create_action_with_dedupe(action)
+        return record
+
+    def create_action_with_dedupe(self, action: ActionCreate) -> tuple[ActionRecord, bool]:
         with self._lock:
+            if action.idempotency_key:
+                existing_action_id = self._idempotency_index.get(
+                    (action.user_id, action.idempotency_key)
+                )
+                if existing_action_id is not None:
+                    existing = self._actions.get(existing_action_id)
+                    if existing is None:
+                        raise ActionRepositoryError(
+                            "idempotency index points to missing action record"
+                        )
+                    return _clone_action(existing), True
+
             submitted_at = _ensure_utc(action.submitted_at)
             next_visible_at = _ensure_utc(action.next_visible_at or submitted_at)
             record = ActionRecord(
@@ -383,10 +467,27 @@ class InMemoryActionsRepository:
                 completed_at=None,
             )
             self._actions[record.action_id] = record
-            return _clone_action(record)
+            if action.idempotency_key:
+                self._idempotency_index[(action.user_id, action.idempotency_key)] = (
+                    record.action_id
+                )
+            return _clone_action(record), False
 
     def get_action(self, action_id: UUID) -> ActionRecord | None:
         with self._lock:
+            row = self._actions.get(action_id)
+            return _clone_action(row) if row is not None else None
+
+    def get_action_by_idempotency_key(
+        self,
+        *,
+        user_id: str,
+        idempotency_key: str,
+    ) -> ActionRecord | None:
+        with self._lock:
+            action_id = self._idempotency_index.get((user_id, idempotency_key))
+            if action_id is None:
+                return None
             row = self._actions.get(action_id)
             return _clone_action(row) if row is not None else None
 
@@ -513,6 +614,11 @@ def _ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _is_unique_violation(exc: IntegrityError) -> bool:
+    sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+    return str(sqlstate) == "23505"
 
 
 def _split_sql_statements(sql_text: str) -> list[str]:

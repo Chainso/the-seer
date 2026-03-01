@@ -630,7 +630,7 @@ Rationale:
 
 - [x] Phase 0 complete
 - [x] Phase 1 complete
-- [ ] Phase 2 complete
+- [x] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
@@ -639,9 +639,9 @@ Rationale:
 
 Current execution state:
 
-- `in_progress`: Phase 2 submit API + ontology validation + enqueue
+- `in_progress`: Phase 3 claim API + instance registry semantics
 - `blocked`: none
-- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations
+- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue
 
 ## Baseline Failure Ledger
 
@@ -655,6 +655,15 @@ Current execution state:
 2. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py` -> pass (`4 passed`).
 3. Local schema bootstrap smoke against PostgreSQL -> pass (`actions schema bootstrap ok`).
 4. Phase 1 implementation commit: `29d258016c4def96b7524db7e20f14f5fc56a4ff`.
+
+## Phase 2 Acceptance Evidence
+
+1. Added `POST /api/v1/actions/submit` transport with request/response contracts and app router wiring.
+2. Added submit-time ontology adapter resolving current release, validating executable action/input metadata, and persisting deterministic `validation_contract_hash`.
+3. Added idempotency dedupe path with stable submit responses (`dedupe_hit`) and repository-level dedupe hooks.
+4. Added submit API tests covering success path, invalid action/payload 422 responses, idempotency dedupe, and dependency-unavailable mapping.
+5. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_submit.py` -> pass (`All checks passed!`).
+6. `cd seer-backend && uv run pytest -q tests/test_actions_submit.py` -> pass (`4 passed`).
 
 ## Decision Log
 
@@ -673,6 +682,8 @@ Current execution state:
 13. 2026-03-01: Kept executor conformance protocol in scope and required for acceptance.
 14. 2026-03-01: Phase 1 completed (domain skeleton, Postgres migrations/config/runtime wiring, repository/service tests, live schema bootstrap validation).
 15. 2026-03-01: Added plan guardrail requiring per-phase scoped commits (including worker-owned phase implementation slices).
+16. 2026-03-01: Phase 2 completed with best-available ontology input validation (`acceptsInput` + `hasProperty` + cardinality + basic type/object-reference checks) and deterministic contract hashing.
+17. 2026-03-01: Deferred deeper semantic type validation (enum/domain-specific constraints/date-format strictness) to later phases; current behavior returns actionable 422s for contract coverage available today.
 
 ## Next-Phase Starter Context
 

@@ -49,6 +49,12 @@ class ActionCreate:
 
 
 @dataclass(slots=True)
+class ActionSubmitResult:
+    action: ActionRecord
+    dedupe_hit: bool
+
+
+@dataclass(slots=True)
 class ActionRecord:
     action_id: UUID
     user_id: str
