@@ -10,9 +10,9 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 
-import { getOcpnGraph } from "@/app/lib/api/process-mining";
+import { getOcdfgGraph, getOcpnGraph, toOcpnGraphFromOcdfg } from "@/app/lib/api/process-mining";
 import { useOntologyDisplay } from "@/app/lib/ontology-display";
-import type { OcpnGraph } from "@/app/types/process-mining";
+import type { OcdfgGraph, OcpnGraph } from "@/app/types/process-mining";
 import { OcpnGraph as OcpnGraphView } from "./ocpn-graph";
 import { BpmnGraph as BpmnGraphView } from "./bpmn-graph";
 
@@ -190,8 +190,9 @@ export function ProcessMiningPanel() {
   const [collapseObjects, setCollapseObjects] = useState(true);
   const [filters, setFilters] = useState<FilterPair[]>([{ id: "filter-0", key: "", value: "" }]);
 
-  const [graph, setGraph] = useState<OcpnGraph | null>(null);
-  const [graphCollapsed, setGraphCollapsed] = useState(false);
+  const [ocdfgGraph, setOcdfgGraph] = useState<OcdfgGraph | null>(null);
+  const [ocpnGraph, setOcpnGraph] = useState<OcpnGraph | null>(null);
+  const [ocpnGraphCollapsed, setOcpnGraphCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [mining, setMining] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -221,11 +222,18 @@ export function ProcessMiningPanel() {
     }, {});
   }, [modelOptions]);
 
-  const eventLabels = useMemo(() => {
-    if (!graph) {
+  const ocdfgRenderGraph = useMemo(() => {
+    if (!ocdfgGraph) {
+      return null;
+    }
+    return toOcpnGraphFromOcdfg(ocdfgGraph);
+  }, [ocdfgGraph]);
+
+  const ocdfgEventLabels = useMemo(() => {
+    if (!ocdfgRenderGraph) {
       return {};
     }
-    return graph.nodes.reduce<Record<string, string>>((acc, node) => {
+    return ocdfgRenderGraph.nodes.reduce<Record<string, string>>((acc, node) => {
       if (node.type !== "TRANSITION") {
         return acc;
       }
@@ -238,7 +246,26 @@ export function ProcessMiningPanel() {
       }
       return acc;
     }, {});
-  }, [graph, ontologyDisplay]);
+  }, [ocdfgRenderGraph, ontologyDisplay]);
+
+  const ocpnEventLabels = useMemo(() => {
+    if (!ocpnGraph) {
+      return {};
+    }
+    return ocpnGraph.nodes.reduce<Record<string, string>>((acc, node) => {
+      if (node.type !== "TRANSITION") {
+        return acc;
+      }
+      const label = ontologyDisplay.displayEventType(node.eventUri ?? node.label ?? node.id);
+      if (node.eventUri) {
+        acc[node.eventUri] = label;
+      }
+      if (node.label) {
+        acc[node.label] = label;
+      }
+      return acc;
+    }, {});
+  }, [ocpnGraph, ontologyDisplay]);
 
   const resolvedFrom = from ? new Date(from).toISOString() : undefined;
   const resolvedTo = to ? new Date(to).toISOString() : undefined;
@@ -270,7 +297,7 @@ export function ProcessMiningPanel() {
     setLoading(true);
     setError(null);
     try {
-      const data = await getOcpnGraph({
+      const requestPayload = {
         modelUri,
         from: resolvedFrom,
         to: resolvedTo,
@@ -279,14 +306,19 @@ export function ProcessMiningPanel() {
         filters: filterPayload,
         minShare: Number.isNaN(Number(minShare)) ? undefined : Number(minShare) / 100,
         collapseObjects,
-      });
-      setGraph(data);
-      setGraphCollapsed(collapseObjects);
+      };
+      const [ocdfgData, ocpnData] = await Promise.all([
+        getOcdfgGraph(requestPayload),
+        getOcpnGraph(requestPayload),
+      ]);
+      setOcdfgGraph(ocdfgData);
+      setOcpnGraph(ocpnData);
+      setOcpnGraphCollapsed(collapseObjects);
       setSelectedNodeId(null);
       setBpmnGraph(null);
       setBpmnError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load process mining data");
+      setError(err instanceof Error ? err.message : "Failed to load OC-DFG process mining data");
     } finally {
       setLoading(false);
     }
@@ -294,7 +326,7 @@ export function ProcessMiningPanel() {
 
   useEffect(() => {
     let active = true;
-    if (!graph || !graphCollapsed) {
+    if (!ocpnGraph || !ocpnGraphCollapsed) {
       setBpmnGraph(null);
       setBpmnError(null);
       return () => {
@@ -305,7 +337,7 @@ export function ProcessMiningPanel() {
     const runMining = async () => {
       setMining(true);
       try {
-        const bpmn = await mineBpmnGraph(graph);
+        const bpmn = await mineBpmnGraph(ocpnGraph);
         if (!active) return;
         setBpmnGraph(bpmn);
         setBpmnError(null);
@@ -323,17 +355,17 @@ export function ProcessMiningPanel() {
     return () => {
       active = false;
     };
-  }, [graph, graphCollapsed]);
+  }, [ocpnGraph, ocpnGraphCollapsed]);
 
   const selectedNode = useMemo(() => {
-    if (!graph || !selectedNodeId) return null;
-    return graph.nodes.find(node => node.id === selectedNodeId) || null;
-  }, [graph, selectedNodeId]);
+    if (!ocdfgRenderGraph || !selectedNodeId) return null;
+    return ocdfgRenderGraph.nodes.find(node => node.id === selectedNodeId) || null;
+  }, [ocdfgRenderGraph, selectedNodeId]);
 
   const selectedNodeStats = useMemo(() => {
-    if (!graph || !selectedNodeId) return null;
-    const incoming = graph.edges.filter(edge => edge.target === selectedNodeId);
-    const outgoing = graph.edges.filter(edge => edge.source === selectedNodeId);
+    if (!ocdfgRenderGraph || !selectedNodeId) return null;
+    const incoming = ocdfgRenderGraph.edges.filter(edge => edge.target === selectedNodeId);
+    const outgoing = ocdfgRenderGraph.edges.filter(edge => edge.source === selectedNodeId);
     const incomingTotal = incoming.reduce((sum, edge) => sum + edge.count, 0);
     const outgoingTotal = outgoing.reduce((sum, edge) => sum + edge.count, 0);
     return {
@@ -342,13 +374,7 @@ export function ProcessMiningPanel() {
       incomingTotal,
       outgoingTotal,
     };
-  }, [graph, selectedNodeId]);
-
-  const formatTimestamp = (value?: string | null) => {
-    if (!value) return "—";
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.valueOf()) ? "—" : parsed.toLocaleString();
-  };
+  }, [ocdfgRenderGraph, selectedNodeId]);
 
   const colorForModel = (modelUri: string) => {
     let hash = 0;
@@ -359,9 +385,9 @@ export function ProcessMiningPanel() {
   };
 
   const modelLegend = useMemo(() => {
-    if (!graph) return [];
+    if (!ocdfgRenderGraph) return [];
     const active = new Set<string>();
-    graph.edges.forEach(edge => {
+    ocdfgRenderGraph.edges.forEach(edge => {
       if (edge.modelUri) {
         active.add(edge.modelUri);
       }
@@ -371,7 +397,40 @@ export function ProcessMiningPanel() {
       name: modelLabels[uri] ?? ontologyDisplay.displayObjectType(uri),
       color: colorForModel(uri),
     }));
-  }, [graph, modelLabels, ontologyDisplay]);
+  }, [ocdfgRenderGraph, modelLabels, ontologyDisplay]);
+
+  const boundarySummary = useMemo(() => {
+    if (!ocdfgGraph) {
+      return {
+        start: [] as Array<{ id: string; activity: string; objectType: string; count: number }>,
+        end: [] as Array<{ id: string; activity: string; objectType: string; count: number }>,
+      };
+    }
+
+    const sortByCountDesc = (
+      rows: Array<{ id: string; activity: string; objectType: string; count: number }>
+    ) => {
+      return [...rows].sort((a, b) => b.count - a.count);
+    };
+
+    const start = sortByCountDesc(
+      ocdfgGraph.startActivities.map((item) => ({
+        id: item.id,
+        activity: item.activity,
+        objectType: item.objectType,
+        count: item.count,
+      }))
+    );
+    const end = sortByCountDesc(
+      ocdfgGraph.endActivities.map((item) => ({
+        id: item.id,
+        activity: item.activity,
+        objectType: item.objectType,
+        count: item.count,
+      }))
+    );
+    return { start, end };
+  }, [ocdfgGraph]);
 
   const updateFilter = (id: string, updates: Partial<FilterPair>) => {
     setFilters(prev => prev.map(item => (item.id === id ? { ...item, ...updates } : item)));
@@ -391,14 +450,14 @@ export function ProcessMiningPanel() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Process Mining</p>
-            <h1 className="mt-3 font-display text-3xl">Object-Centric Flow</h1>
-            <p className="mt-3 text-sm text-muted-foreground max-w-2xl">
-              Places are object types, transitions are events, and arcs show how events touch multiple objects in time.
+            <h1 className="mt-3 font-display text-3xl">Object-Centric Process Explorer</h1>
+            <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+              OC-DFG is the first diagram for activity flow analysis. OCPN and BPMN remain available as secondary views.
             </p>
           </div>
           <Badge className="gap-2 rounded-full bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
             <Activity className="h-3 w-3" />
-            OCPN
+            OC-DFG First
           </Badge>
         </div>
       </Card>
@@ -458,7 +517,7 @@ export function ProcessMiningPanel() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="collapseObjects">Edge coloring</Label>
+            <Label htmlFor="collapseObjects">Secondary OCPN options</Label>
             <div className="flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-sm">
               <input
                 id="collapseObjects"
@@ -466,7 +525,7 @@ export function ProcessMiningPanel() {
                 checked={collapseObjects}
                 onChange={e => setCollapseObjects(e.target.checked)}
               />
-              <span>Collapse object places, color edges by object type</span>
+              <span>Collapse object places for OCPN and enable BPMN conversion</span>
             </div>
           </div>
         </div>
@@ -516,40 +575,36 @@ export function ProcessMiningPanel() {
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           <Layers className="h-4 w-4" />
-          Object-Centric Petri Net
+          Object-Centric Directly-Follows Graph (Primary)
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div>
-            {graph && modelUri ? (
+            {ocdfgRenderGraph && modelUri ? (
               <OcpnGraphView
-                graph={graph}
+                graph={ocdfgRenderGraph}
                 modelLabels={modelLabels}
-                eventLabels={eventLabels}
+                eventLabels={ocdfgEventLabels}
                 selectedNodeId={selectedNodeId}
                 onNodeSelect={setSelectedNodeId}
-                collapseObjects={collapseObjects}
+                collapseObjects
               />
             ) : (
               <div className="flex h-[680px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-                Select a model to render the process mining graph.
+                Select a model to render the OC-DFG graph.
               </div>
             )}
           </div>
           <div className="space-y-4">
             <Card className="rounded-2xl border border-border bg-background p-4">
               <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                Node Inspector
+                Activity Inspector
               </div>
               {selectedNode ? (
                 <div className="mt-3 space-y-3 text-sm">
                   <div className="font-display text-lg">
-                    {selectedNode.type === "PLACE"
-                      ? ontologyDisplay.displayObjectType(selectedNode.modelUri ?? selectedNode.label ?? null)
-                      : ontologyDisplay.displayEventType(selectedNode.eventUri ?? selectedNode.label ?? null)}
+                    {ontologyDisplay.displayEventType(selectedNode.eventUri ?? selectedNode.label ?? null)}
                   </div>
-                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                    {selectedNode.type === "PLACE" ? "Object type" : "Event"}
-                  </div>
+                  <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Activity</div>
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                     <div className="rounded-lg border border-border bg-background px-3 py-2">
                       <div className="text-[0.65rem] uppercase tracking-[0.2em]">In</div>
@@ -560,88 +615,93 @@ export function ProcessMiningPanel() {
                       <div className="text-sm text-foreground">{selectedNodeStats?.outgoingTotal ?? 0}</div>
                     </div>
                   </div>
-                  {selectedNode.type === "TRANSITION" && (
-                    <div className="grid gap-2 text-xs text-muted-foreground">
-                      <div className="rounded-lg border border-border bg-background px-3 py-2">
-                        <div className="text-[0.65rem] uppercase tracking-[0.2em]">First seen</div>
-                        <div className="text-sm text-foreground">{formatTimestamp(selectedNode.firstSeen)}</div>
-                      </div>
-                      <div className="rounded-lg border border-border bg-background px-3 py-2">
-                        <div className="text-[0.65rem] uppercase tracking-[0.2em]">Median seen</div>
-                        <div className="text-sm text-foreground">{formatTimestamp(selectedNode.medianSeen)}</div>
-                      </div>
-                      <div className="rounded-lg border border-border bg-background px-3 py-2">
-                        <div className="text-[0.65rem] uppercase tracking-[0.2em]">Last seen</div>
-                        <div className="text-sm text-foreground">{formatTimestamp(selectedNode.lastSeen)}</div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               ) : (
                 <div className="mt-3 text-sm text-muted-foreground">
-                  Click a node to inspect its flow statistics.
+                  Click an activity node to inspect incoming and outgoing flow.
                 </div>
               )}
             </Card>
-            {selectedNode && selectedNodeStats && (
-              <Card className="rounded-2xl border border-border bg-background p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  Flow Summary
-                </div>
-                <div className="mt-3 space-y-2 text-xs text-muted-foreground">
-                  <div className="flex items-center justify-between">
-                    <span>Incoming edges</span>
-                    <span className="text-foreground">{selectedNodeStats.incoming.length}</span>
+            <Card className="rounded-2xl border border-border bg-background p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                Start / End Activities
+              </div>
+              {ocdfgGraph ? (
+                <div className="mt-3 grid gap-3 text-xs text-muted-foreground">
+                  <div>
+                    <div className="mb-1 uppercase tracking-[0.2em]">Start</div>
+                    {boundarySummary.start.length > 0 ? (
+                      <div className="space-y-1">
+                        {boundarySummary.start.slice(0, 6).map((item) => (
+                          <div key={item.id} className="flex items-center justify-between gap-3">
+                            <span className="truncate">
+                              {ontologyDisplay.displayEventType(item.activity)} ·{" "}
+                              {modelLabels[item.objectType] ?? ontologyDisplay.displayObjectType(item.objectType)}
+                            </span>
+                            <span className="text-foreground">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground">No start activity markers.</div>
+                    )}
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span>Outgoing edges</span>
-                    <span className="text-foreground">{selectedNodeStats.outgoing.length}</span>
+                  <div>
+                    <div className="mb-1 uppercase tracking-[0.2em]">End</div>
+                    {boundarySummary.end.length > 0 ? (
+                      <div className="space-y-1">
+                        {boundarySummary.end.slice(0, 6).map((item) => (
+                          <div key={item.id} className="flex items-center justify-between gap-3">
+                            <span className="truncate">
+                              {ontologyDisplay.displayEventType(item.activity)} ·{" "}
+                              {modelLabels[item.objectType] ?? ontologyDisplay.displayObjectType(item.objectType)}
+                            </span>
+                            <span className="text-foreground">{item.count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground">No end activity markers.</div>
+                    )}
                   </div>
                 </div>
-              </Card>
-            )}
+              ) : (
+                <div className="mt-3 text-sm text-muted-foreground">
+                  Run mining to view OC-DFG start and end activity summaries.
+                </div>
+              )}
+            </Card>
           </div>
         </div>
-        {graph && graph.edges.length === 0 && (
+        {ocdfgRenderGraph && ocdfgRenderGraph.edges.length === 0 && (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            No OCPN edges yet. This usually means events are missing object links in `event_object_links`.
+            No OC-DFG edges are visible for the current filters and minimum share threshold.
+          </div>
+        )}
+        {ocdfgGraph && ocdfgGraph.warnings.length > 0 && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            {ocdfgGraph.warnings.join(" ")}
           </div>
         )}
         <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-2">
             <span className="inline-block h-3 w-6 rounded-full bg-foreground/20" />
-            Edge thickness = % share (within object type)
+            Edge thickness = OC-DFG count share (within object type)
           </div>
-          {!collapseObjects && (
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-border bg-[color:var(--graph-node-state-bg)] text-[0.6rem] font-semibold">
-                O
-              </span>
-              Object type nodes show linked event volume
-            </div>
-          )}
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.2em]">
               event
             </span>
-            Transition nodes represent ontology event concepts
+            Nodes are event activities from pm4py OC-DFG
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.2em]">
-              time
+              color
             </span>
-            Columns are ordered by median event time (bucketed to minutes)
+            Edge color = object type
           </div>
-          {collapseObjects && (
-            <div className="flex items-center gap-2">
-              <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.2em]">
-                color
-              </span>
-              Edge color = object type
-            </div>
-          )}
         </div>
-        {collapseObjects && modelLegend.length > 0 && (
+        {modelLegend.length > 0 && (
           <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
             {modelLegend.map(item => (
               <div key={item.uri} className="flex items-center gap-2 rounded-full border border-border px-3 py-1">
@@ -659,19 +719,47 @@ export function ProcessMiningPanel() {
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           <Layers className="h-4 w-4" />
+          Object-Centric Petri Net (Secondary)
+        </div>
+        <div className="mt-4">
+          {ocpnGraph ? (
+            <OcpnGraphView
+              graph={ocpnGraph}
+              modelLabels={modelLabels}
+              eventLabels={ocpnEventLabels}
+              selectedNodeId={null}
+              onNodeSelect={() => {}}
+              collapseObjects={collapseObjects}
+            />
+          ) : (
+            <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
+              Run mining to render the secondary OCPN view.
+            </div>
+          )}
+        </div>
+        {ocpnGraph && ocpnGraph.edges.length === 0 && (
+          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            No OCPN edges yet. This usually means events are missing object links in `event_object_links`.
+          </div>
+        )}
+      </Card>
+
+      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+          <Layers className="h-4 w-4" />
           Inductive Miner (BPMN)
         </div>
         <div className="mt-4">
-          {!graph || !graphCollapsed ? (
+          {!ocpnGraph || !ocpnGraphCollapsed ? (
             <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-              Enable collapse object places and run mining to generate the inductive model.
+              Enable OCPN collapse and run mining to generate the secondary BPMN model.
             </div>
           ) : mining ? (
             <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
               Running inductive miner...
             </div>
           ) : bpmnGraph ? (
-            <BpmnGraphView graph={bpmnGraph} labelMap={eventLabels} />
+            <BpmnGraphView graph={bpmnGraph} labelMap={ocpnEventLabels} />
           ) : bpmnError ? (
             <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {bpmnError}

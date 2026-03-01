@@ -42,6 +42,7 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
   assert.match(processApi, /max_events/);
   assert.match(processApi, /max_relations/);
   assert.match(processApi, /max_traces_per_handle/);
+  assert.match(processApi, /\/process\/ocdfg\/mine/);
   assert.match(rootCauseApi, /\/root-cause\/run/);
   assert.match(rootCauseApi, /\/root-cause\/evidence/);
   assert.match(rootCauseApi, /\/root-cause\/assist\/setup/);
@@ -72,6 +73,10 @@ test("process mining panel consumes shared ontology display resolver contract", 
   assert.match(processMiningPanel, /\.displayObjectType\(/);
   assert.match(processMiningPanel, /\.displayEventType\(/);
   assert.match(processMiningPanel, /catalog\.objectModels/);
+  assert.match(processMiningPanel, /Object-Centric Directly-Follows Graph \(Primary\)/);
+  assert.match(processMiningPanel, /Object-Centric Petri Net \(Secondary\)/);
+  assert.match(processMiningPanel, /OC-DFG First/);
+  assert.match(processMiningPanel, /getOcdfgGraph/);
   assert.doesNotMatch(processMiningPanel, /const iriLocalName =/);
   assert.doesNotMatch(processMiningPanel, /const ontologyNodeName =/);
 });

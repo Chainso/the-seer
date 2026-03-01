@@ -1,5 +1,20 @@
 import { fetchApi } from './client';
-import type { OcpnEdge, OcpnGraph, OcpnNode } from '@/app/types/process-mining';
+import type {
+  OcdfgBoundaryActivity,
+  OcdfgBoundaryActivityContract,
+  OcdfgEdge,
+  OcdfgEdgeContract,
+  OcdfgGraph,
+  OcdfgMiningResponseContract,
+  OcdfgNode,
+  OcdfgNodeContract,
+  OcpnEdge,
+  OcpnGraph,
+  OcpnNode,
+  ProcessMineResponseContract,
+  ProcessMiningRequestContract,
+  ProcessTraceDrilldownResponseContract,
+} from '@/app/types/process-mining';
 
 export interface ProcessMiningRequest {
   modelUri?: string;
@@ -14,71 +29,6 @@ export interface ProcessMiningRequest {
   maxEvents?: number;
   maxRelations?: number;
   maxTracesPerHandle?: number;
-}
-
-interface ProcessMineRequestContract {
-  anchor_object_type: string;
-  start_at: string;
-  end_at: string;
-  include_object_types?: string[];
-  max_events?: number;
-  max_relations?: number;
-  max_traces_per_handle?: number;
-}
-
-interface ProcessMineNodeContract {
-  id: string;
-  label: string;
-  node_type: string;
-  frequency: number;
-  trace_handle: string;
-}
-
-interface ProcessMineEdgeContract {
-  id: string;
-  source: string;
-  target: string;
-  object_type: string;
-  count: number;
-  trace_handle: string;
-}
-
-interface ProcessPathStatContract {
-  object_type: string;
-  path: string;
-  count: number;
-  trace_handle: string;
-}
-
-export interface ProcessMineResponseContract {
-  run_id: string;
-  anchor_object_type: string;
-  start_at: string;
-  end_at: string;
-  nodes: ProcessMineNodeContract[];
-  edges: ProcessMineEdgeContract[];
-  object_types: string[];
-  path_stats: ProcessPathStatContract[];
-  warnings: string[];
-}
-
-export interface ProcessTraceRecordContract {
-  object_type: string;
-  object_ref_hash: number;
-  object_ref_canonical: string;
-  event_ids: string[];
-  event_types: string[];
-  start_at: string;
-  end_at: string;
-  trace_id: string | null;
-}
-
-export interface ProcessTraceDrilldownResponseContract {
-  handle: string;
-  selector_type: string;
-  traces: ProcessTraceRecordContract[];
-  matched_count: number;
-  truncated: boolean;
 }
 
 const DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -134,7 +84,7 @@ function normalizeModelUris(modelUris: string[] | undefined): string[] | undefin
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function toTransitionNode(node: ProcessMineNodeContract): OcpnNode {
+function toTransitionNode(node: ProcessMineResponseContract['nodes'][number]): OcpnNode {
   return {
     id: node.id,
     label: node.label,
@@ -152,9 +102,11 @@ function toTransitionNode(node: ProcessMineNodeContract): OcpnNode {
   };
 }
 
-function buildObjectTypeCounts(run: ProcessMineResponseContract): Map<string, number> {
+function buildObjectTypeCounts(
+  edges: Array<{ object_type: string; count: number }>
+): Map<string, number> {
   const counts = new Map<string, number>();
-  run.edges.forEach((edge) => {
+  edges.forEach((edge) => {
     counts.set(edge.object_type, (counts.get(edge.object_type) || 0) + (Number(edge.count) || 0));
   });
   return counts;
@@ -168,7 +120,7 @@ function buildOcpnEdges(
   }
 ): OcpnEdge[] {
   const { collapseObjects, minShare } = options;
-  const totalsByObjectType = buildObjectTypeCounts(run);
+  const totalsByObjectType = buildObjectTypeCounts(run.edges);
   const minShareThreshold = typeof minShare === 'number' ? Math.max(0, minShare) : 0;
   const edges: OcpnEdge[] = [];
 
@@ -216,7 +168,7 @@ function buildOcpnEdges(
 }
 
 function buildPlaceNodes(run: ProcessMineResponseContract): OcpnNode[] {
-  const countsByObjectType = buildObjectTypeCounts(run);
+  const countsByObjectType = buildObjectTypeCounts(run.edges);
   return run.object_types.map((objectType) => ({
     id: `object:${objectType}`,
     label: objectType,
@@ -234,7 +186,7 @@ function buildPlaceNodes(run: ProcessMineResponseContract): OcpnNode[] {
   }));
 }
 
-function toMineRequestContract(payload: ProcessMiningRequest): ProcessMineRequestContract {
+function toMineRequestContract(payload: ProcessMiningRequest): ProcessMiningRequestContract {
   const modelUri = payload.modelUri || payload.modelUris?.[0];
   if (!modelUri) {
     throw new Error('Process mining requires an ontology object model selection.');
@@ -272,6 +224,102 @@ export async function mineProcess(payload: ProcessMiningRequest): Promise<Proces
     method: 'POST',
     body: JSON.stringify(contract),
   });
+}
+
+export async function mineOcdfg(payload: ProcessMiningRequest): Promise<OcdfgMiningResponseContract> {
+  const contract = toMineRequestContract(payload);
+  return fetchApi<OcdfgMiningResponseContract>('/process/ocdfg/mine', {
+    method: 'POST',
+    body: JSON.stringify(contract),
+  });
+}
+
+function toOcdfgNode(node: OcdfgNodeContract): OcdfgNode {
+  return {
+    id: node.id,
+    activity: node.activity,
+    count: Number(node.count) || 0,
+    traceHandle: node.trace_handle,
+  };
+}
+
+function toOcdfgEdge(edge: OcdfgEdgeContract): OcdfgEdge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    sourceActivity: edge.source_activity,
+    targetActivity: edge.target_activity,
+    objectType: edge.object_type,
+    count: Number(edge.count) || 0,
+    share: Number(edge.share) || 0,
+    p50Seconds: edge.p50_seconds,
+    p95Seconds: edge.p95_seconds,
+    traceHandle: edge.trace_handle,
+  };
+}
+
+function toOcdfgBoundaryActivity(item: OcdfgBoundaryActivityContract): OcdfgBoundaryActivity {
+  return {
+    id: item.id,
+    objectType: item.object_type,
+    activity: item.activity,
+    count: Number(item.count) || 0,
+    traceHandle: item.trace_handle,
+  };
+}
+
+function filterOcdfgEdges(
+  edges: OcdfgEdgeContract[],
+  minShare: number | undefined
+): OcdfgEdgeContract[] {
+  const minShareThreshold = typeof minShare === 'number' ? Math.max(0, minShare) : 0;
+  return edges.filter((edge) => (Number(edge.share) || 0) >= minShareThreshold);
+}
+
+export async function getOcdfgGraph(payload: ProcessMiningRequest): Promise<OcdfgGraph> {
+  const run = await mineOcdfg(payload);
+  const filteredEdges = filterOcdfgEdges(run.edges, payload.minShare);
+  return {
+    runId: run.run_id,
+    anchorObjectType: run.anchor_object_type,
+    startAt: run.start_at,
+    endAt: run.end_at,
+    nodes: run.nodes.map(toOcdfgNode),
+    edges: filteredEdges.map(toOcdfgEdge),
+    startActivities: run.start_activities.map(toOcdfgBoundaryActivity),
+    endActivities: run.end_activities.map(toOcdfgBoundaryActivity),
+    objectTypes: run.object_types,
+    warnings: run.warnings,
+  };
+}
+
+export function toOcpnGraphFromOcdfg(graph: OcdfgGraph): OcpnGraph {
+  return {
+    nodes: graph.nodes.map((node) => ({
+      id: node.id,
+      label: node.activity,
+      type: 'TRANSITION',
+      eventUri: node.activity,
+      count: node.count,
+      firstSeen: null,
+      lastSeen: null,
+      medianSeen: null,
+      modelUri: null,
+      stateUri: null,
+      avgSeconds: null,
+      p50Seconds: null,
+      p95Seconds: null,
+    })),
+    edges: graph.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      modelUri: edge.objectType,
+      count: edge.count,
+      share: edge.share,
+    })),
+  };
 }
 
 export async function getOcpnGraph(payload: ProcessMiningRequest): Promise<OcpnGraph> {

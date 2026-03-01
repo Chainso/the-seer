@@ -26,6 +26,16 @@
 5. Added backend tests for OC-DFG contract, determinism, and error paths.
 6. Updated backend README process API documentation for OC-DFG endpoint and Arrow-backed extraction path.
 
+### 2026-03-01 - Phase B UI (Completed)
+
+1. Added frontend OC-DFG API wiring for `POST /process/ocdfg/mine` and kept existing OCPN API as secondary flow.
+2. Added OC-DFG request/response contracts and UI graph types in `seer-ui/app/types/process-mining.ts`.
+3. Updated process mining panel UX to render OC-DFG as the primary/first diagram card.
+4. Kept OCPN and BPMN as secondary cards:
+   - OCPN remains available as a separate secondary diagram.
+   - BPMN remains derived from collapsed OCPN in the secondary path.
+5. Expanded UI contract tests to assert OC-DFG endpoint usage and OC-DFG-first panel markers.
+
 ## Decision Log
 
 ### 2026-03-01
