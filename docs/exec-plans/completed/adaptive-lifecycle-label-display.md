@@ -3,7 +3,7 @@
 **Status:** completed  
 **Target order:** post-MVP track 4 (focused UX polish)  
 **Agent slot:** UX-R4  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ontology-driven-field-display-centralization.md`  
+**Predecessor:** `docs/exec-plans/completed/ontology-driven-field-display-centralization.md`  
 **Successor:** TBD  
 **Last updated:** 2026-02-28
 

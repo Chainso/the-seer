@@ -3,7 +3,7 @@
 **Status:** completed  
 **Target order:** post-MVP track 4  
 **Agent slot:** AI-STREAM-1  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/global-assistant-layer-and-generic-ai-endpoint.md`  
+**Predecessor:** `docs/exec-plans/completed/global-assistant-layer-and-generic-ai-endpoint.md`  
 **Successor:** archived  
 **Last updated:** 2026-03-01
 

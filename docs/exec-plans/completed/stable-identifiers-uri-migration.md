@@ -3,7 +3,7 @@
 **Status:** completed  
 **Target order:** post-MVP track 3  
 **Agent slot:** DATA-RCA-1  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
+**Predecessor:** `docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
 **Successor:** TBD  
 **Last updated:** 2026-03-01
 
@@ -40,39 +40,39 @@ This creates drift risk when ontology labels are edited for UX wording.
 1. History ingestion request:
    - `event_type: str`
    - `updated_objects[].object_type: str`
-   - File: `/home/chanzo/code/large-projects/seer-python/seer-backend/src/seer_backend/history/models.py`
+   - File: `seer-backend/src/seer_backend/history/models.py`
 2. RCA request:
    - `outcome.event_type: str`
    - `outcome.object_type: str | None`
    - `anchor_object_type: str`
-   - File: `/home/chanzo/code/large-projects/seer-python/seer-backend/src/seer_backend/analytics/rca_models.py`
+   - File: `seer-backend/src/seer_backend/analytics/rca_models.py`
 3. Process mining request:
    - `anchor_object_type: str`
    - `include_object_types: list[str] | None`
-   - File: `/home/chanzo/code/large-projects/seer-python/seer-backend/src/seer_backend/analytics/models.py`
+   - File: `seer-backend/src/seer_backend/analytics/models.py`
 
 ### Backend matching/query behavior is exact string equality
 
 1. RCA outcome evaluation compares `event.event_type != outcome.event_type`.
-   - File: `/home/chanzo/code/large-projects/seer-python/seer-backend/src/seer_backend/analytics/rca_service.py`
+   - File: `seer-backend/src/seer_backend/analytics/rca_service.py`
 2. History query filtering uses `event_type = <literal>`.
-   - File: `/home/chanzo/code/large-projects/seer-python/seer-backend/src/seer_backend/history/repository.py`
+   - File: `seer-backend/src/seer_backend/history/repository.py`
 
 ### Frontend adapters currently derive unstable identifiers from display labels
 
 1. Process mining adapter converts ontology concept label to `anchor_object_type` by removing spaces.
-   - File: `/home/chanzo/code/large-projects/seer-python/seer-ui/app/lib/api/process-mining.ts`
+   - File: `seer-ui/app/lib/api/process-mining.ts`
 2. Root-cause panel derives anchor object type and event type values from labels / local names.
-   - File: `/home/chanzo/code/large-projects/seer-python/seer-ui/app/components/inspector/process-insights-panel.tsx`
+   - File: `seer-ui/app/components/inspector/process-insights-panel.tsx`
 3. Ontology display catalog canonicalizes event identifiers from `prophet:name` by stripping spaces.
-   - File: `/home/chanzo/code/large-projects/seer-python/seer-ui/app/lib/ontology-display/catalog.ts`
+   - File: `seer-ui/app/lib/ontology-display/catalog.ts`
 
 ### Test and script fixtures encode mutable identifiers
 
 1. Fake generator emits display-like event names.
-   - File: `/home/chanzo/code/large-projects/seer-python/scripts/generate_fake_event_data.py`
+   - File: `scripts/generate_fake_event_data.py`
 2. RCA verification script hardcodes non-URI anchor/outcome strings.
-   - File: `/home/chanzo/code/large-projects/seer-python/scripts/verify_fake_data_rca.py`
+   - File: `scripts/verify_fake_data_rca.py`
 
 ## Canonical Identifier Decision
 

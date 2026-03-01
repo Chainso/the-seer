@@ -1,7 +1,7 @@
 # Foundation Module Shell (Phase 0)
 
 **Status:** completed
-**Linked plan:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md`
+**Linked plan:** `docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md`
 
 ## Purpose
 

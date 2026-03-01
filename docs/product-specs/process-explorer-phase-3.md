@@ -1,7 +1,7 @@
 # Process Explorer Phase 3 Spec
 
 **Status:** completed  
-**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md`  
+**Owner phase:** `docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md`  
 **Last updated:** 2026-02-22
 
 ---

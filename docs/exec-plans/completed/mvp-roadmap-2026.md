@@ -2,8 +2,8 @@
 
 **Status:** Canonical MVP umbrella roadmap  
 **Date:** 2026-02-22  
-**Parent strategy:** `/home/chanzo/code/large-projects/seer-python/VISION.md`  
-**Phase index:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/index.md`
+**Parent strategy:** `VISION.md`  
+**Phase index:** `docs/exec-plans/active/index.md`
 
 ---
 
@@ -47,17 +47,17 @@ MVP is complete when Seer can:
 Execution is strictly sequential and each phase is owned by a different agent slot.
 
 1. Phase 0: Foundation and Skeleton  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md`
+   `docs/exec-plans/completed/mvp-phase-0-foundation-skeleton.md`
 2. Phase 1: Ontology Ingestion and Copilot v1  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`
+   `docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`
 3. Phase 2: Event Ingestion and History Data Model  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-2-event-history-ingestion.md`
+   `docs/exec-plans/completed/mvp-phase-2-event-history-ingestion.md`
 4. Phase 3: Process Mining v1 (Object-Centric Petri Nets)  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md`
+   `docs/exec-plans/completed/mvp-phase-3-process-mining-ocpn.md`
 5. Phase 4: Root Cause Analysis v1  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`
+   `docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`
 6. Phase 5: AI Expansion, Hardening, and MVP Release  
-   `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`
+   `docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`
 
 ## 5. Cross-Phase Acceptance Gates
 
@@ -109,7 +109,7 @@ Must pass before MVP pilot release:
 
 Phase 1 execution pivot (2026-02-22):
 1. Ontology Copilot v1 model execution uses backend Gemini CLI headless invocation (`gemini -p ...`) with structured output parsing.
-2. The detailed command contract, schema expectations, and safeguards are tracked in `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`.
+2. The detailed command contract, schema expectations, and safeguards are tracked in `docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`.
 
 ## 7. Change Control
 

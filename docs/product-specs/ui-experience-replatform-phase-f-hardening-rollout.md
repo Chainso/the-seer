@@ -1,7 +1,7 @@
 # UI Experience Replatform Phase F Hardening and Rollout Spec
 
 **Status:** completed  
-**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md`  
+**Owner phase:** `docs/exec-plans/completed/ui-experience-replatform-2026.md`  
 **Last updated:** 2026-02-23
 
 ---

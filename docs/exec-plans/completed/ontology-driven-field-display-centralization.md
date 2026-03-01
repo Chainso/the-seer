@@ -3,7 +3,7 @@
 **Status:** completed  
 **Target order:** post-MVP track 3 (completed)  
 **Agent slot:** UX-R3  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
+**Predecessor:** `docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`  
 **Successor:** TBD  
 **Last updated:** 2026-02-28
 
@@ -286,13 +286,13 @@ Exit criteria:
    - `docs/product-specs/history-inspector-phase-3a.md` makes shared resolver mandatory for field/state label source-of-truth.
 20. Updated execution-plan lifecycle docs for completion handoff:
    - added handoff note in `docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`,
-   - moved this plan to `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ontology-driven-field-display-centralization.md`,
+   - moved this plan to `docs/exec-plans/completed/ontology-driven-field-display-centralization.md`,
    - updated `docs/exec-plans/active/index.md` and `docs/exec-plans/completed/README.md` for accurate status/indexing.
 21. Validation evidence for Phase 6:
    - markdown/index sanity checks: confirmed moved-plan presence under `docs/exec-plans/completed/`, no remaining `active/ontology-driven-field-display-centralization.md` references, and updated listing/state entries in `docs/exec-plans/active/index.md`, `docs/exec-plans/completed/README.md`, and `docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md`.
    - `cd seer-ui && npm run test:contracts`: passes `tests/history.contract.test.mjs`, `tests/insights.contract.test.mjs`, `tests/ontology-display-guardrails.contract.test.mjs`, and `tests/ontology-display.contract.test.mjs`; unchanged pre-existing failure remains in `tests/change-intelligence.contract.test.mjs`.
 22. Decision: mark Phase 6 complete and close this plan after documentation ratification, index synchronization, and final validation evidence capture.
-23. 2026-02-28: Adaptive lifecycle follow-up was completed in `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/adaptive-lifecycle-label-display.md`, locking explicit lifecycle labels in cross-object explorer contexts, plain/default lifecycle labels in object-local history contexts, and removal of hard-coded alias rewrite tables from the shared ontology display catalog.
+23. 2026-02-28: Adaptive lifecycle follow-up was completed in `docs/exec-plans/completed/adaptive-lifecycle-label-display.md`, locking explicit lifecycle labels in cross-object explorer contexts, plain/default lifecycle labels in object-local history contexts, and removal of hard-coded alias rewrite tables from the shared ontology display catalog.
 
 Current execution state:
 

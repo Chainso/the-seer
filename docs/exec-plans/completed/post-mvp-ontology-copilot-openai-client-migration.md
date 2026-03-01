@@ -3,7 +3,7 @@
 **Status:** completed  
 **Target order:** post-MVP track 2  
 **Agent slot:** AI-BE1  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`  
+**Predecessor:** `docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`  
 **Successor:** TBD (post-MVP plan chain)  
 **Last updated:** 2026-02-23
 

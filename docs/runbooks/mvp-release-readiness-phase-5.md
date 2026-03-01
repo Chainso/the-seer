@@ -1,7 +1,7 @@
 # MVP Release Readiness Runbook (Phase 5)
 
 **Status:** completed  
-**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`  
+**Owner phase:** `docs/exec-plans/completed/mvp-phase-5-ai-hardening-release.md`  
 **Last updated:** 2026-02-22
 
 ---

@@ -3,7 +3,7 @@
 **Status:** completed  
 **Target order:** 5 of 6  
 **Agent slot:** A6  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`  
+**Predecessor:** `docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`  
 **Successor:** none (MVP release gate)  
 **Last updated:** 2026-02-22
 
@@ -107,7 +107,7 @@ Unify AI experiences across modules, remove critical defects, and deliver a pilo
 1. **Gate A-D regression:** prior phase tests remain green under unified suite (`pytest -q`).
 2. **Gate E smoke readiness:** guided flow and module AI integrations implemented and build-verified.
 3. **Defect threshold:** no unresolved P0/P1 defects identified in owned Phase 5 scope.
-4. **Operational docs:** release runbook published at `/home/chanzo/code/large-projects/seer-python/docs/runbooks/mvp-release-readiness-phase-5.md`.
+4. **Operational docs:** release runbook published at `docs/runbooks/mvp-release-readiness-phase-5.md`.
 5. **Product/spec docs:** Phase 5 guided investigation and onboarding updates recorded in `docs/product-specs/`.
 
 ## Doc Updates

@@ -4,7 +4,7 @@
 **Target order:** 0 of 6  
 **Agent slot:** A1  
 **Predecessor:** none  
-**Successor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`
+**Successor:** `docs/exec-plans/completed/mvp-phase-1-ontology-copilot-v1.md`
 **Last updated:** 2026-02-22
 
 ---

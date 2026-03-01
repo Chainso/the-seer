@@ -1,7 +1,7 @@
 # Root-Cause Lab Phase 4 Spec
 
 **Status:** completed  
-**Owner phase:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`  
+**Owner phase:** `docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`  
 **Last updated:** 2026-02-22
 
 ---

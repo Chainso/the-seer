@@ -3,8 +3,8 @@
 **Status:** completed  
 **Target order:** 3 of 6  
 **Agent slot:** A4  
-**Predecessor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-2-event-history-ingestion.md`  
-**Successor:** `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`
+**Predecessor:** `docs/exec-plans/completed/mvp-phase-2-event-history-ingestion.md`  
+**Successor:** `docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`
 **Last updated:** 2026-02-22
 
 ---
