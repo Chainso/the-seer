@@ -23,6 +23,10 @@ import '@xyflow/react/dist/style.css';
 import { GraphNodeCard } from '@/app/components/graph/graph-node-card';
 import {
   buildOcdfgLayout,
+  OCDFG_NODE_HEIGHT,
+  OCDFG_NODE_WIDTH,
+  OCDFG_OBJECT_NODE_HEIGHT,
+  OCDFG_OBJECT_NODE_WIDTH,
   colorSetForKey,
   colorSetForObjectType,
   colorForObjectType,
@@ -119,6 +123,7 @@ function ElkEdge(props: EdgeProps<Edge<EdgeData>>) {
             style={{
               position: 'absolute',
               transform: `translate(-50%, -50%) translate(${labelPoint.x}px, ${labelPoint.y}px)`,
+              zIndex: 50,
             }}
           >
             <span style={labelStyle}>{label}</span>
@@ -143,6 +148,8 @@ function ActivityNode({ data }: { data: ActivityNodeData }) {
         description={objectTypeSummary}
         bgColor={data.backgroundColor}
         borderColor={data.borderColor}
+        widthPx={OCDFG_NODE_WIDTH}
+        heightPx={OCDFG_NODE_HEIGHT}
       />
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
       <div className="sr-only">{data.objectTypes.map((objectType) => conceptLabel(objectType)).join(', ')}</div>
@@ -158,9 +165,10 @@ function ObjectNode({ data }: { data: ObjectNodeData }) {
         header="Object"
         headerRight={data.count > 0 ? `${data.count} starts` : undefined}
         title={data.label}
-        description={data.objectTypeLabel}
         bgColor={data.backgroundColor}
         borderColor={data.borderColor}
+        widthPx={OCDFG_OBJECT_NODE_WIDTH}
+        heightPx={OCDFG_OBJECT_NODE_HEIGHT}
       />
       <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
     </>
@@ -230,6 +238,8 @@ function OcdfgGraphInner({ graph, modelLabels, eventLabels, selectedNodeId, onNo
           id: node.id,
           type: 'objectNode',
           position: { x: node.x, y: node.y },
+          style: { width: node.width, height: node.height },
+          zIndex: 20,
           className,
           data: {
             kind: 'object',
@@ -255,6 +265,8 @@ function OcdfgGraphInner({ graph, modelLabels, eventLabels, selectedNodeId, onNo
         id: node.id,
         type: 'activityNode',
         position: { x: node.x, y: node.y },
+        style: { width: node.width, height: node.height },
+        zIndex: 20,
         className,
         data: {
           kind: 'activity',
@@ -285,6 +297,7 @@ function OcdfgGraphInner({ graph, modelLabels, eventLabels, selectedNodeId, onNo
         source: edge.source,
         target: edge.target,
         type: 'elk',
+        zIndex: 10,
         label: isStartEdge ? `${edge.count} start` : `${edge.count} • ${(edge.share * 100).toFixed(0)}%`,
         markerEnd: {
           type: MarkerType.ArrowClosed,

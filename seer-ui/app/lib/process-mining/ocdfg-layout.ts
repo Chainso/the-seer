@@ -2,11 +2,12 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 
 import type { OcdfgGraph, OcdfgNode } from '@/app/types/process-mining';
 
-export const OCDFG_NODE_WIDTH = 186;
-export const OCDFG_NODE_HEIGHT = 92;
-export const OCDFG_OBJECT_NODE_WIDTH = 170;
-export const OCDFG_OBJECT_NODE_HEIGHT = 74;
+export const OCDFG_NODE_WIDTH = 220;
+export const OCDFG_NODE_HEIGHT = 82;
+export const OCDFG_OBJECT_NODE_WIDTH = 200;
+export const OCDFG_OBJECT_NODE_HEIGHT = 88;
 export const OCDFG_TRACK_SPACING = 180;
+const OCDFG_PORT_EDGE_OFFSET = 4;
 
 export interface LayoutPoint {
   x: number;
@@ -480,11 +481,12 @@ export async function buildOcdfgLayout(graph: OcdfgGraph): Promise<OcdfgLayoutRe
       'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
       'elk.layered.nodePlacement.bk.fixedAlignment': 'BALANCED',
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+      'elk.layered.mergeEdges': 'false',
       'elk.portConstraints': 'FIXED_POS',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '124',
-      'elk.spacing.nodeNode': '68',
-      'elk.spacing.edgeNode': '36',
-      'elk.spacing.edgeEdge': '20',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '180',
+      'elk.spacing.nodeNode': '96',
+      'elk.spacing.edgeNode': '52',
+      'elk.spacing.edgeEdge': '28',
     },
     children: allNodes.map((node) => {
       const leftPort = `${node.id}__left`;
@@ -507,7 +509,7 @@ export async function buildOcdfgLayout(graph: OcdfgGraph): Promise<OcdfgLayoutRe
             id: leftPort,
             width: 1,
             height: 1,
-            x: 0,
+            x: -OCDFG_PORT_EDGE_OFFSET,
             y: node.height / 2,
             properties: {
               'elk.port.side': 'WEST',
@@ -517,7 +519,7 @@ export async function buildOcdfgLayout(graph: OcdfgGraph): Promise<OcdfgLayoutRe
             id: rightPort,
             width: 1,
             height: 1,
-            x: node.width,
+            x: node.width + OCDFG_PORT_EDGE_OFFSET,
             y: node.height / 2,
             properties: {
               'elk.port.side': 'EAST',
