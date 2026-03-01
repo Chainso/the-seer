@@ -10,8 +10,6 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
-import httpx
-
 from seer_backend.analytics.errors import RootCauseError, RootCauseLimitExceededError
 from seer_backend.analytics.rca_models import (
     ExtractedRcaNeighborhood,
@@ -21,6 +19,8 @@ from seer_backend.analytics.rca_models import (
     RcaRelationRow,
     RootCauseRequest,
 )
+from seer_backend.clickhouse.client import AsyncClickHouseClient
+from seer_backend.clickhouse.errors import ClickHouseClientError
 
 
 class RootCauseRepository(Protocol):
@@ -45,9 +45,15 @@ class ClickHouseRootCauseRepository:
     timeout_seconds: float
     migrations_dir: Path
 
-    @property
-    def _query_url(self) -> str:
-        return f"http://{self.host}:{self.port}/"
+    def _shared_clickhouse_client(self) -> AsyncClickHouseClient:
+        return AsyncClickHouseClient(
+            host=self.host,
+            port=self.port,
+            database=self.database,
+            user=self.user,
+            password=self.password,
+            timeout_seconds=self.timeout_seconds,
+        )
 
     async def ensure_schema(self) -> None:
         if not self.migrations_dir.exists():
@@ -298,40 +304,18 @@ class ClickHouseRootCauseRepository:
         return objects
 
     async def _select_rows(self, query: str) -> list[dict[str, Any]]:
-        async with self._client() as client:
-            response = await client.post(
-                self._query_url,
-                params={"database": self.database},
-                content=query.encode("utf-8"),
-                headers={"Content-Type": "text/plain; charset=utf-8"},
-            )
-        self._raise_for_status(response, "execute ClickHouse query")
-        body = response.json()
-        data = body.get("data", [])
-        return data if isinstance(data, list) else []
+        try:
+            return await self._shared_clickhouse_client().select_rows(query)
+        except ClickHouseClientError as exc:
+            raise RootCauseError(f"ClickHouse failed to execute ClickHouse query: {exc}") from exc
 
     async def _execute(self, statement: str) -> None:
-        async with self._client() as client:
-            response = await client.post(
-                self._query_url,
-                params={"database": self.database},
-                content=statement.encode("utf-8"),
-                headers={"Content-Type": "text/plain; charset=utf-8"},
-            )
-        self._raise_for_status(response, "execute ClickHouse statement")
-
-    def _client(self) -> httpx.AsyncClient:
-        return httpx.AsyncClient(
-            timeout=self.timeout_seconds,
-            auth=(self.user, self.password),
-        )
-
-    def _raise_for_status(self, response: httpx.Response, operation: str) -> None:
-        if response.is_success:
-            return
-        raise RootCauseError(
-            f"ClickHouse failed to {operation}: HTTP {response.status_code} - {response.text}"
-        )
+        try:
+            await self._shared_clickhouse_client().execute(statement)
+        except ClickHouseClientError as exc:
+            raise RootCauseError(
+                f"ClickHouse failed to execute ClickHouse statement: {exc}"
+            ) from exc
 
 
 class InMemoryRootCauseRepository:
