@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 from json import dumps
 from pathlib import Path
@@ -20,6 +21,7 @@ from seer_backend.actions.errors import (
 from seer_backend.actions.models import (
     ActionCreate,
     ActionRecord,
+    ActionStatus,
     ActionSubmitResult,
     InstanceRecord,
     InstanceStatus,
@@ -236,6 +238,27 @@ class ActionsService:
         await self.ensure_schema()
         return await asyncio.to_thread(self._repository.get_action, action_id)
 
+    async def list_actions(
+        self,
+        *,
+        user_id: str,
+        status: ActionStatus | None = None,
+        page: int = 1,
+        size: int = 20,
+        submitted_after: datetime | None = None,
+        submitted_before: datetime | None = None,
+    ) -> tuple[list[ActionRecord], int]:
+        await self.ensure_schema()
+        return await asyncio.to_thread(
+            self._repository.list_actions,
+            user_id=user_id,
+            status=status,
+            page=page,
+            size=size,
+            submitted_after=submitted_after,
+            submitted_before=submitted_before,
+        )
+
     async def get_action_by_idempotency_key(
         self,
         *,
@@ -427,6 +450,19 @@ class UnavailableActionsService:
 
     async def get_action(self, action_id: UUID) -> ActionRecord | None:
         del action_id
+        raise ActionDependencyUnavailableError(self.reason)
+
+    async def list_actions(
+        self,
+        *,
+        user_id: str,
+        status: ActionStatus | None = None,
+        page: int = 1,
+        size: int = 20,
+        submitted_after: datetime | None = None,
+        submitted_before: datetime | None = None,
+    ) -> tuple[list[ActionRecord], int]:
+        del user_id, status, page, size, submitted_after, submitted_before
         raise ActionDependencyUnavailableError(self.reason)
 
     async def get_action_by_idempotency_key(

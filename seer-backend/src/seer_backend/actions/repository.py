@@ -21,6 +21,7 @@ from sqlalchemy import (
     and_,
     create_engine,
     desc,
+    func,
     insert,
     select,
     update,
@@ -137,6 +138,17 @@ class ActionsRepository(Protocol):
         user_id: str,
         idempotency_key: str,
     ) -> ActionRecord | None: ...
+
+    def list_actions(
+        self,
+        *,
+        user_id: str,
+        status: ActionStatus | None = None,
+        page: int = 1,
+        size: int = 20,
+        submitted_after: datetime | None = None,
+        submitted_before: datetime | None = None,
+    ) -> tuple[list[ActionRecord], int]: ...
 
     def claim_actions(
         self,
@@ -294,6 +306,52 @@ class PostgresActionsRepository:
         if row is None:
             return None
         return _action_from_row(row)
+
+    def list_actions(
+        self,
+        *,
+        user_id: str,
+        status: ActionStatus | None = None,
+        page: int = 1,
+        size: int = 20,
+        submitted_after: datetime | None = None,
+        submitted_before: datetime | None = None,
+    ) -> tuple[list[ActionRecord], int]:
+        page_number = max(int(page), 1)
+        page_size = max(int(size), 1)
+        offset = (page_number - 1) * page_size
+        filters = [actions_table.c.user_id == user_id]
+        if status is not None:
+            filters.append(actions_table.c.status == status.value)
+        if submitted_after is not None:
+            filters.append(actions_table.c.submitted_at >= _ensure_utc(submitted_after))
+        if submitted_before is not None:
+            filters.append(actions_table.c.submitted_at <= _ensure_utc(submitted_before))
+        clause = and_(*filters)
+
+        try:
+            with self._engine_instance().connect() as connection:
+                total = connection.execute(
+                    select(func.count()).select_from(actions_table).where(clause)
+                ).scalar_one()
+                rows = (
+                    connection.execute(
+                        select(*actions_table.c)
+                        .where(clause)
+                        .order_by(
+                            desc(actions_table.c.submitted_at),
+                            desc(actions_table.c.action_id),
+                        )
+                        .offset(offset)
+                        .limit(page_size)
+                    )
+                    .mappings()
+                    .all()
+                )
+        except SQLAlchemyError as exc:
+            raise ActionRepositoryError(f"Postgres list actions failed: {exc}") from exc
+
+        return [_action_from_row(row) for row in rows], int(total)
 
     def claim_actions(
         self,
@@ -844,6 +902,44 @@ class InMemoryActionsRepository:
                 return None
             row = self._actions.get(action_id)
             return _clone_action(row) if row is not None else None
+
+    def list_actions(
+        self,
+        *,
+        user_id: str,
+        status: ActionStatus | None = None,
+        page: int = 1,
+        size: int = 20,
+        submitted_after: datetime | None = None,
+        submitted_before: datetime | None = None,
+    ) -> tuple[list[ActionRecord], int]:
+        page_number = max(int(page), 1)
+        page_size = max(int(size), 1)
+        offset = (page_number - 1) * page_size
+        submitted_after_utc = _ensure_utc(submitted_after) if submitted_after is not None else None
+        submitted_before_utc = (
+            _ensure_utc(submitted_before) if submitted_before is not None else None
+        )
+
+        with self._lock:
+            filtered = []
+            for action in self._actions.values():
+                if action.user_id != user_id:
+                    continue
+                if status is not None and action.status != status:
+                    continue
+                if submitted_after_utc is not None and action.submitted_at < submitted_after_utc:
+                    continue
+                if submitted_before_utc is not None and action.submitted_at > submitted_before_utc:
+                    continue
+                filtered.append(action)
+            filtered.sort(
+                key=lambda row: (row.submitted_at, str(row.action_id)),
+                reverse=True,
+            )
+            total = len(filtered)
+            page_rows = filtered[offset : offset + page_size]
+            return [_clone_action(row) for row in page_rows], total
 
     def claim_actions(
         self,

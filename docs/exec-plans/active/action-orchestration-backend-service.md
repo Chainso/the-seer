@@ -633,15 +633,15 @@ Rationale:
 - [x] Phase 2 complete
 - [x] Phase 3 complete
 - [x] Phase 4 complete
-- [ ] Phase 5 complete
+- [x] Phase 5 complete
 - [ ] Phase 6 complete
 - [ ] Phase 7 complete
 
 Current execution state:
 
-- `in_progress`: Phase 5 status query + streamed updates + operator surfaces
+- `in_progress`: Phase 6 hardening, load, and fault-injection
 - `blocked`: none
-- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics; Phase 4 complete/fail APIs + retry scheduling + dead-letter lifecycle
+- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics; Phase 4 complete/fail APIs + retry scheduling + dead-letter lifecycle; Phase 5 status query endpoints + filtered list transport + status SSE stream
 
 ## Baseline Failure Ledger
 
@@ -700,6 +700,27 @@ Current execution state:
 8. `cd seer-backend && uv run pytest -q tests/test_actions_lifecycle.py` -> pass (`7 passed`).
 9. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py` -> pass (`20 passed`).
 
+## Phase 5 Acceptance Evidence
+
+1. Added `GET /api/v1/actions/{action_id}` transport returning canonical action status/audit payload (identity, lifecycle state, lease fields, attempt counters, submitted/updated/completed timestamps, and terminal error context).
+2. Added `GET /api/v1/actions` transport with required `user_id`, optional `status`, page/size pagination, and optional submitted-at window filters (`submitted_after`/`submitted_before`).
+3. Extended action repository/service interfaces with deterministic list-query behavior:
+   - `ActionsRepository.list_actions(...)` protocol method,
+   - PostgreSQL implementation with filtered count + ordered page fetch (`submitted_at DESC, action_id DESC`),
+   - In-memory implementation with matching filter/order semantics for API tests.
+4. Added pragmatic SSE lifecycle stream endpoint `GET /api/v1/actions/{action_id}/stream` using persisted-state polling (no event bus), emitting deterministic events:
+   - initial `snapshot`,
+   - change-driven `update`,
+   - terminal `terminal` event and stream close.
+5. Added `tests/test_actions_status_api.py` covering:
+   - get-by-id success payload and not-found handling,
+   - list filtering/pagination/time-window basics,
+   - dependency-unavailable mapping (`503`) for get/list/stream,
+   - SSE event contract ordering and terminal behavior (`snapshot` then `terminal` for completed action).
+6. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_status_api.py` -> pass (`All checks passed!`).
+7. `cd seer-backend && uv run pytest -q tests/test_actions_status_api.py` -> pass (`5 passed`).
+8. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py tests/test_actions_status_api.py` -> pass (`25 passed`).
+
 ## Decision Log
 
 1. 2026-03-01: Selected pull-based claim routing with lease semantics as canonical delivery model.
@@ -721,6 +742,7 @@ Current execution state:
 17. 2026-03-01: Deferred deeper semantic type validation (enum/domain-specific constraints/date-format strictness) to later phases; current behavior returns actionable 422s for contract coverage available today.
 18. 2026-03-01: Phase 3 completed with claim transport, instance heartbeat transport, claim-path instance upsert, draining claim exclusion, and lease-expiry reclaim coverage.
 19. 2026-03-01: Phase 4 completed with complete/fail lifecycle transports, lease ownership enforcement, retry scheduling, and dead-letter transition behavior; dedicated sweeper runtime remains deferred by phase scope.
+20. 2026-03-01: Phase 5 completed with action status query transports, filtered/paginated list API, and deterministic polling-backed status SSE stream (`snapshot/update/terminal`) aligned to persisted state transitions.
 
 ## Next-Phase Starter Context
 

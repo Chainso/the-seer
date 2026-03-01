@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 from seer_backend.actions.errors import (
@@ -16,11 +20,16 @@ from seer_backend.actions.errors import (
     ActionNotFoundError,
     ActionValidationError,
 )
-from seer_backend.actions.models import ActionRecord, InstanceStatus
+from seer_backend.actions.models import ActionRecord, ActionStatus, InstanceStatus
 from seer_backend.ontology.errors import OntologyDependencyUnavailableError, OntologyError
 from seer_backend.ontology.models import assert_valid_iri
 
 router = APIRouter(prefix="/actions", tags=["actions"])
+_TERMINAL_ACTION_STATUSES = {
+    ActionStatus.COMPLETED,
+    ActionStatus.FAILED_TERMINAL,
+    ActionStatus.DEAD_LETTER,
+}
 
 
 class ActionSubmitRequest(BaseModel):
@@ -136,6 +145,43 @@ class ActionLifecycleResponse(BaseModel):
     last_error_detail: str | None = None
 
 
+class ActionStatusResponse(BaseModel):
+    action_id: UUID
+    user_id: str
+    action_uri: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    status: Literal[
+        "queued",
+        "leased",
+        "running",
+        "completed",
+        "retry_wait",
+        "failed_terminal",
+        "dead_letter",
+    ]
+    priority: int
+    attempt_count: int
+    max_attempts: int
+    ontology_release_id: str
+    next_visible_at: datetime
+    lease_owner_instance_id: str | None = None
+    lease_expires_at: datetime | None = None
+    submitted_at: datetime
+    updated_at: datetime
+    completed_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_detail: str | None = None
+
+
+class ActionListResponse(BaseModel):
+    user_id: str
+    status: str | None = None
+    page: int
+    size: int
+    total: int
+    actions: list[ActionStatusResponse] = Field(default_factory=list)
+
+
 @router.post("/submit", response_model=ActionSubmitResponse)
 async def submit_action(
     payload: ActionSubmitRequest,
@@ -214,6 +260,158 @@ async def claim_actions(
         lease_seconds=settings.actions_lease_seconds,
         claimed_count=len(actions),
         actions=actions,
+    )
+
+
+@router.get("", response_model=ActionListResponse)
+async def list_actions(
+    request: Request,
+    user_id: str = Query(min_length=1, max_length=255),
+    action_status: ActionStatus | None = Query(default=None, alias="status"),
+    page: int = Query(default=1, ge=1, le=10_000),
+    size: int = Query(default=20, ge=1, le=200),
+    submitted_after: datetime | None = None,
+    submitted_before: datetime | None = None,
+) -> ActionListResponse:
+    if (
+        submitted_after is not None
+        and submitted_before is not None
+        and submitted_after > submitted_before
+    ):
+        raise _http_error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            {
+                "code": "invalid_time_window",
+                "message": "submitted_after must be earlier than or equal to submitted_before.",
+            },
+        )
+
+    actions_service = request.app.state.actions_service
+    try:
+        actions, total = await actions_service.list_actions(
+            user_id=user_id,
+            status=action_status,
+            page=page,
+            size=size,
+            submitted_after=submitted_after,
+            submitted_before=submitted_before,
+        )
+    except ActionDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ActionError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+    return ActionListResponse(
+        user_id=user_id,
+        status=action_status.value if action_status is not None else None,
+        page=page,
+        size=size,
+        total=total,
+        actions=[_status_response(action) for action in actions],
+    )
+
+
+@router.get("/{action_id}", response_model=ActionStatusResponse)
+async def get_action_status(
+    action_id: UUID,
+    request: Request,
+) -> ActionStatusResponse:
+    actions_service = request.app.state.actions_service
+    try:
+        action = await actions_service.get_action(action_id)
+    except ActionDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ActionError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    if action is None:
+        raise _http_error(status.HTTP_404_NOT_FOUND, f"action '{action_id}' was not found")
+    return _status_response(action)
+
+
+@router.get("/{action_id}/stream")
+async def stream_action_status(
+    action_id: UUID,
+    request: Request,
+    poll_interval_ms: int = Query(default=500, ge=50, le=10_000),
+) -> StreamingResponse:
+    actions_service = request.app.state.actions_service
+    try:
+        initial = await actions_service.get_action(action_id)
+    except ActionDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ActionError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    if initial is None:
+        raise _http_error(status.HTTP_404_NOT_FOUND, f"action '{action_id}' was not found")
+
+    interval_seconds = poll_interval_ms / 1000.0
+
+    async def event_stream() -> AsyncIterator[str]:
+        sequence = 1
+        prior_token = _stream_change_token(initial)
+        yield _sse_event("snapshot", _stream_event_payload(initial, sequence=sequence))
+        if _is_terminal_status(initial.status):
+            sequence += 1
+            yield _sse_event("terminal", _stream_event_payload(initial, sequence=sequence))
+            return
+
+        while True:
+            if await request.is_disconnected():
+                return
+            await asyncio.sleep(interval_seconds)
+            try:
+                latest = await actions_service.get_action(action_id)
+            except ActionDependencyUnavailableError as exc:
+                yield _sse_event(
+                    "error",
+                    {
+                        "status_code": status.HTTP_503_SERVICE_UNAVAILABLE,
+                        "code": "dependency_unavailable",
+                        "message": str(exc),
+                    },
+                )
+                return
+            except ActionError as exc:
+                yield _sse_event(
+                    "error",
+                    {
+                        "status_code": status.HTTP_502_BAD_GATEWAY,
+                        "code": "action_error",
+                        "message": str(exc),
+                    },
+                )
+                return
+
+            if latest is None:
+                yield _sse_event(
+                    "error",
+                    {
+                        "status_code": status.HTTP_404_NOT_FOUND,
+                        "code": "not_found",
+                        "message": f"action '{action_id}' was not found",
+                    },
+                )
+                return
+
+            current_token = _stream_change_token(latest)
+            if current_token == prior_token:
+                continue
+
+            prior_token = current_token
+            sequence += 1
+            if _is_terminal_status(latest.status):
+                yield _sse_event("terminal", _stream_event_payload(latest, sequence=sequence))
+                return
+            yield _sse_event("update", _stream_event_payload(latest, sequence=sequence))
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -340,6 +538,72 @@ def _lifecycle_response(action: ActionRecord) -> ActionLifecycleResponse:
         last_error_code=action.last_error_code,
         last_error_detail=action.last_error_detail,
     )
+
+
+def _status_response(action: ActionRecord) -> ActionStatusResponse:
+    return ActionStatusResponse(
+        action_id=action.action_id,
+        user_id=action.user_id,
+        action_uri=action.action_uri,
+        payload=action.input_payload,
+        status=action.status.value,
+        priority=action.priority,
+        attempt_count=action.attempt_count,
+        max_attempts=action.max_attempts,
+        ontology_release_id=action.ontology_release_id,
+        next_visible_at=action.next_visible_at,
+        lease_owner_instance_id=action.lease_owner_instance_id,
+        lease_expires_at=action.lease_expires_at,
+        submitted_at=action.submitted_at,
+        updated_at=action.updated_at,
+        completed_at=action.completed_at,
+        last_error_code=action.last_error_code,
+        last_error_detail=action.last_error_detail,
+    )
+
+
+def _is_terminal_status(action_status: ActionStatus) -> bool:
+    return action_status in _TERMINAL_ACTION_STATUSES
+
+
+def _stream_change_token(action: ActionRecord) -> tuple[object, ...]:
+    return (
+        action.status.value,
+        action.attempt_count,
+        action.lease_owner_instance_id,
+        action.lease_expires_at.isoformat() if action.lease_expires_at else None,
+        action.next_visible_at.isoformat(),
+        action.updated_at.isoformat(),
+        action.completed_at.isoformat() if action.completed_at else None,
+        action.last_error_code,
+        action.last_error_detail,
+    )
+
+
+def _stream_event_payload(action: ActionRecord, *, sequence: int) -> dict[str, Any]:
+    return {
+        "sequence": sequence,
+        "action_id": str(action.action_id),
+        "status": action.status.value,
+        "attempt_count": action.attempt_count,
+        "updated_at": action.updated_at.isoformat(),
+        "next_visible_at": action.next_visible_at.isoformat(),
+        "lease_expires_at": action.lease_expires_at.isoformat()
+        if action.lease_expires_at
+        else None,
+        "completed_at": action.completed_at.isoformat() if action.completed_at else None,
+        "last_error_code": action.last_error_code,
+        "terminal": _is_terminal_status(action.status),
+    }
+
+
+def _sse_event(event: str, payload: dict[str, Any]) -> str:
+    serialized = json.dumps(payload, separators=(",", ":"))
+    lines = [f"event: {event}"]
+    for line in serialized.splitlines() or [""]:
+        lines.append(f"data: {line}")
+    lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 def _http_error(status_code: int, detail: Any) -> HTTPException:
