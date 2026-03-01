@@ -634,14 +634,14 @@ Rationale:
 - [x] Phase 3 complete
 - [x] Phase 4 complete
 - [x] Phase 5 complete
-- [ ] Phase 6 complete
+- [x] Phase 6 complete
 - [ ] Phase 7 complete
 
 Current execution state:
 
-- `in_progress`: Phase 6 hardening, load, and fault-injection
+- `in_progress`: Phase 7 documentation ratification + plan closeout
 - `blocked`: none
-- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics; Phase 4 complete/fail APIs + retry scheduling + dead-letter lifecycle; Phase 5 status query endpoints + filtered list transport + status SSE stream
+- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics; Phase 4 complete/fail APIs + retry scheduling + dead-letter lifecycle; Phase 5 status query endpoints + filtered list transport + status SSE stream; Phase 6 hardening with contention + fault-injection validation
 
 ## Baseline Failure Ledger
 
@@ -721,6 +721,22 @@ Current execution state:
 7. `cd seer-backend && uv run pytest -q tests/test_actions_status_api.py` -> pass (`5 passed`).
 8. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py tests/test_actions_status_api.py` -> pass (`25 passed`).
 
+## Phase 6 Acceptance Evidence
+
+1. Added `tests/test_actions_concurrency.py` with contention-focused claim hardening coverage:
+   - parallel claims against a single queued action confirm only one active lease assignment,
+   - parallel claims with bounded aggregate capacity confirm claimed set follows encoded scheduler ordering (`priority DESC`, then FIFO by `submitted_at`, then `action_id`).
+2. Added `tests/test_actions_faults.py` with failure-injection lifecycle coverage:
+   - dropped completion callback + lease expiry causes deterministic redelivery (`attempt_count` progression demonstrates at-least-once delivery),
+   - stale-lease completion callback is rejected while current lease owner can still complete,
+   - duplicate completion callback remains idempotent after terminal completion,
+   - retryable failures progress through `retry_wait` and transition to `dead_letter` at max-attempt exhaustion.
+3. Minimal hardening posture for this phase: no runtime subsystem changes were required; determinism was achieved with explicit test timestamps and contention barriers only.
+4. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_concurrency.py tests/test_actions_faults.py` -> pass (`All checks passed!`).
+5. `cd seer-backend && uv run pytest -q tests/test_actions_concurrency.py tests/test_actions_faults.py` -> pass (`5 passed`).
+6. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py tests/test_actions_status_api.py tests/test_actions_concurrency.py tests/test_actions_faults.py` -> pass (`30 passed`).
+7. Regression warnings remain unchanged and non-blocking (FastAPI `on_event` deprecation and `HTTP_422_UNPROCESSABLE_ENTITY` deprecation).
+
 ## Decision Log
 
 1. 2026-03-01: Selected pull-based claim routing with lease semantics as canonical delivery model.
@@ -743,6 +759,7 @@ Current execution state:
 18. 2026-03-01: Phase 3 completed with claim transport, instance heartbeat transport, claim-path instance upsert, draining claim exclusion, and lease-expiry reclaim coverage.
 19. 2026-03-01: Phase 4 completed with complete/fail lifecycle transports, lease ownership enforcement, retry scheduling, and dead-letter transition behavior; dedicated sweeper runtime remains deferred by phase scope.
 20. 2026-03-01: Phase 5 completed with action status query transports, filtered/paginated list API, and deterministic polling-backed status SSE stream (`snapshot/update/terminal`) aligned to persisted state transitions.
+21. 2026-03-01: Phase 6 completed with deterministic concurrency contention tests and fault-injection lifecycle tests validating no duplicate lease claims, stale-lease conflict handling, duplicate-complete idempotency, and retry-to-dead-letter progression under induced failures; no runtime code changes were required for this phase.
 
 ## Next-Phase Starter Context
 
