@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -57,7 +57,8 @@ async def assistant_chat(
 
     async def event_stream() -> AsyncIterator[str]:
         try:
-            response = await service.assistant_chat(payload)
+            async for event_name, event_payload in service.assistant_chat_stream(payload):
+                yield _sse_event(event_name, event_payload)
         except Exception as exc:  # pragma: no cover - fallback guardrail
             status_code, error_code, detail = _assistant_stream_error(exc)
             yield _sse_event(
@@ -69,21 +70,6 @@ async def assistant_chat(
                 },
             )
             return
-
-        yield _sse_event(
-            "meta",
-            {
-                "thread_id": response.thread_id,
-                "module": response.module,
-                "task": response.task,
-                "response_policy": response.response_policy,
-                "tool_permissions": response.tool_permissions,
-            },
-        )
-        for chunk in _iter_answer_chunks(response.answer):
-            yield _sse_event("assistant_delta", {"text": chunk})
-        yield _sse_event("final", response.model_dump(mode="json"))
-        yield _sse_event("done", {"status": "ok"})
 
     return StreamingResponse(
         event_stream(),
@@ -226,14 +212,6 @@ def _assistant_stream_error(exc: Exception) -> tuple[int, str, str]:
         "internal_error",
         "assistant chat request failed",
     )
-
-
-def _iter_answer_chunks(answer: str, chunk_size: int = 120) -> Iterator[str]:
-    if not answer:
-        yield ""
-        return
-    for index in range(0, len(answer), chunk_size):
-        yield answer[index : index + chunk_size]
 
 
 def _sse_event(event: str, payload: dict[str, Any]) -> str:

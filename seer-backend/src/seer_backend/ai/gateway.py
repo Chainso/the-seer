@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from seer_backend.ai.ontology_copilot import OntologyCopilotService
+from seer_backend.ai.ontology_copilot import (
+    CopilotAnswerFinalEvent,
+    CopilotAssistantDeltaEvent,
+    CopilotToolStatusEvent,
+    OntologyCopilotService,
+)
 from seer_backend.analytics.models import ProcessMiningRequest, ProcessMiningResponse
 from seer_backend.analytics.rca_models import (
     InsightResult,
@@ -248,6 +254,15 @@ class AiGatewayService:
         self,
         payload: AiAssistantChatRequest,
     ) -> AiAssistantChatResponse:
+        async for event_name, event_payload in self.assistant_chat_stream(payload):
+            if event_name == "final":
+                return AiAssistantChatResponse.model_validate(event_payload)
+        raise ValueError("assistant chat stream ended without final response")
+
+    async def assistant_chat_stream(
+        self,
+        payload: AiAssistantChatRequest,
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
         (
             question,
             conversation,
@@ -258,48 +273,66 @@ class AiGatewayService:
             payload.completion_messages,
             payload.context,
         )
-        copilot = await self._ontology_copilot_service.answer(
+        thread_id = payload.thread_id or str(uuid4())
+
+        copilot_stream = self._ontology_copilot_service.answer_stream(
             question,
             conversation=conversation,
             completion_conversation=completion_conversation,
         )
-        evidence, caveats = _build_copilot_evidence_and_caveats(copilot)
-        thread_id = payload.thread_id or str(uuid4())
-        completion_messages = _truncate_completion_messages(
-            completion_messages + copilot.completion_messages_delta
+        stream_event: object
+        try:
+            stream_event = await anext(copilot_stream)
+        except StopAsyncIteration as exc:
+            raise ValueError("assistant chat stream ended without final response") from exc
+
+        yield (
+            "meta",
+            {
+                "thread_id": thread_id,
+                "module": "assistant",
+                "task": "chat",
+                "response_policy": "informational",
+                "tool_permissions": _assistant_tool_permissions(),
+            },
         )
 
-        if payload.context is not None:
-            context_details = _format_context_details(payload.context)
-            if context_details:
-                evidence.append(
-                    AiEvidenceItem(
-                        label="Request context",
-                        detail=context_details,
-                    )
+        while True:
+            if isinstance(stream_event, CopilotAssistantDeltaEvent):
+                for chunk in _iter_answer_chunks(stream_event.text):
+                    yield ("assistant_delta", {"text": chunk})
+            elif isinstance(stream_event, CopilotToolStatusEvent):
+                yield (
+                    "tool_status",
+                    {
+                        "status": stream_event.status,
+                        "tool": stream_event.tool,
+                        "call_id": stream_event.call_id,
+                        "summary": stream_event.summary,
+                        "query_preview": stream_event.query_preview,
+                        "query_type": stream_event.query_type,
+                        "row_count": stream_event.row_count,
+                        "truncated": stream_event.truncated,
+                        "error": stream_event.error,
+                    },
                 )
+            elif isinstance(stream_event, CopilotAnswerFinalEvent):
+                response = _build_assistant_chat_response(
+                    payload=payload,
+                    thread_id=thread_id,
+                    copilot=stream_event.response,
+                    completion_messages=completion_messages,
+                )
+                yield ("final", response.model_dump(mode="json"))
+                yield ("done", {"status": "ok"})
+                return
 
-        return AiAssistantChatResponse(
-            response_policy="informational",
-            tool_permissions=[
-                "assistant.context",
-                "ontology.current",
-                "ontology.concepts",
-                "ontology.concept_detail",
-                "ontology.query(read_only)",
-            ],
-            summary=copilot.answer,
-            answer=copilot.answer,
-            evidence=evidence,
-            caveats=caveats,
-            next_actions=[
-                "Ask a narrower follow-up scoped to one concept, process path, or outcome.",
-                "Include object type and time window context for process/RCA guidance.",
-            ],
-            thread_id=thread_id,
-            copilot=copilot,
-            completion_messages=completion_messages,
-        )
+            try:
+                stream_event = await anext(copilot_stream)
+            except StopAsyncIteration:
+                break
+
+        raise ValueError("assistant chat stream ended without final response")
 
     async def process_interpret(
         self,
@@ -523,6 +556,63 @@ class AiGatewayService:
             root_cause_run=root_cause_run,
             root_cause_ai=root_cause_ai,
         )
+
+
+def _build_assistant_chat_response(
+    *,
+    payload: AiAssistantChatRequest,
+    thread_id: str,
+    copilot: CopilotChatResponse,
+    completion_messages: list[dict[str, Any]],
+) -> AiAssistantChatResponse:
+    evidence, caveats = _build_copilot_evidence_and_caveats(copilot)
+    completion_messages_for_thread = _truncate_completion_messages(
+        completion_messages + copilot.completion_messages_delta
+    )
+
+    if payload.context is not None:
+        context_details = _format_context_details(payload.context)
+        if context_details:
+            evidence.append(
+                AiEvidenceItem(
+                    label="Request context",
+                    detail=context_details,
+                )
+            )
+
+    return AiAssistantChatResponse(
+        response_policy="informational",
+        tool_permissions=_assistant_tool_permissions(),
+        summary=copilot.answer,
+        answer=copilot.answer,
+        evidence=evidence,
+        caveats=caveats,
+        next_actions=[
+            "Ask a narrower follow-up scoped to one concept, process path, or outcome.",
+            "Include object type and time window context for process/RCA guidance.",
+        ],
+        thread_id=thread_id,
+        copilot=copilot,
+        completion_messages=completion_messages_for_thread,
+    )
+
+
+def _assistant_tool_permissions() -> list[str]:
+    return [
+        "assistant.context",
+        "ontology.current",
+        "ontology.concepts",
+        "ontology.concept_detail",
+        "ontology.query(read_only)",
+    ]
+
+
+def _iter_answer_chunks(answer: str, chunk_size: int = 120) -> Iterator[str]:
+    if not answer:
+        yield ""
+        return
+    for index in range(0, len(answer), chunk_size):
+        yield answer[index : index + chunk_size]
 
 
 def _pick_outcome_definition(

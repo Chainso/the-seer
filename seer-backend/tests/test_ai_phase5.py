@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from seer_backend.ai.gateway import GuidedInvestigationRequest
+from seer_backend.ai.ontology_copilot import (
+    CopilotAnswerFinalEvent,
+    CopilotAnswerStreamEvent,
+    CopilotAssistantDeltaEvent,
+    CopilotToolStatusEvent,
+)
 from seer_backend.analytics.rca_repository import InMemoryRootCauseRepository
 from seer_backend.analytics.rca_service import RootCauseService
 from seer_backend.analytics.repository import InMemoryProcessMiningRepository
@@ -92,6 +99,20 @@ class StubOntologyCopilotService:
             ],
         )
 
+    async def answer_stream(
+        self,
+        question: str,
+        conversation: list[CopilotConversationMessage] | None = None,
+        completion_conversation: list[dict[str, object]] | None = None,
+    ) -> AsyncIterator[CopilotAnswerStreamEvent]:
+        response = await self.answer(
+            question,
+            conversation=conversation,
+            completion_conversation=completion_conversation,
+        )
+        yield CopilotAssistantDeltaEvent(text=response.answer)
+        yield CopilotAnswerFinalEvent(response=response)
+
 
 class StubOntologyCopilotWithPolicyBlock:
     async def answer(
@@ -127,6 +148,37 @@ class StubOntologyCopilotWithPolicyBlock:
             ],
         )
 
+    async def answer_stream(
+        self,
+        question: str,
+        conversation: list[CopilotConversationMessage] | None = None,
+        completion_conversation: list[dict[str, object]] | None = None,
+    ) -> AsyncIterator[CopilotAnswerStreamEvent]:
+        response = await self.answer(
+            question,
+            conversation=conversation,
+            completion_conversation=completion_conversation,
+        )
+        if response.tool_call is not None:
+            call_id = response.tool_call.call_id or "call_1"
+            yield CopilotToolStatusEvent(
+                status="started",
+                tool=response.tool_call.tool,
+                call_id=call_id,
+                summary="Running read-only SPARQL query.",
+                query_preview=response.tool_call.query,
+            )
+            yield CopilotToolStatusEvent(
+                status="failed",
+                tool=response.tool_call.tool,
+                call_id=call_id,
+                summary="Read-only SPARQL query failed: SPARQL update operations are not allowed",
+                query_preview=response.tool_call.query,
+                error=response.tool_result.error if response.tool_result else None,
+            )
+        yield CopilotAssistantDeltaEvent(text=response.answer)
+        yield CopilotAnswerFinalEvent(response=response)
+
 
 class StubOntologyCopilotNotReady:
     async def answer(
@@ -137,6 +189,16 @@ class StubOntologyCopilotNotReady:
     ) -> CopilotChatResponse:
         del question, conversation, completion_conversation
         raise OntologyNotReadyError("Ontology release is still initializing")
+
+    async def answer_stream(
+        self,
+        question: str,
+        conversation: list[CopilotConversationMessage] | None = None,
+        completion_conversation: list[dict[str, object]] | None = None,
+    ) -> AsyncIterator[CopilotAnswerStreamEvent]:
+        del question, conversation, completion_conversation
+        raise OntologyNotReadyError("Ontology release is still initializing")
+        yield CopilotAssistantDeltaEvent(text="")
 
 
 def _parse_sse_events(raw_stream: str) -> list[tuple[str, dict[str, object]]]:
@@ -389,6 +451,12 @@ def test_ai_assistant_chat_surfaces_read_only_policy_block_caveat() -> None:
 
     assert response.status_code == 200, response.text
     events = _parse_sse_events(response.text)
+    tool_status_events = [payload for event, payload in events if event == "tool_status"]
+    assert [payload["status"] for payload in tool_status_events] == ["started", "failed"]
+    assert tool_status_events[0]["call_id"] == "call_1"
+    assert "running read-only sparql query" in str(tool_status_events[0]["summary"]).lower()
+    assert "failed" in str(tool_status_events[1]["summary"]).lower()
+
     final_event = next(payload for event, payload in events if event == "final")
     assert final_event["module"] == "assistant"
     assert any(

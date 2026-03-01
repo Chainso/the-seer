@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from typing import Any, Protocol
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Any, Literal, Protocol
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
 
@@ -232,6 +234,34 @@ _SPARQL_READ_ONLY_TOOL_SCHEMA = {
 }
 
 
+@dataclass(slots=True)
+class CopilotAssistantDeltaEvent:
+    text: str
+
+
+@dataclass(slots=True)
+class CopilotToolStatusEvent:
+    status: Literal["started", "completed", "failed"]
+    tool: Literal["sparql_read_only_query"]
+    call_id: str
+    summary: str
+    query_preview: str | None = None
+    query_type: Literal["SELECT", "ASK"] | None = None
+    row_count: int | None = None
+    truncated: bool | None = None
+    error: str | None = None
+
+
+@dataclass(slots=True)
+class CopilotAnswerFinalEvent:
+    response: CopilotChatResponse
+
+
+CopilotAnswerStreamEvent = (
+    CopilotAssistantDeltaEvent | CopilotToolStatusEvent | CopilotAnswerFinalEvent
+)
+
+
 class CopilotModelRuntime(Protocol):
     """Abstract runtime for model completion in tests and production."""
 
@@ -315,6 +345,21 @@ class OntologyCopilotService:
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, Any]] | None = None,
     ) -> CopilotChatResponse:
+        async for event in self.answer_stream(
+            question,
+            conversation=conversation,
+            completion_conversation=completion_conversation,
+        ):
+            if isinstance(event, CopilotAnswerFinalEvent):
+                return event.response
+        raise OntologyError("copilot stream ended without a final response")
+
+    async def answer_stream(
+        self,
+        question: str,
+        conversation: list[CopilotConversationMessage] | None = None,
+        completion_conversation: list[dict[str, Any]] | None = None,
+    ) -> AsyncIterator[CopilotAnswerStreamEvent]:
         current = await self._ontology_service.current()
         ontology_index_markdown = await self._build_ontology_index_markdown(
             current_release_id=current.release_id
@@ -347,15 +392,19 @@ class OntologyCopilotService:
                 completion_messages_delta.append(
                     {"role": "assistant", "content": answer_text}
                 )
-                return CopilotChatResponse(
-                    mode="direct_answer",
-                    answer=answer_text,
-                    evidence=model_output.evidence,
-                    current_release_id=current.release_id,
-                    tool_call=tool_call,
-                    tool_result=tool_result,
-                    completion_messages_delta=completion_messages_delta,
+                yield CopilotAssistantDeltaEvent(text=answer_text)
+                yield CopilotAnswerFinalEvent(
+                    response=CopilotChatResponse(
+                        mode="direct_answer",
+                        answer=answer_text,
+                        evidence=model_output.evidence,
+                        current_release_id=current.release_id,
+                        tool_call=tool_call,
+                        tool_result=tool_result,
+                        completion_messages_delta=completion_messages_delta,
+                    )
                 )
+                return
 
             remaining_budget = _TOOL_CALL_MAX_TOTAL - total_tool_calls
             if remaining_budget <= 0:
@@ -372,6 +421,9 @@ class OntologyCopilotService:
                         update={"call_id": f"call_auto_{round_index}_{call_index}"}
                     )
                 )
+
+            for resolved_call in resolved_calls:
+                yield _tool_status_started_event(resolved_call)
 
             tool_results = await asyncio.gather(
                 *(self._execute_tool_call(resolved_call) for resolved_call in resolved_calls)
@@ -392,18 +444,26 @@ class OntologyCopilotService:
                 messages.append(tool_message)
                 completion_messages_delta.append(assistant_message)
                 completion_messages_delta.append(tool_message)
+                yield _tool_status_completed_event(
+                    tool_call=resolved_call,
+                    tool_result=resolved_result,
+                )
 
         fallback_answer = _summarize_tool_result(tool_result)
         completion_messages_delta.append({"role": "assistant", "content": fallback_answer})
-        return CopilotChatResponse(
-            mode="direct_answer",
-            answer=fallback_answer,
-            evidence=[],
-            current_release_id=current.release_id,
-            tool_call=tool_call,
-            tool_result=tool_result,
-            completion_messages_delta=completion_messages_delta,
+        yield CopilotAssistantDeltaEvent(text=fallback_answer)
+        yield CopilotAnswerFinalEvent(
+            response=CopilotChatResponse(
+                mode="direct_answer",
+                answer=fallback_answer,
+                evidence=[],
+                current_release_id=current.release_id,
+                tool_call=tool_call,
+                tool_result=tool_result,
+                completion_messages_delta=completion_messages_delta,
+            )
         )
+        return
 
     async def _build_ontology_index_markdown(self, current_release_id: str | None) -> str:
         cache_key = current_release_id or _ONTOLOGY_INDEX_CACHE_KEY_EMPTY_RELEASE
@@ -949,6 +1009,63 @@ def _build_tool_result_messages(
         "content": json.dumps(tool_result.model_dump(mode="json"), ensure_ascii=True),
     }
     return assistant_message, tool_message
+
+
+def _tool_status_started_event(tool_call: CopilotToolCall) -> CopilotToolStatusEvent:
+    return CopilotToolStatusEvent(
+        status="started",
+        tool=tool_call.tool,
+        call_id=tool_call.call_id or "call_unknown",
+        summary="Running read-only SPARQL query.",
+        query_preview=_query_preview(tool_call.query),
+    )
+
+
+def _tool_status_completed_event(
+    *,
+    tool_call: CopilotToolCall,
+    tool_result: CopilotToolResult,
+) -> CopilotToolStatusEvent:
+    status: Literal["completed", "failed"] = (
+        "failed" if tool_result.error else "completed"
+    )
+    return CopilotToolStatusEvent(
+        status=status,
+        tool=tool_call.tool,
+        call_id=tool_call.call_id or "call_unknown",
+        summary=_tool_status_summary(tool_result),
+        query_preview=_query_preview(tool_call.query),
+        query_type=tool_result.query_type,
+        row_count=tool_result.row_count,
+        truncated=tool_result.truncated,
+        error=tool_result.error,
+    )
+
+
+def _tool_status_summary(tool_result: CopilotToolResult) -> str:
+    if tool_result.error:
+        return f"Read-only SPARQL query failed: {tool_result.error}"
+    if tool_result.query_type == "ASK":
+        if tool_result.ask_result is None:
+            return "Read-only ASK query completed without a boolean result."
+        return (
+            "Read-only ASK query completed with result "
+            f"{str(tool_result.ask_result).lower()}."
+        )
+    if tool_result.query_type == "SELECT":
+        truncated_suffix = " (truncated)" if tool_result.truncated else ""
+        return (
+            "Read-only SELECT query completed with "
+            f"{tool_result.row_count} rows{truncated_suffix}."
+        )
+    return "Read-only SPARQL query completed."
+
+
+def _query_preview(query: str, max_len: int = 160) -> str:
+    compact = " ".join(query.split())
+    if len(compact) <= max_len:
+        return compact
+    return f"{compact[: max_len - 3]}..."
 
 
 def _summarize_tool_result(tool_result: CopilotToolResult | None) -> str:
