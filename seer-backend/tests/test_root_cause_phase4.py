@@ -201,7 +201,11 @@ def test_rca_filters_support_numeric_comparison_operators() -> None:
             "outcome": {"event_type": _ORDER_DELAYED_EVENT_URI},
             "filters": [
                 {"field": f"event.count.{_ORDER_DELAYED_EVENT_URI}", "op": "gte", "value": "1"},
-                {"field": f"object_type.count.{_to_uri_identifier('Invoice')}", "op": "lt", "value": "4+"},
+                {
+                    "field": f"object_type.count.{_to_uri_identifier('Invoice')}",
+                    "op": "lt",
+                    "value": "4+",
+                },
             ],
         },
     )

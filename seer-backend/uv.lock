@@ -1331,7 +1331,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "clickhouse-connect", specifier = ">=0.8.0,<1" },
+    { name = "clickhouse-connect", specifier = ">=0.13.0" },
     { name = "fastapi", specifier = ">=0.116.0,<1" },
     { name = "httpx", specifier = ">=0.28.0,<1" },
     { name = "openai", specifier = ">=1.108.0,<2" },

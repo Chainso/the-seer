@@ -15,6 +15,7 @@ import {
   Position,
   ReactFlow,
   ReactFlowProvider,
+  type EdgeTypes,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import ELK from "elkjs/lib/elk.bundled.js";
@@ -225,7 +226,7 @@ const buildLayout = async (graph: BpmnGraphType, labelMap?: Record<string, strin
 function BpmnGraphInner({ graph, labelMap }: BpmnGraphProps) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
-  const edgeTypes = useMemo(
+  const edgeTypes: EdgeTypes = useMemo(
     () => ({
       elk: ElkEdge,
     }),
@@ -253,7 +254,7 @@ function BpmnGraphInner({ graph, labelMap }: BpmnGraphProps) {
         nodes={nodes}
         edges={edges}
         nodeTypes={{ taskNode: TaskNode, eventNode: EventNode, gatewayNode: GatewayNode }}
-        edgeTypes={edgeTypes as any}
+        edgeTypes={edgeTypes}
         fitView
         minZoom={0.2}
         maxZoom={1.6}

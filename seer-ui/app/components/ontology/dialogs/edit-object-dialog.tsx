@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/app/components/ui/button';
 import {
   Dialog,
@@ -79,7 +79,7 @@ export function EditObjectDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const toFieldKey = (value: string) => camelcase(value || '');
+  const toFieldKey = useCallback((value: string) => camelcase(value || ''), []);
 
   useEffect(() => {
     if (!open || !object) {
@@ -328,10 +328,10 @@ export function EditObjectDialog({
     return {
       stateCount: stateUris.length,
       transitionCount: transitionUris.length,
-      referencedBy: uniqueReferences
-        .map((uri) => nodeMap.get(uri))
-        .filter(Boolean)
-        .map((node) => (node?.properties.name as string) || node?.uri || uri),
+      referencedBy: uniqueReferences.map((uri) => {
+        const node = nodeMap.get(uri);
+        return (node?.properties.name as string) || node?.uri || uri;
+      }),
     };
   }, [edges, nodeMap, nodes, object]);
 

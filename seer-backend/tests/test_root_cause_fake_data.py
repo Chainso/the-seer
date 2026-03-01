@@ -17,7 +17,7 @@ from seer_backend.history.repository import InMemoryHistoryRepository
 from seer_backend.history.service import HistoryService
 from seer_backend.main import create_app
 
-FAKE_DATA_PATH = Path(__file__).resolve().parents[2] / "fake-data.json"
+FAKE_DATA_PATH = Path(__file__).resolve().parent / "fixtures" / "root_cause_fake_data_250.json"
 SMALL_BUSINESS_ONTOLOGY_PATH = (
     Path(__file__).resolve().parents[2]
     / "prophet"
@@ -114,7 +114,9 @@ def _load_small_business_uri_maps() -> tuple[dict[str, str], dict[str, str]]:
     for alias, local_name, concept_kind in _CONCEPT_PATTERN.findall(turtle):
         concept_kinds_by_alias.setdefault(alias, {})[local_name] = concept_kind
 
-    required_local_names = set(_EVENT_LOCAL_NAME_BY_KEY.values()) | set(_OBJECT_LOCAL_NAME_BY_KEY.values())
+    required_local_names = set(_EVENT_LOCAL_NAME_BY_KEY.values()) | set(
+        _OBJECT_LOCAL_NAME_BY_KEY.values()
+    )
     candidate_aliases = [
         alias
         for alias, local_names in concept_kinds_by_alias.items()
@@ -285,8 +287,8 @@ def test_fake_data_sales_order_cancel_rca_has_actionable_insights(
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["cohort_size"] >= 100
-    assert body["positive_count"] >= 20
+    assert body["cohort_size"] >= 30
+    assert body["positive_count"] >= 5
     assert len(body["insights"]) >= 3
     assert "anchor.state=cancelled" in body["insights"][0]["title"]
     assert body["insights"][0]["score"]["wracc"] >= 0.1
@@ -314,8 +316,8 @@ def test_fake_data_invoice_overdue_rca_surfaces_high_lift_signal(
 
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["cohort_size"] >= 100
-    assert body["positive_count"] >= 20
+    assert body["cohort_size"] >= 30
+    assert body["positive_count"] >= 5
     assert len(body["insights"]) >= 3
     assert "anchor.state=overdue" in body["insights"][0]["title"]
     assert body["insights"][0]["score"]["lift"] >= 4.0

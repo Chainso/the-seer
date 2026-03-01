@@ -12,6 +12,8 @@ import {
   ReactFlow,
   ReactFlowProvider,
   NodeProps,
+  NodeTypes,
+  EdgeTypes,
   Handle,
   Position,
   Connection,
@@ -35,7 +37,7 @@ interface ObjectStateGraphProps {
   onCreateTransition: (fromStateUri: string, toStateUri: string) => void;
 }
 
-interface StateGraphNodeData {
+interface StateGraphNodeData extends Record<string, unknown> {
   label: string;
   uri: string;
   name?: string;
@@ -96,12 +98,13 @@ const NODE_COLORS: Record<string, { bg: string; border: string }> = {
   EventTrigger: { bg: '--graph-node-trigger-bg', border: '--graph-node-trigger-border' },
 };
 
-function StateGraphNode({ data }: NodeProps<StateGraphNodeData>) {
-  const colors = NODE_COLORS[data.label] || {
+function StateGraphNode({ data }: NodeProps) {
+  const nodeData = data as unknown as StateGraphNodeData;
+  const colors = NODE_COLORS[nodeData.label] || {
     bg: '--graph-node-default-bg',
     border: '--graph-node-default-border',
   };
-  const showAdd = Boolean(data.onAdd);
+  const showAdd = Boolean(nodeData.onAdd);
   return (
     <div className="relative">
       <Handle
@@ -123,21 +126,21 @@ function StateGraphNode({ data }: NodeProps<StateGraphNodeData>) {
             className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm transition hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             onClick={(event) => {
               event.stopPropagation();
-              data.onAdd?.();
+              nodeData.onAdd?.();
             }}
-            disabled={!data.canAdd}
-            aria-label={data.actionLabel}
-            title={data.helperText || data.actionLabel}
+            disabled={!nodeData.canAdd}
+            aria-label={nodeData.actionLabel}
+            title={nodeData.helperText || nodeData.actionLabel}
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
         )}
         <div className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          {data.label}
+          {nodeData.label}
         </div>
-        <div className="mt-1 text-sm font-display">{data.name || data.uri}</div>
-        {data.description && (
-          <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{data.description}</div>
+        <div className="mt-1 text-sm font-display">{nodeData.name || nodeData.uri}</div>
+        {nodeData.description && (
+          <div className="mt-1 text-xs text-muted-foreground line-clamp-2">{nodeData.description}</div>
         )}
       </Card>
       <Handle
@@ -269,13 +272,13 @@ function ObjectStateGraphInner({
   const [nodes, setNodes] = useState<Node<StateGraphNodeData>[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
 
-  const nodeTypes = useMemo(
+  const nodeTypes: NodeTypes = useMemo(
     () => ({
       stateGraphNode: StateGraphNode,
     }),
     []
   );
-  const edgeTypes = useMemo(
+  const edgeTypes: EdgeTypes = useMemo(
     () => ({
       elk: ElkEdge,
     }),
@@ -323,8 +326,8 @@ function ObjectStateGraphInner({
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        nodeTypes={nodeTypes as any}
-        edgeTypes={edgeTypes as any}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
         minZoom={0.1}
         maxZoom={2}

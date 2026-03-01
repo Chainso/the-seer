@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ObjectList } from '../lists/object-list';
 import { EditObjectDialog } from '../dialogs/edit-object-dialog';
 import { CreateObjectDialog } from '../dialogs/create-object-dialog';

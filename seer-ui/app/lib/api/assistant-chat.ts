@@ -193,7 +193,7 @@ function handleSseEvent(
   const payload = asObject(parsed.payload);
   switch (parsed.event) {
     case 'meta': {
-      const eventPayload = payload as AssistantChatMetaEvent;
+      const eventPayload = payload as unknown as AssistantChatMetaEvent;
       result.meta = eventPayload;
       handlers.onMeta?.(eventPayload);
       return;
@@ -206,23 +206,23 @@ function handleSseEvent(
       return;
     }
     case 'tool_status': {
-      handlers.onToolStatus?.(payload as AssistantChatToolStatusEvent);
+      handlers.onToolStatus?.(payload as unknown as AssistantChatToolStatusEvent);
       return;
     }
     case 'final': {
-      const eventPayload = payload as AssistantChatResponse;
+      const eventPayload = payload as unknown as AssistantChatResponse;
       result.final = eventPayload;
       handlers.onFinal?.(eventPayload);
       return;
     }
     case 'done': {
-      const eventPayload = payload as AssistantChatDoneEvent;
+      const eventPayload = payload as unknown as AssistantChatDoneEvent;
       result.sawDone = true;
       handlers.onDone?.(eventPayload);
       return;
     }
     case 'error': {
-      const eventPayload = payload as AssistantChatErrorEvent;
+      const eventPayload = payload as unknown as AssistantChatErrorEvent;
       handlers.onError?.(eventPayload);
       const detail =
         typeof eventPayload.message === 'string' && eventPayload.message.trim().length > 0
