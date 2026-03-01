@@ -64,8 +64,8 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/stable-identifiers-uri-migration.md` (`agent_slot: DATA-RCA-1`, completed 2026-03-01; pending move to completed/)
-2. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/object-centric-history-inspector-consolidation.md` (`agent_slot: UX-HISTORY-1`, completed 2026-02-28; pending move to completed/)
+1. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/object-centric-history-inspector-consolidation.md` (`agent_slot: UX-HISTORY-1`, completed 2026-02-28; pending move to completed/)
+2. `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/assistant-chat-sse-streaming-migration.md` (`agent_slot: AI-STREAM-1`, in_progress)
 
 ## Post-MVP Status Tracking
 
@@ -80,9 +80,10 @@ Current execution state:
 
 Current post-MVP execution state:
 
+- `in_progress`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/assistant-chat-sse-streaming-migration.md` (Phase 1 planning complete as of 2026-03-01)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md` (all phases complete and plan closed as of 2026-02-28)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/adaptive-lifecycle-label-display.md` (Phases 1-3 complete and validated as of 2026-02-28)
-- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/stable-identifiers-uri-migration.md` (all phases complete and validated as of 2026-03-01; file still resides under active/ until archival move)
+- `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/stable-identifiers-uri-migration.md` (all phases complete and validated as of 2026-03-01)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/active/object-centric-history-inspector-consolidation.md` (all phases complete and ratified as of 2026-02-28; file still resides under active/ until archival move)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/assistant-page-surface-unification.md` (all phases complete as of 2026-02-28)
 - `completed`: `/home/chanzo/code/large-projects/seer-python/docs/exec-plans/completed/ui-experience-replatform-2026.md` (all phases complete as of 2026-02-22)
