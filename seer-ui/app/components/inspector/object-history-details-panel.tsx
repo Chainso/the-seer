@@ -143,6 +143,33 @@ function localDateTimeToIso(value: string): string | undefined {
   return parsed.toISOString();
 }
 
+function humanizeIdentifierToken(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+  const normalized = trimmed
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_./-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return trimmed;
+  }
+  return normalized
+    .split(" ")
+    .map((part) => (part ? `${part[0]?.toUpperCase()}${part.slice(1).toLowerCase()}` : part))
+    .join(" ");
+}
+
+function isMappedDisplayLabel(raw: string, candidate: string): boolean {
+  const normalizedCandidate = candidate.trim();
+  if (!normalizedCandidate || normalizedCandidate === "—") {
+    return false;
+  }
+  return normalizedCandidate !== raw;
+}
+
 async function fetchObjectEventsForGraph(
   identity: ObjectIdentity,
   window: TimeWindow,
@@ -428,6 +455,50 @@ export function ObjectHistoryDetailsPanel() {
     return `${graphTimeSource}:${activeGraphWindow.startAt}:${activeGraphWindow.endAt}`;
   }, [activeGraphWindow, graphTimeSource]);
 
+  const displayRelationRole = useCallback(
+    (value: string | null | undefined) => {
+      const raw = value?.trim();
+      if (!raw) {
+        return "Linked";
+      }
+      const objectLabel = ontologyDisplay.displayObjectType(raw);
+      if (isMappedDisplayLabel(raw, objectLabel)) {
+        return objectLabel;
+      }
+      const conceptLabel = ontologyDisplay.displayConcept(raw);
+      if (isMappedDisplayLabel(raw, conceptLabel)) {
+        return conceptLabel;
+      }
+      return humanizeIdentifierToken(raw);
+    },
+    [ontologyDisplay]
+  );
+
+  const displayEventSource = useCallback(
+    (value: string | null | undefined) => {
+      const raw = value?.trim();
+      if (!raw) {
+        return "Source unavailable";
+      }
+      const conceptLabel = ontologyDisplay.displayConcept(raw);
+      if (isMappedDisplayLabel(raw, conceptLabel)) {
+        return conceptLabel;
+      }
+      const eventLabel = ontologyDisplay.displayEventType(raw, {
+        fallbackObjectType: objectType,
+      });
+      if (isMappedDisplayLabel(raw, eventLabel)) {
+        return eventLabel;
+      }
+      const objectLabel = ontologyDisplay.displayObjectType(raw);
+      if (isMappedDisplayLabel(raw, objectLabel)) {
+        return objectLabel;
+      }
+      return humanizeIdentifierToken(raw);
+    },
+    [objectType, ontologyDisplay]
+  );
+
   const loadTimelinePage = useCallback(
     async (page: number, mode: "replace" | "append") => {
       if (!anchorIdentity) {
@@ -535,7 +606,7 @@ export function ObjectHistoryDetailsPanel() {
             label: ontologyDisplay.displayEventType(eventNode.eventType, {
               fallbackObjectType: objectType,
             }),
-            subtitle: `${formatDateTime(eventNode.occurredAt || eventNode.linkedAt)}${eventNode.source ? ` | ${eventNode.source}` : ""}`,
+            subtitle: `${formatDateTime(eventNode.occurredAt || eventNode.linkedAt)}${eventNode.source ? ` | ${displayEventSource(eventNode.source)}` : ""}`,
             occurredAtSortKey: Number.isNaN(sortKey) ? 0 : sortKey,
           };
         });
@@ -544,7 +615,7 @@ export function ObjectHistoryDetailsPanel() {
           id: edge.id,
           eventId: edge.eventId,
           objectKey: edge.objectKey,
-          role: edge.role,
+          role: displayRelationRole(edge.role),
         }));
 
         setGraphObjects(viewObjects);
@@ -572,7 +643,18 @@ export function ObjectHistoryDetailsPanel() {
     return () => {
       active = false;
     };
-  }, [activeGraphWindow, activeGraphWindowKey, anchorIdentity, graphDepth, identityKey, objectType, ontologyDisplay, timelineReady]);
+  }, [
+    activeGraphWindow,
+    activeGraphWindowKey,
+    anchorIdentity,
+    displayEventSource,
+    displayRelationRole,
+    graphDepth,
+    identityKey,
+    objectType,
+    ontologyDisplay,
+    timelineReady,
+  ]);
 
   const canLoadOlder = timelineReady && !timelineLoading && timelinePage + 1 < timelineTotalPages;
 
@@ -604,17 +686,46 @@ export function ObjectHistoryDetailsPanel() {
   }, [anchorIdentity, objectRefCanonical, ontologyDisplay]);
 
   const summarizeTimelinePayload = useCallback(
-    (item: ObjectEventItem) =>
-      ontologyDisplay.summarizePayload(item.payload || item.object_payload || null, {
-        objectType,
-        eventType: item.event_type,
-        stateLabelByToken,
-      }),
+    (item: ObjectEventItem, excludedComparableKeys?: Set<string>) => {
+      const payload = item.payload || item.object_payload || null;
+      if (!payload) {
+        return "—";
+      }
+
+      if (!excludedComparableKeys || excludedComparableKeys.size === 0) {
+        return ontologyDisplay.summarizePayload(payload, {
+          objectType,
+          eventType: item.event_type,
+          stateLabelByToken,
+        });
+      }
+
+      const filteredEntries = Object.entries(payload).filter(([key]) => {
+        const comparable = normalizeComparableToken(key);
+        return !comparable || !excludedComparableKeys.has(comparable);
+      });
+      if (filteredEntries.length === 0) {
+        return "—";
+      }
+
+      return ontologyDisplay.summarizePayload(
+        Object.fromEntries(filteredEntries) as Record<string, unknown>,
+        {
+          objectType,
+          eventType: item.event_type,
+          stateLabelByToken,
+        }
+      );
+    },
     [objectType, ontologyDisplay, stateLabelByToken]
   );
 
   const buildTimelineHighlights = useCallback(
-    (item: ObjectEventItem, payload: Record<string, unknown>) => {
+    (
+      item: ObjectEventItem,
+      payload: Record<string, unknown>,
+      excludedComparableKeys?: Set<string>
+    ) => {
       const eventFieldKeys = Array.from(
         ontologyDisplay.fieldLabelsForEventType(item.event_type)?.keys() || []
       );
@@ -635,7 +746,11 @@ export function ObjectHistoryDetailsPanel() {
       const seenNormalized = new Set<string>();
       for (const key of prioritized) {
         const normalized = normalizeComparableToken(key);
-        if (!normalized || seenNormalized.has(normalized)) {
+        if (
+          !normalized ||
+          seenNormalized.has(normalized) ||
+          excludedComparableKeys?.has(normalized)
+        ) {
           continue;
         }
         const payloadKey = payloadKeys.find(
@@ -712,9 +827,12 @@ export function ObjectHistoryDetailsPanel() {
           })
         : null;
 
+      const payloadKeys = [fromKey, toKey].filter((key): key is string => Boolean(key));
+
       return {
         from: fromValue ? String(fromValue) : "Unknown",
         to: toValue ? String(toValue) : "Unknown",
+        payloadKeys,
       };
     },
     [objectType, ontologyDisplay, stateLabelByToken]
@@ -731,6 +849,23 @@ export function ObjectHistoryDetailsPanel() {
       .map((item) => {
         const payload = item.payload || item.object_payload || {};
         const eventDate = new Date(eventTimeIso(item));
+        const stateTransition = resolveStateTransition(item, payload);
+        const excludedComparableKeys = new Set<string>();
+        for (const key of stateTransition?.payloadKeys || []) {
+          const comparable = normalizeComparableToken(key);
+          if (comparable) {
+            excludedComparableKeys.add(comparable);
+          }
+        }
+        const highlights = buildTimelineHighlights(item, payload, excludedComparableKeys);
+        for (const highlight of highlights) {
+          const comparable = normalizeComparableToken(highlight.key);
+          if (comparable) {
+            excludedComparableKeys.add(comparable);
+          }
+        }
+        const payloadSummary = summarizeTimelinePayload(item, excludedComparableKeys);
+
         return {
           timelineKey: timelineIdentityKey(item),
           dayKey: Number.isNaN(eventDate.valueOf())
@@ -747,17 +882,24 @@ export function ObjectHistoryDetailsPanel() {
           eventName: ontologyDisplay.displayEventType(item.event_type, {
             fallbackObjectType: objectType,
           }),
-          role: item.relation_role || "linked",
+          role: displayRelationRole(item.relation_role),
           time: formatDateTime(eventTimeIso(item)),
-          source: item.source || "Source unavailable",
+          source: displayEventSource(item.source),
           shortEventId: item.event_id.slice(0, 8),
-          payloadSummary: summarizeTimelinePayload(item),
-          highlights: buildTimelineHighlights(item, payload),
-          stateTransition: resolveStateTransition(item, payload),
+          payloadSummary,
+          highlights,
+          stateTransition: stateTransition
+            ? {
+                from: stateTransition.from,
+                to: stateTransition.to,
+              }
+            : null,
         };
       });
   }, [
     buildTimelineHighlights,
+    displayEventSource,
+    displayRelationRole,
     objectType,
     ontologyDisplay,
     resolveStateTransition,

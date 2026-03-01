@@ -67,7 +67,7 @@ export function ObjectHistoryTimeline({ groups, hasAnyEvents, loading }: ObjectH
                       <div className="font-display text-sm">{entry.eventName}</div>
                       <div className="text-xs text-muted-foreground">{entry.time}</div>
                     </div>
-                    <Badge className="rounded-full border border-foreground/15 bg-background px-3 py-1 text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-foreground">
+                    <Badge className="rounded-full border border-foreground/15 bg-background px-3 py-1 text-[0.65rem] font-semibold text-foreground">
                       {entry.role}
                     </Badge>
                   </header>
@@ -100,7 +100,9 @@ export function ObjectHistoryTimeline({ groups, hasAnyEvents, loading }: ObjectH
                     </div>
                   )}
 
-                  <p className="mt-3 text-xs text-muted-foreground">{entry.payloadSummary}</p>
+                  {entry.payloadSummary && entry.payloadSummary !== "—" && (
+                    <p className="mt-3 text-xs text-muted-foreground">{entry.payloadSummary}</p>
+                  )}
                   <footer className="mt-3 text-xs text-muted-foreground">
                     {entry.source} • Event {entry.shortEventId}
                   </footer>
