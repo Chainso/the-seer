@@ -1,7 +1,7 @@
 # Process Explorer Phase 3 Spec
 
 **Status:** completed  
-**Owner phase:** `docs/exec-plans/completed/ocdfg-multi-object-depth-scope.md`  
+**Owner phase:** `docs/exec-plans/completed/ocdfg-ui-layout-engine-upgrade.md`  
 **Last updated:** 2026-03-01
 
 ---
@@ -31,11 +31,16 @@ Define user-facing behavior for OC-DFG-first process mining and trace drill-down
    - `end_activities`,
    - `object_types`,
    - optional edge performance percentiles (`p50_seconds`, `p95_seconds`).
-7. UI keeps secondary diagrams available:
+7. OC-DFG visualization behavior:
+   - object nodes are displayed per included object type,
+   - start edges render from object nodes to their start activities,
+   - activity and object nodes render ontology display names (no raw URI text in visible labels),
+   - event nodes related to exactly one object type use a lighter variant of that object-type color.
+8. UI keeps secondary diagrams available:
    - `POST /api/v1/process/mine` for OCPN,
    - derived BPMN path from collapsed OCPN.
-8. User clicks a node, edge, start activity, or end activity entry.
-9. UI requests trace drill-down with the backend handle and renders matching traces.
+9. User clicks a node, edge, start activity, or end activity entry.
+10. UI requests trace drill-down with the backend handle and renders matching traces.
 
 ## Backend Contracts Consumed by UI
 
@@ -60,6 +65,8 @@ Mining request scope semantics:
 6. Re-running against unchanged data snapshot produces deterministic ordering for OC-DFG payload arrays.
 7. Depth changes update included object scope immediately in the UI.
 8. OC-DFG and OCPN mining calls use the same resolved multi-object scope per run.
+9. OC-DFG UI includes object nodes and object-to-start-activity edges in the rendered node/edge model.
+10. OC-DFG object and activity node labels are ontology-display driven for user-facing names.
 
 ## Out of Scope (Phase 3)
 

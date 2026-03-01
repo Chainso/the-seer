@@ -1,7 +1,7 @@
 'use client';
 
 import { Handle, Position } from '@xyflow/react';
-import { Card } from '../ui/card';
+import { GraphNodeCard } from '@/app/components/graph/graph-node-card';
 
 /**
  * Color scheme for different node types
@@ -42,28 +42,16 @@ export function OntologyNode({ data }: { data: OntologyNodeData }) {
   };
 
   return (
-    <Card
-      className="px-4 py-2 min-w-[160px] border-2 shadow-sm"
-      style={{
-        backgroundColor: `var(${colors.bg})`,
-        borderColor: `var(${colors.border})`,
-      }}
-    >
+    <>
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
-      <div>
-        <div className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-1">
-          {data.label}
-        </div>
-        <div className="text-sm font-display">
-          {data.name || data.uri}
-        </div>
-        {data.description && (
-          <div className="text-xs text-muted-foreground mt-1 truncate max-w-[200px]">
-            {data.description}
-          </div>
-        )}
-      </div>
+      <GraphNodeCard
+        header={data.label}
+        title={data.name || data.uri}
+        description={data.description}
+        bgVar={colors.bg}
+        borderVar={colors.border}
+      />
       <Handle type="source" position={Position.Bottom} style={{ opacity: 0 }} />
-    </Card>
+    </>
   );
 }

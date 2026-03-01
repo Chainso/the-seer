@@ -11,13 +11,14 @@ import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 
-import { getOcdfgGraph, getOcpnGraph, toOcpnGraphFromOcdfg } from "@/app/lib/api/process-mining";
+import { getOcdfgGraph, getOcpnGraph } from "@/app/lib/api/process-mining";
 import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import { buildReferenceEdges } from "@/app/components/ontology/graph-reference-edges";
 import { useOntologyGraphContext } from "@/app/components/providers/ontology-graph-provider";
 import type { OntologyGraph } from "@/app/types/ontology";
 import type { OcdfgGraph, OcpnGraph } from "@/app/types/process-mining";
 import { OcpnGraph as OcpnGraphView } from "./ocpn-graph";
+import { OcdfgGraph as OcdfgGraphView } from "./ocdfg-graph";
 import { BpmnGraph as BpmnGraphView } from "./bpmn-graph";
 
 type ProcessTreeNode = {
@@ -392,31 +393,19 @@ export function ProcessMiningPanel() {
       });
   }, [modelLabels, modelUri, ontologyDisplay, resolvedModelUris]);
 
-  const ocdfgRenderGraph = useMemo(() => {
-    if (!ocdfgGraph) {
-      return null;
-    }
-    return toOcpnGraphFromOcdfg(ocdfgGraph);
-  }, [ocdfgGraph]);
-
   const ocdfgEventLabels = useMemo(() => {
-    if (!ocdfgRenderGraph) {
+    if (!ocdfgGraph) {
       return {};
     }
-    return ocdfgRenderGraph.nodes.reduce<Record<string, string>>((acc, node) => {
-      if (node.type !== "TRANSITION") {
+    return ocdfgGraph.nodes.reduce<Record<string, string>>((acc, node) => {
+      if (node.kind !== "activity" || !node.activity) {
         return acc;
       }
-      const label = ontologyDisplay.displayEventType(node.eventUri ?? node.label ?? node.id);
-      if (node.eventUri) {
-        acc[node.eventUri] = label;
-      }
-      if (node.label) {
-        acc[node.label] = label;
-      }
+      const label = ontologyDisplay.displayEventType(node.activity);
+      acc[node.activity] = label;
       return acc;
     }, {});
-  }, [ocdfgRenderGraph, ontologyDisplay]);
+  }, [ocdfgGraph, ontologyDisplay]);
 
   const ocpnEventLabels = useMemo(() => {
     if (!ocpnGraph) {
@@ -529,14 +518,18 @@ export function ProcessMiningPanel() {
   }, [ocpnGraph, ocpnGraphCollapsed]);
 
   const selectedNode = useMemo(() => {
-    if (!ocdfgRenderGraph || !selectedNodeId) return null;
-    return ocdfgRenderGraph.nodes.find(node => node.id === selectedNodeId) || null;
-  }, [ocdfgRenderGraph, selectedNodeId]);
+    if (!ocdfgGraph || !selectedNodeId) return null;
+    return (
+      ocdfgGraph.nodes.find(
+        node => node.id === selectedNodeId && node.kind === "activity" && Boolean(node.activity)
+      ) || null
+    );
+  }, [ocdfgGraph, selectedNodeId]);
 
   const selectedNodeStats = useMemo(() => {
-    if (!ocdfgRenderGraph || !selectedNodeId) return null;
-    const incoming = ocdfgRenderGraph.edges.filter(edge => edge.target === selectedNodeId);
-    const outgoing = ocdfgRenderGraph.edges.filter(edge => edge.source === selectedNodeId);
+    if (!ocdfgGraph || !selectedNodeId) return null;
+    const incoming = ocdfgGraph.edges.filter(edge => edge.target === selectedNodeId);
+    const outgoing = ocdfgGraph.edges.filter(edge => edge.source === selectedNodeId);
     const incomingTotal = incoming.reduce((sum, edge) => sum + edge.count, 0);
     const outgoingTotal = outgoing.reduce((sum, edge) => sum + edge.count, 0);
     return {
@@ -545,7 +538,7 @@ export function ProcessMiningPanel() {
       incomingTotal,
       outgoingTotal,
     };
-  }, [ocdfgRenderGraph, selectedNodeId]);
+  }, [ocdfgGraph, selectedNodeId]);
 
   const colorForModel = (modelUri: string) => {
     let hash = 0;
@@ -556,19 +549,17 @@ export function ProcessMiningPanel() {
   };
 
   const modelLegend = useMemo(() => {
-    if (!ocdfgRenderGraph) return [];
+    if (!ocdfgGraph) return [];
     const active = new Set<string>();
-    ocdfgRenderGraph.edges.forEach(edge => {
-      if (edge.modelUri) {
-        active.add(edge.modelUri);
-      }
+    ocdfgGraph.edges.forEach(edge => {
+      active.add(edge.objectType);
     });
     return Array.from(active).sort().map(uri => ({
       uri,
       name: modelLabels[uri] ?? ontologyDisplay.displayObjectType(uri),
       color: colorForModel(uri),
     }));
-  }, [ocdfgRenderGraph, modelLabels, ontologyDisplay]);
+  }, [ocdfgGraph, modelLabels, ontologyDisplay]);
 
   const boundarySummary = useMemo(() => {
     if (!ocdfgGraph) {
@@ -791,14 +782,13 @@ export function ProcessMiningPanel() {
         </div>
         <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div>
-            {ocdfgRenderGraph && modelUri ? (
-              <OcpnGraphView
-                graph={ocdfgRenderGraph}
+            {ocdfgGraph && modelUri ? (
+              <OcdfgGraphView
+                graph={ocdfgGraph}
                 modelLabels={modelLabels}
                 eventLabels={ocdfgEventLabels}
                 selectedNodeId={selectedNodeId}
                 onNodeSelect={setSelectedNodeId}
-                collapseObjects
               />
             ) : (
               <div className="flex h-[680px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
@@ -814,7 +804,7 @@ export function ProcessMiningPanel() {
               {selectedNode ? (
                 <div className="mt-3 space-y-3 text-sm">
                   <div className="font-display text-lg">
-                    {ontologyDisplay.displayEventType(selectedNode.eventUri ?? selectedNode.label ?? null)}
+                    {ontologyDisplay.displayEventType(selectedNode.activity ?? "")}
                   </div>
                   <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Activity</div>
                   <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
@@ -885,7 +875,7 @@ export function ProcessMiningPanel() {
             </Card>
           </div>
         </div>
-        {ocdfgRenderGraph && ocdfgRenderGraph.edges.length === 0 && (
+        {ocdfgGraph && ocdfgGraph.edges.length === 0 && (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             No OC-DFG edges are visible for the current filters and minimum share threshold.
           </div>

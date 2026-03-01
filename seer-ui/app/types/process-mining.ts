@@ -139,17 +139,20 @@ export interface ProcessTraceDrilldownResponseContract {
 
 export interface OcdfgNode {
   id: string;
-  activity: string;
+  kind: "activity" | "object";
+  activity: string | null;
+  objectType: string | null;
   count: number;
-  traceHandle: string;
+  traceHandle: string | null;
 }
 
 export interface OcdfgEdge {
   id: string;
+  kind: "flow" | "start";
   source: string;
   target: string;
-  sourceActivity: string;
-  targetActivity: string;
+  sourceActivity: string | null;
+  targetActivity: string | null;
   objectType: string;
   count: number;
   share: number;

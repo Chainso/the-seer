@@ -81,6 +81,7 @@ Current post-MVP execution state:
 
 - `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/ocdfg-ui-layout-engine-upgrade.md` (all phases complete; validation/docs/archive ratified on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/ocdfg-multi-object-depth-scope.md` (all phases complete; ratified and archived on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/ocdfg-pm4py-backend-ui-first-diagram.md` (Phases A-C complete; validation/docs/archive ratified on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/clickhouse-connect-migration.md` (Phase 6 compliance audit and remediation validated on 2026-03-01)

@@ -239,7 +239,9 @@ export async function mineOcdfg(payload: ProcessMiningRequest): Promise<OcdfgMin
 function toOcdfgNode(node: OcdfgNodeContract): OcdfgNode {
   return {
     id: node.id,
+    kind: 'activity',
     activity: node.activity,
+    objectType: null,
     count: Number(node.count) || 0,
     traceHandle: node.trace_handle,
   };
@@ -248,6 +250,7 @@ function toOcdfgNode(node: OcdfgNodeContract): OcdfgNode {
 function toOcdfgEdge(edge: OcdfgEdgeContract): OcdfgEdge {
   return {
     id: edge.id,
+    kind: 'flow',
     source: edge.source,
     target: edge.target,
     sourceActivity: edge.source_activity,
@@ -279,30 +282,118 @@ function filterOcdfgEdges(
   return edges.filter((edge) => (Number(edge.share) || 0) >= minShareThreshold);
 }
 
+function buildOcdfgObjectNodes(
+  objectTypes: string[],
+  startActivities: OcdfgBoundaryActivity[]
+): OcdfgNode[] {
+  const orderedObjectTypes = Array.from(
+    new Set([
+      ...objectTypes.map((value) => value.trim()).filter(Boolean),
+      ...startActivities.map((item) => item.objectType),
+    ])
+  );
+  const startsByObjectType = new Map<string, number>();
+  const traceHandleByObjectType = new Map<string, string>();
+
+  startActivities.forEach((item) => {
+    startsByObjectType.set(item.objectType, (startsByObjectType.get(item.objectType) ?? 0) + item.count);
+    if (!traceHandleByObjectType.has(item.objectType)) {
+      traceHandleByObjectType.set(item.objectType, item.traceHandle);
+    }
+  });
+
+  return orderedObjectTypes.map((objectType) => ({
+    id: `object:${objectType}`,
+    kind: 'object',
+    activity: null,
+    objectType,
+    count: startsByObjectType.get(objectType) ?? 0,
+    traceHandle: traceHandleByObjectType.get(objectType) ?? null,
+  }));
+}
+
+function buildOcdfgStartEdges(
+  startActivities: OcdfgBoundaryActivity[],
+  activityNodes: OcdfgNode[]
+): OcdfgEdge[] {
+  const activityNodeIdsByActivity = new Map<string, string[]>();
+  activityNodes.forEach((node) => {
+    if (node.kind !== 'activity' || !node.activity) {
+      return;
+    }
+    const existing = activityNodeIdsByActivity.get(node.activity) ?? [];
+    existing.push(node.id);
+    activityNodeIdsByActivity.set(node.activity, existing);
+  });
+  activityNodeIdsByActivity.forEach((ids) => ids.sort((a, b) => a.localeCompare(b)));
+
+  const totalByObjectType = new Map<string, number>();
+  startActivities.forEach((item) => {
+    totalByObjectType.set(item.objectType, (totalByObjectType.get(item.objectType) ?? 0) + item.count);
+  });
+
+  const startEdges: OcdfgEdge[] = [];
+  startActivities.forEach((item) => {
+    const targetIds = activityNodeIdsByActivity.get(item.activity) ?? [];
+    if (targetIds.length === 0) {
+      return;
+    }
+    const total = totalByObjectType.get(item.objectType) ?? 0;
+    const share = total > 0 ? item.count / total : 0;
+    targetIds.forEach((targetId) => {
+      startEdges.push({
+        id: `start:${item.id}:${targetId}`,
+        kind: 'start',
+        source: `object:${item.objectType}`,
+        target: targetId,
+        sourceActivity: null,
+        targetActivity: item.activity,
+        objectType: item.objectType,
+        count: item.count,
+        share,
+        p50Seconds: null,
+        p95Seconds: null,
+        traceHandle: item.traceHandle,
+      });
+    });
+  });
+
+  return startEdges;
+}
+
 export async function getOcdfgGraph(payload: ProcessMiningRequest): Promise<OcdfgGraph> {
   const run = await mineOcdfg(payload);
   const filteredEdges = filterOcdfgEdges(run.edges, payload.minShare);
+  const startActivities = run.start_activities.map(toOcdfgBoundaryActivity);
+  const endActivities = run.end_activities.map(toOcdfgBoundaryActivity);
+  const activityNodes = run.nodes.map(toOcdfgNode);
+  const objectNodes = buildOcdfgObjectNodes(run.object_types, startActivities);
+  const flowEdges = filteredEdges.map(toOcdfgEdge);
+  const startEdges = buildOcdfgStartEdges(startActivities, activityNodes);
   return {
     runId: run.run_id,
     anchorObjectType: run.anchor_object_type,
     startAt: run.start_at,
     endAt: run.end_at,
-    nodes: run.nodes.map(toOcdfgNode),
-    edges: filteredEdges.map(toOcdfgEdge),
-    startActivities: run.start_activities.map(toOcdfgBoundaryActivity),
-    endActivities: run.end_activities.map(toOcdfgBoundaryActivity),
+    nodes: [...objectNodes, ...activityNodes],
+    edges: [...startEdges, ...flowEdges],
+    startActivities,
+    endActivities,
     objectTypes: run.object_types,
     warnings: run.warnings,
   };
 }
 
 export function toOcpnGraphFromOcdfg(graph: OcdfgGraph): OcpnGraph {
+  const activityNodes = graph.nodes.filter((node) => node.kind === 'activity' && node.activity);
+  const flowEdges = graph.edges.filter((edge) => edge.kind === 'flow');
+
   return {
-    nodes: graph.nodes.map((node) => ({
+    nodes: activityNodes.map((node) => ({
       id: node.id,
-      label: node.activity,
+      label: node.activity as string,
       type: 'TRANSITION',
-      eventUri: node.activity,
+      eventUri: node.activity as string,
       count: node.count,
       firstSeen: null,
       lastSeen: null,
@@ -313,7 +404,7 @@ export function toOcpnGraphFromOcdfg(graph: OcdfgGraph): OcpnGraph {
       p50Seconds: null,
       p95Seconds: null,
     })),
-    edges: graph.edges.map((edge) => ({
+    edges: flowEdges.map((edge) => ({
       id: edge.id,
       source: edge.source,
       target: edge.target,
