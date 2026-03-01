@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: OC-DFG as Primary Process Diagram (pm4py + ClickHouse/Polars)
 
-**Status:** in_progress (clickhouse-connect migration dependency cleared on 2026-03-01)  
+**Status:** completed (Phase C validation/archive finished on 2026-03-01)  
 **Track:** post-MVP analytics UX + backend contract extension  
 **Last updated:** 2026-03-01
 
@@ -35,6 +35,15 @@
    - OCPN remains available as a separate secondary diagram.
    - BPMN remains derived from collapsed OCPN in the secondary path.
 5. Expanded UI contract tests to assert OC-DFG endpoint usage and OC-DFG-first panel markers.
+
+### 2026-03-01 - Phase C Final Validation + Docs/Archive (Completed)
+
+1. Validated backend OC-DFG contract/determinism/error-path tests via `seer-backend/.venv/bin/pytest -q seer-backend/tests/test_process_phase3.py -k ocdfg` (`6 passed`, `6 deselected`).
+2. Validated frontend process-mining contract coverage via `node --test tests/insights.contract.test.mjs tests/ontology-display-guardrails.contract.test.mjs` in `seer-ui` (`2 passed`).
+3. Ran lightweight backend lint on OC-DFG touched paths via `seer-backend/.venv/bin/ruff check ...` (`All checks passed`).
+4. Updated `docs/product-specs/process-explorer-phase-3.md` for OC-DFG-first flow and contract expectations.
+5. Updated `ARCHITECTURE.md` process-mining contract/invariant references for OC-DFG-primary endpoint boundary.
+6. Archived this plan to `docs/exec-plans/completed/` and updated active/completed indexes and successor cross-links.
 
 ## Decision Log
 

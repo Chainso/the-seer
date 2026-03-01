@@ -64,7 +64,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md` - in_progress (dependency unblocked by clickhouse migration completion)
+1. none
 
 ## Post-MVP Status Tracking
 
@@ -79,8 +79,9 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md` (dependency cleared after clickhouse migration completion on 2026-03-01)
+- `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/ocdfg-pm4py-backend-ui-first-diagram.md` (Phases A-C complete; validation/docs/archive ratified on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/clickhouse-connect-migration.md` (Phase 6 compliance audit and remediation validated on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/object-centric-history-inspector-consolidation.md` (all phases complete and ratified as of 2026-02-28)
 - `completed`: `docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md` (all phases complete and plan closed as of 2026-02-28)

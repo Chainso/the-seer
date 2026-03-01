@@ -3,7 +3,7 @@
 **Status:** completed  
 **Track:** post-MVP backend data-plane hardening  
 **Predecessor:** none  
-**Successor:** `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md`  
+**Successor:** `docs/exec-plans/completed/ocdfg-pm4py-backend-ui-first-diagram.md`  
 **Last updated:** 2026-03-01
 
 ---

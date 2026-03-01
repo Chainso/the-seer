@@ -81,7 +81,7 @@ Expected internal service areas:
    - object reference normalization utilities
 3. `analytics` domain:
    - ClickHouse extraction (Arrow-backed dataframe path)
-   - object-centric Petri net execution via `pm4py`
+   - object-centric process mining via `pm4py` (OC-DFG primary, OCPN secondary)
    - root-cause pipeline (neighborhood extraction + ranking)
 4. `ai` domain:
    - unified AI gateway routing by module (`ontology`, `process`, `root_cause`)
@@ -175,7 +175,11 @@ Flow:
 5. Insight result contract:
    - analytics output shape for UI and AI rendering
    - includes hypothesis, scoring metrics, coverage, and evidence references
-6. AI gateway contract:
+6. Process mining contract:
+   - primary process diagram endpoint: `POST /api/v1/process/ocdfg/mine`
+   - secondary OCPN endpoint: `POST /api/v1/process/mine`
+   - shared drill-down endpoint for stateless handles: `GET /api/v1/process/traces`
+7. AI gateway contract:
    - single backend `/ai` API surface for ontology/process/RCA AI interactions plus generic assistant chat
    - generic assistant chat route: `POST /api/v1/ai/assistant/chat` is SSE-first (`text/event-stream`)
    - assistant request contract uses canonical `completion_messages[]` only (top-level `messages[]` is not accepted)
@@ -200,7 +204,7 @@ The following invariants are deliberate and must hold unless explicitly changed 
 10. `event_object_links` references specific object history snapshots via `object_history_id`.
 11. `object_type` is present in both `object_history` and `event_object_links`, and must match for linked records.
 12. Object reference normalization preserves raw reference and derived canonical/hash forms.
-13. Primary mining method for this phase is object-centric Petri nets.
+13. Primary process-mining diagram contract is OC-DFG (`POST /api/v1/process/ocdfg/mine`); OCPN remains a secondary view.
 14. Analytics data access uses programmatic SQL with Arrow-backed dataframe flow from ClickHouse into Python.
 15. RCA outcome definition is analysis-run scoped (user or AI configured), not globally fixed.
 16. AI interactions are served through a unified backend gateway with module-scoped permissions.
