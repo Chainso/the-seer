@@ -62,6 +62,10 @@ def build_history_service(settings: Settings) -> HistoryService | UnavailableHis
             user=settings.clickhouse_user,
             password=settings.clickhouse_password,
             timeout_seconds=settings.clickhouse_timeout_seconds,
+            connect_timeout_seconds=settings.clickhouse_connect_timeout_seconds,
+            send_receive_timeout_seconds=settings.clickhouse_send_receive_timeout_seconds,
+            compression=settings.clickhouse_compression,
+            query_limit=settings.clickhouse_query_limit,
             migrations_dir=migrations_dir,
         )
         return HistoryService(repository=repository)

@@ -18,6 +18,10 @@ class AsyncClickHouseClient:
     user: str
     password: str
     timeout_seconds: float
+    connect_timeout_seconds: float | None = None
+    send_receive_timeout_seconds: float | None = None
+    compression: str | None = None
+    query_limit: int | None = None
     _core_client: ClickHouseSqlAlchemyCoreClient = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -28,6 +32,10 @@ class AsyncClickHouseClient:
             user=self.user,
             password=self.password,
             timeout_seconds=self.timeout_seconds,
+            connect_timeout_seconds=self.connect_timeout_seconds,
+            send_receive_timeout_seconds=self.send_receive_timeout_seconds,
+            compression=self.compression,
+            query_limit=self.query_limit,
         )
 
     async def select_rows(self, query: str | Any) -> list[dict[str, Any]]:

@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: Migrate Backend ClickHouse Access to clickhouse-connect
 
-**Status:** completed  
+**Status:** in_progress  
 **Track:** post-MVP backend data-plane hardening  
 **Predecessor:** none  
 **Successor:** `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md`  
@@ -183,6 +183,30 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 1. `cd seer-backend && uv run pytest -q`
 2. `cd seer-backend && uv run ruff check src tests`
 
+## Phase 6: Independent Compliance Audit (Subagent Review)
+
+### Scope
+
+1. Spawn an independent review agent to audit current ClickHouse + SQLAlchemy usage across all runtime repositories.
+2. Verify implementation alignment with this plan's SQLAlchemy utilization model:
+   - DSN/engine usage,
+   - Core query coverage (`SELECT`/joins/order/limit/distinct),
+   - insert/delete semantics,
+   - documented limitations (no transaction guarantees, no update expectation, etc.).
+3. Produce a gap report with required fixes (if any), prioritized by correctness risk.
+4. Apply required remediations and re-run targeted validation for touched paths.
+
+### Exit Criteria
+
+1. Independent audit report confirms compliance, or all identified gaps are fixed and verified.
+2. Decision log records the audit outcome and any remediation decisions.
+3. Plan can be marked `completed` only after this phase closes.
+
+### Validation
+
+1. `cd seer-backend && uv run pytest -q tests/test_history_phase2.py tests/test_process_phase3.py tests/test_root_cause_phase4.py`
+2. `cd seer-backend && uv run ruff check src/seer_backend`
+
 ## Risks and Mitigations
 
 1. **Risk:** behavioral drift in datetime/UUID parsing when switching client result formats.  
@@ -208,6 +232,7 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 - [x] Phase 3 complete
 - [x] Phase 4 complete
 - [x] Phase 5 complete
+- [x] Phase 6 complete
 
 ## Decision Log
 
@@ -218,3 +243,5 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 5. 2026-03-01: Phase 3 migrated `ClickHouseProcessMiningRepository` and `ClickHouseRootCauseRepository` transport paths to `AsyncClickHouseClient`, removed repository-local `httpx.AsyncClient` usage, and preserved deterministic ordering plus repository-level domain error mapping.
 6. 2026-03-01: Phase 4 made SQLAlchemy Core (`clickhousedb` dialect) the single runtime ClickHouse path by introducing a shared SQLAlchemy utility, switching shared client execution to that utility, removing `FORMAT JSON` query-shape dependencies from history/process/RCA repositories, and retaining repository-level domain error translation and deterministic ordering semantics.
 7. 2026-03-01: Phase 5 ran full backend validation and docs finalization: `cd seer-backend && uv run pytest -q` passed (`59 passed, 99 warnings in 21.38s`; warnings are existing FastAPI deprecation notices), `cd seer-backend && uv run ruff check src tests` passed (`All checks passed!`). Post-MVP execution state was updated and OC-DFG dependency block was cleared.
+8. 2026-03-01: Added Phase 6 independent compliance audit requirement so plan completion requires a fresh subagent review against the SQLAlchemy dialect utilization model.
+9. 2026-03-01: Closed independent audit remediation gaps: history/process/RCA runtime query construction now defaults to SQLAlchemy Core statements (`select/join/where/order/limit/distinct`) rather than raw SQL string assembly, ClickHouse SQLAlchemy engine now receives DSN/options plumbing for compression/query_limit/connect+send-receive timeouts from `SEER_CLICKHOUSE_*` settings, and explicit runtime limitations were encoded in code/docs (no update expectation, no transaction guarantees, no RETURNING/sequence reliance). Validation evidence: `cd seer-backend && uv run ruff check src/seer_backend/clickhouse src/seer_backend/history/repository.py src/seer_backend/analytics/repository.py src/seer_backend/analytics/rca_repository.py` (`All checks passed!`), `cd seer-backend && uv run pytest -q tests/test_history_phase2.py` (`12 passed`), `cd seer-backend && uv run pytest -q tests/test_process_phase3.py` (`6 passed`), `cd seer-backend && uv run pytest -q tests/test_root_cause_phase4.py` (`5 passed`).

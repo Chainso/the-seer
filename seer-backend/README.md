@@ -16,7 +16,11 @@ Copy `.env.example` to `.env` and adjust values as needed.
 1. Runtime ClickHouse repositories use SQLAlchemy Core with the `clickhousedb` dialect as the canonical query/execution path.
 2. Backend transport is centralized through the shared `clickhouse-connect` client utilities instead of per-repository HTTP wiring.
 3. Direct repository `httpx` + `FORMAT JSON` transport/parsing paths are intentionally removed.
-4. ClickHouse connection settings continue to come from `SEER_CLICKHOUSE_*` environment variables.
+4. ClickHouse engine options are wired from `SEER_CLICKHOUSE_*` settings, including DSN options (`SEER_CLICKHOUSE_COMPRESSION`, `SEER_CLICKHOUSE_QUERY_LIMIT`) and timeout options (`SEER_CLICKHOUSE_TIMEOUT_SECONDS`, `SEER_CLICKHOUSE_CONNECT_TIMEOUT_SECONDS`, `SEER_CLICKHOUSE_SEND_RECEIVE_TIMEOUT_SECONDS`).
+5. Runtime limitations are explicit:
+   - no `UPDATE` expectation in repository paths,
+   - no transaction guarantees from SQLAlchemy `begin/commit/rollback`,
+   - no reliance on `RETURNING` or sequence/autoincrement semantics.
 
 ## Phase 2 History APIs
 

@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     clickhouse_user: str = "seer"
     clickhouse_password: str = "seer"
     clickhouse_timeout_seconds: float = Field(default=5.0, ge=0.1, le=30.0)
+    clickhouse_connect_timeout_seconds: float | None = Field(default=None, ge=0.1, le=30.0)
+    clickhouse_send_receive_timeout_seconds: float | None = Field(
+        default=None, ge=0.1, le=30.0
+    )
+    clickhouse_compression: str | None = "lz4"
+    clickhouse_query_limit: int | None = Field(default=None, ge=1, le=1_000_000)
     clickhouse_migrations_dir: str = "migrations/clickhouse"
     process_mining_max_events: int = Field(default=5_000, ge=100, le=200_000)
     process_mining_max_relations: int = Field(default=40_000, ge=100, le=500_000)

@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
+from sqlalchemy import column, select, table, tuple_
+
 from seer_backend.analytics.errors import RootCauseError, RootCauseLimitExceededError
 from seer_backend.analytics.rca_models import (
     ExtractedRcaNeighborhood,
@@ -21,6 +23,33 @@ from seer_backend.analytics.rca_models import (
 )
 from seer_backend.clickhouse.client import AsyncClickHouseClient
 from seer_backend.clickhouse.errors import ClickHouseClientError
+
+_EVENT_HISTORY = table(
+    "event_history",
+    column("event_id"),
+    column("occurred_at"),
+    column("event_type"),
+    column("source"),
+    column("trace_id"),
+)
+_EVENT_OBJECT_LINKS = table(
+    "event_object_links",
+    column("event_id"),
+    column("object_history_id"),
+    column("object_type"),
+    column("object_ref_hash"),
+    column("object_ref_canonical"),
+    column("relation_role"),
+)
+_OBJECT_HISTORY = table(
+    "object_history",
+    column("object_history_id"),
+    column("object_type"),
+    column("object_ref_hash"),
+    column("object_ref_canonical"),
+    column("object_payload"),
+    column("recorded_at"),
+)
 
 
 class RootCauseRepository(Protocol):
@@ -44,6 +73,10 @@ class ClickHouseRootCauseRepository:
     password: str
     timeout_seconds: float
     migrations_dir: Path
+    connect_timeout_seconds: float | None = None
+    send_receive_timeout_seconds: float | None = None
+    compression: str | None = None
+    query_limit: int | None = None
     _clickhouse_client: AsyncClickHouseClient | None = field(
         default=None,
         init=False,
@@ -59,6 +92,10 @@ class ClickHouseRootCauseRepository:
                 user=self.user,
                 password=self.password,
                 timeout_seconds=self.timeout_seconds,
+                connect_timeout_seconds=self.connect_timeout_seconds,
+                send_receive_timeout_seconds=self.send_receive_timeout_seconds,
+                compression=self.compression,
+                query_limit=self.query_limit,
             )
         return self._clickhouse_client
 
@@ -162,22 +199,20 @@ class ClickHouseRootCauseRepository:
         )
 
     async def _select_anchor_instances(self, payload: RootCauseRequest) -> list[RcaObjectInstance]:
-        query = "\n".join(
-            [
-                "SELECT DISTINCT",
-                "  l.object_type,",
-                "  l.object_ref_hash,",
-                "  l.object_ref_canonical",
-                "FROM event_object_links AS l",
-                "INNER JOIN event_history AS e ON e.event_id = l.event_id",
-                "WHERE",
-                f"  l.object_type = {_sql_string_literal(payload.anchor_object_type)}",
-                f"  AND e.occurred_at >= {_datetime_literal(payload.start_at)}",
-                f"  AND e.occurred_at <= {_datetime_literal(payload.end_at)}",
-                "ORDER BY l.object_ref_hash, l.object_ref_canonical",
-            ]
+        links = _EVENT_OBJECT_LINKS.alias("l")
+        events = _EVENT_HISTORY.alias("e")
+        stmt = (
+            select(links.c.object_type, links.c.object_ref_hash, links.c.object_ref_canonical)
+            .distinct()
+            .select_from(links.join(events, events.c.event_id == links.c.event_id))
+            .where(
+                links.c.object_type == payload.anchor_object_type,
+                events.c.occurred_at >= _ensure_utc(payload.start_at),
+                events.c.occurred_at <= _ensure_utc(payload.end_at),
+            )
+            .order_by(links.c.object_ref_hash, links.c.object_ref_canonical)
         )
-        rows = await self._select_rows(query)
+        rows = await self._select_rows(stmt)
         return [
             RcaObjectInstance(
                 object_type=str(row["object_type"]),
@@ -198,18 +233,27 @@ class ClickHouseRootCauseRepository:
 
         event_ids: set[UUID] = set()
         for chunk in _chunk(values, size=350):
-            query = "\n".join(
-                [
-                    "SELECT DISTINCT l.event_id",
-                    "FROM event_object_links AS l",
-                    "INNER JOIN event_history AS e ON e.event_id = l.event_id",
-                    "WHERE",
-                    f"  {_instance_tuple_predicate(chunk)}",
-                    f"  AND e.occurred_at >= {_datetime_literal(payload.start_at)}",
-                    f"  AND e.occurred_at <= {_datetime_literal(payload.end_at)}",
-                ]
+            links = _EVENT_OBJECT_LINKS.alias("l")
+            events = _EVENT_HISTORY.alias("e")
+            instance_tuples = [
+                (item.object_type, int(item.object_ref_hash), item.object_ref_canonical)
+                for item in chunk
+            ]
+            stmt = (
+                select(links.c.event_id)
+                .distinct()
+                .select_from(links.join(events, events.c.event_id == links.c.event_id))
+                .where(
+                    tuple_(
+                        links.c.object_type,
+                        links.c.object_ref_hash,
+                        links.c.object_ref_canonical,
+                    ).in_(instance_tuples),
+                    events.c.occurred_at >= _ensure_utc(payload.start_at),
+                    events.c.occurred_at <= _ensure_utc(payload.end_at),
+                )
             )
-            rows = await self._select_rows(query)
+            rows = await self._select_rows(stmt)
             event_ids.update(UUID(str(row["event_id"])) for row in rows)
         return event_ids
 
@@ -217,51 +261,54 @@ class ClickHouseRootCauseRepository:
         self,
         event_ids: Iterable[UUID],
     ) -> list[RcaRelationRow]:
-        values = list(event_ids)
+        values = [str(value) for value in event_ids]
         if not values:
             return []
 
         relations: list[RcaRelationRow] = []
+        links = _EVENT_OBJECT_LINKS.alias("l")
         for chunk in _chunk(values, size=500):
-            query = "\n".join(
-                [
-                    "SELECT",
-                    "  event_id,",
-                    "  object_history_id,",
-                    "  object_type,",
-                    "  object_ref_hash,",
-                    "  object_ref_canonical,",
-                    "  relation_role",
-                    "FROM event_object_links",
-                    f"WHERE event_id IN ({', '.join(_uuid_literal(value) for value in chunk)})",
-                    "ORDER BY event_id, object_type, object_ref_hash, object_history_id",
-                ]
+            stmt = (
+                select(
+                    links.c.event_id,
+                    links.c.object_history_id,
+                    links.c.object_type,
+                    links.c.object_ref_hash,
+                    links.c.object_ref_canonical,
+                    links.c.relation_role,
+                )
+                .where(links.c.event_id.in_(chunk))
+                .order_by(
+                    links.c.event_id,
+                    links.c.object_type,
+                    links.c.object_ref_hash,
+                    links.c.object_history_id,
+                )
             )
-            rows = await self._select_rows(query)
+            rows = await self._select_rows(stmt)
             relations.extend(_relation_row_from_clickhouse(row) for row in rows)
         return relations
 
     async def _select_events_by_ids(self, event_ids: Iterable[UUID]) -> list[RcaEventRow]:
-        values = list(event_ids)
+        values = [str(value) for value in event_ids]
         if not values:
             return []
 
         events: list[RcaEventRow] = []
+        event_history = _EVENT_HISTORY.alias("e")
         for chunk in _chunk(values, size=500):
-            query = "\n".join(
-                [
-                    "SELECT",
-                    "  event_id,",
-                    "  occurred_at,",
-                    "  event_type,",
-                    "  source,",
-                    "  trace_id",
-                    "FROM event_history",
-                    f"WHERE event_id IN ({', '.join(_uuid_literal(value) for value in chunk)})",
-                    "ORDER BY occurred_at, event_id",
-                ]
+            stmt = (
+                select(
+                    event_history.c.event_id,
+                    event_history.c.occurred_at,
+                    event_history.c.event_type,
+                    event_history.c.source,
+                    event_history.c.trace_id,
+                )
+                .where(event_history.c.event_id.in_(chunk))
+                .order_by(event_history.c.occurred_at, event_history.c.event_id)
             )
-            rows = await self._select_rows(query)
+            rows = await self._select_rows(stmt)
             events.extend(_event_row_from_clickhouse(row) for row in rows)
 
         events.sort(key=lambda row: (_ensure_utc(row.occurred_at), str(row.event_id)))
@@ -270,29 +317,31 @@ class ClickHouseRootCauseRepository:
     async def _select_objects_by_ids(
         self, object_history_ids: Iterable[UUID]
     ) -> list[RcaObjectRow]:
-        values = list({item for item in object_history_ids})
+        values = [str(item) for item in {item for item in object_history_ids}]
         if not values:
             return []
 
         objects: list[RcaObjectRow] = []
+        object_history = _OBJECT_HISTORY.alias("o")
         for chunk in _chunk(values, size=500):
-            ids_clause = ", ".join(_uuid_literal(value) for value in chunk)
-            query = "\n".join(
-                [
-                    "SELECT",
-                    "  object_history_id,",
-                    "  object_type,",
-                    "  object_ref_hash,",
-                    "  object_ref_canonical,",
-                    "  object_payload,",
-                    "  recorded_at",
-                    "FROM object_history",
-                    "WHERE",
-                    f"  object_history_id IN ({ids_clause})",
-                    "ORDER BY object_type, object_ref_hash, recorded_at, object_history_id",
-                ]
+            stmt = (
+                select(
+                    object_history.c.object_history_id,
+                    object_history.c.object_type,
+                    object_history.c.object_ref_hash,
+                    object_history.c.object_ref_canonical,
+                    object_history.c.object_payload,
+                    object_history.c.recorded_at,
+                )
+                .where(object_history.c.object_history_id.in_(chunk))
+                .order_by(
+                    object_history.c.object_type,
+                    object_history.c.object_ref_hash,
+                    object_history.c.recorded_at,
+                    object_history.c.object_history_id,
+                )
             )
-            rows = await self._select_rows(query)
+            rows = await self._select_rows(stmt)
             objects.extend(_object_row_from_clickhouse(row) for row in rows)
 
         objects.sort(
@@ -305,7 +354,7 @@ class ClickHouseRootCauseRepository:
         )
         return objects
 
-    async def _select_rows(self, query: str) -> list[dict[str, Any]]:
+    async def _select_rows(self, query: Any) -> list[dict[str, Any]]:
         try:
             return await self._shared_clickhouse_client().select_rows(query)
         except ClickHouseClientError as exc:
@@ -529,22 +578,6 @@ def _chunk(values: Sequence[Any], *, size: int) -> list[list[Any]]:
     return [list(values[index : index + size]) for index in range(0, len(values), size)]
 
 
-def _instance_tuple_predicate(instances: Sequence[RcaObjectInstance]) -> str:
-    tuples = ", ".join(
-        "("
-        + ", ".join(
-            [
-                _sql_string_literal(item.object_type),
-                str(int(item.object_ref_hash)),
-                _sql_string_literal(item.object_ref_canonical),
-            ]
-        )
-        + ")"
-        for item in instances
-    )
-    return f"(l.object_type, l.object_ref_hash, l.object_ref_canonical) IN ({tuples})"
-
-
 def _event_row_from_clickhouse(row: dict[str, Any]) -> RcaEventRow:
     return RcaEventRow(
         event_id=UUID(str(row["event_id"])),
@@ -577,15 +610,6 @@ def _relation_row_from_clickhouse(row: dict[str, Any]) -> RcaRelationRow:
     )
 
 
-def _datetime_literal(value: datetime) -> str:
-    return f"toDateTime64('{_to_clickhouse_datetime(value)}', 3, 'UTC')"
-
-
-def _to_clickhouse_datetime(value: datetime) -> str:
-    normalized = _ensure_utc(value)
-    return normalized.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-
-
 def _parse_clickhouse_datetime(value: str) -> datetime:
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -594,15 +618,6 @@ def _parse_clickhouse_datetime(value: str) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
-
-
-def _uuid_literal(value: UUID) -> str:
-    return f"toUUID('{str(value)}')"
-
-
-def _sql_string_literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
-    return f"'{escaped}'"
 
 
 def _load_json_object(raw: Any, default: dict[str, Any] | None = None) -> dict[str, Any] | None:

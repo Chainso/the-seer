@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
+from sqlalchemy import column, desc, func, select, table
+
 from seer_backend.clickhouse.client import AsyncClickHouseClient
 from seer_backend.clickhouse.errors import ClickHouseClientError
 from seer_backend.history.errors import HistoryError, ObjectTypeMismatchError
@@ -36,6 +38,39 @@ _DURATION_PATTERN = re.compile(
     r"(?:(?P<minutes>\d+(?:\.\d+)?)M)?"
     r"(?:(?P<seconds>\d+(?:\.\d+)?)S)?"
     r")?$"
+)
+_EVENT_HISTORY = table(
+    "event_history",
+    column("event_id"),
+    column("occurred_at"),
+    column("event_type"),
+    column("source"),
+    column("payload"),
+    column("trace_id"),
+    column("attributes"),
+    column("ingested_at"),
+)
+_OBJECT_HISTORY = table(
+    "object_history",
+    column("object_history_id"),
+    column("object_type"),
+    column("object_ref"),
+    column("object_ref_canonical"),
+    column("object_ref_hash"),
+    column("object_payload"),
+    column("recorded_at"),
+    column("source_event_id"),
+)
+_EVENT_OBJECT_LINKS = table(
+    "event_object_links",
+    column("event_id"),
+    column("object_history_id"),
+    column("object_type"),
+    column("object_ref"),
+    column("object_ref_canonical"),
+    column("object_ref_hash"),
+    column("relation_role"),
+    column("linked_at"),
 )
 
 
@@ -109,6 +144,10 @@ class ClickHouseHistoryRepository:
     password: str
     timeout_seconds: float
     migrations_dir: Path
+    connect_timeout_seconds: float | None = None
+    send_receive_timeout_seconds: float | None = None
+    compression: str | None = None
+    query_limit: int | None = None
     _clickhouse_client: AsyncClickHouseClient | None = field(
         default=None,
         init=False,
@@ -129,12 +168,11 @@ class ClickHouseHistoryRepository:
                 await self._execute(statement)
 
     async def event_exists(self, event_id: UUID) -> bool:
-        query = (
-            "SELECT count() AS cnt "
-            "FROM event_history "
-            f"WHERE event_id = {_uuid_literal(event_id)} "
+        event_history = _EVENT_HISTORY.alias("e")
+        stmt = select(func.count().label("cnt")).select_from(event_history).where(
+            event_history.c.event_id == str(event_id)
         )
-        rows = await self._select_rows(query)
+        rows = await self._select_rows(stmt)
         if not rows:
             return False
         return int(rows[0].get("cnt", 0)) > 0
@@ -148,6 +186,10 @@ class ClickHouseHistoryRepository:
                 user=self.user,
                 password=self.password,
                 timeout_seconds=self.timeout_seconds,
+                connect_timeout_seconds=self.connect_timeout_seconds,
+                send_receive_timeout_seconds=self.send_receive_timeout_seconds,
+                compression=self.compression,
+                query_limit=self.query_limit,
             )
         return self._clickhouse_client
 
@@ -232,32 +274,34 @@ class ClickHouseHistoryRepository:
         event_type: str | None,
         limit: int,
     ) -> list[EventHistoryRecord]:
-        conditions: list[str] = []
+        event_history = _EVENT_HISTORY.alias("e")
+        conditions: list[Any] = []
         if start_at is not None:
-            conditions.append(f"occurred_at >= {_datetime_literal(start_at)}")
+            conditions.append(event_history.c.occurred_at >= _ensure_utc(start_at))
         if end_at is not None:
-            conditions.append(f"occurred_at <= {_datetime_literal(end_at)}")
+            conditions.append(event_history.c.occurred_at <= _ensure_utc(end_at))
         if event_type is not None:
-            conditions.append(f"event_type = {_sql_string_literal(event_type)}")
+            conditions.append(event_history.c.event_type == event_type)
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        stmt = (
+            select(
+                event_history.c.event_id,
+                event_history.c.occurred_at,
+                event_history.c.event_type,
+                event_history.c.source,
+                event_history.c.payload,
+                event_history.c.trace_id,
+                event_history.c.attributes,
+                event_history.c.ingested_at,
+            )
+            .select_from(event_history)
+            .order_by(event_history.c.occurred_at, event_history.c.event_id)
+            .limit(int(limit))
+        )
+        if conditions:
+            stmt = stmt.where(*conditions)
 
-        query = f"""
-SELECT
-  event_id,
-  occurred_at,
-  event_type,
-  source,
-  payload,
-  trace_id,
-  attributes,
-  ingested_at
-FROM event_history
-{where_clause}
-ORDER BY occurred_at, event_id
-LIMIT {int(limit)}
-""".strip()
-        rows = await self._select_rows(query)
+        rows = await self._select_rows(stmt)
         return [_event_row_from_clickhouse(row) for row in rows]
 
     async def fetch_object_timeline(
@@ -269,31 +313,38 @@ LIMIT {int(limit)}
         end_at: datetime | None,
         limit: int,
     ) -> list[ObjectHistoryRecord]:
-        conditions = [
-            f"object_type = {_sql_string_literal(object_type)}",
-            f"object_ref_hash = {int(object_ref_hash)}",
+        object_history = _OBJECT_HISTORY.alias("o")
+        conditions: list[Any] = [
+            object_history.c.object_type == object_type,
+            object_history.c.object_ref_hash == int(object_ref_hash),
         ]
         if start_at is not None:
-            conditions.append(f"recorded_at >= {_datetime_literal(start_at)}")
+            conditions.append(object_history.c.recorded_at >= _ensure_utc(start_at))
         if end_at is not None:
-            conditions.append(f"recorded_at <= {_datetime_literal(end_at)}")
+            conditions.append(object_history.c.recorded_at <= _ensure_utc(end_at))
 
-        query = f"""
-SELECT
-  object_history_id,
-  object_type,
-  object_ref,
-  object_ref_canonical,
-  object_ref_hash,
-  object_payload,
-  recorded_at,
-  source_event_id
-FROM object_history
-WHERE {' AND '.join(conditions)}
-ORDER BY object_type, object_ref_hash, recorded_at, object_history_id
-LIMIT {int(limit)}
-""".strip()
-        rows = await self._select_rows(query)
+        stmt = (
+            select(
+                object_history.c.object_history_id,
+                object_history.c.object_type,
+                object_history.c.object_ref,
+                object_history.c.object_ref_canonical,
+                object_history.c.object_ref_hash,
+                object_history.c.object_payload,
+                object_history.c.recorded_at,
+                object_history.c.source_event_id,
+            )
+            .select_from(object_history)
+            .where(*conditions)
+            .order_by(
+                object_history.c.object_type,
+                object_history.c.object_ref_hash,
+                object_history.c.recorded_at,
+                object_history.c.object_history_id,
+            )
+            .limit(int(limit))
+        )
+        rows = await self._select_rows(stmt)
         return [_object_row_from_clickhouse(row) for row in rows]
 
     async def fetch_latest_objects(
@@ -304,62 +355,60 @@ LIMIT {int(limit)}
         limit: int,
         offset: int,
     ) -> tuple[list[LatestObjectRecord], int]:
-        source_conditions: list[str] = []
+        object_history = _OBJECT_HISTORY.alias("oh")
+        sort_key = func.tuple(object_history.c.recorded_at, object_history.c.object_history_id)
+        latest_base_stmt = (
+            select(
+                func.argMax(object_history.c.object_history_id, sort_key).label(
+                    "latest_object_history_id"
+                ),
+                object_history.c.object_type,
+                object_history.c.object_ref_hash,
+                func.argMax(object_history.c.object_ref, sort_key).label("latest_object_ref"),
+                func.argMax(object_history.c.object_ref_canonical, sort_key).label(
+                    "latest_object_ref_canonical"
+                ),
+                func.argMax(object_history.c.object_payload, sort_key).label(
+                    "latest_object_payload"
+                ),
+                func.max(object_history.c.recorded_at).label("latest_recorded_at"),
+                func.argMax(object_history.c.source_event_id, sort_key).label(
+                    "latest_source_event_id"
+                ),
+            )
+            .select_from(object_history)
+            .group_by(object_history.c.object_type, object_history.c.object_ref_hash)
+        )
         if object_type is not None:
-            source_conditions.append(f"object_type = {_sql_string_literal(object_type)}")
-        source_where = f"WHERE {' AND '.join(source_conditions)}" if source_conditions else ""
+            latest_base_stmt = latest_base_stmt.where(object_history.c.object_type == object_type)
+        latest = latest_base_stmt.cte("latest")
 
         latest_filter_conditions, residual_filters = _build_latest_object_filter_conditions(
             property_filters,
-            payload_column="latest_object_payload",
-        )
-        latest_where = (
-            f"WHERE {' AND '.join(latest_filter_conditions)}"
-            if latest_filter_conditions
-            else ""
+            payload_column=latest.c.latest_object_payload,
         )
 
-        base_latest_cte = f"""
-WITH latest AS (
-  SELECT
-    argMax(object_history_id, tuple(recorded_at, object_history_id)) AS latest_object_history_id,
-    object_type,
-    object_ref_hash,
-    argMax(object_ref, tuple(recorded_at, object_history_id)) AS latest_object_ref,
-    argMax(
-      object_ref_canonical,
-      tuple(recorded_at, object_history_id)
-    ) AS latest_object_ref_canonical,
-    argMax(object_payload, tuple(recorded_at, object_history_id)) AS latest_object_payload,
-    max(recorded_at) AS latest_recorded_at,
-    argMax(source_event_id, tuple(recorded_at, object_history_id)) AS latest_source_event_id
-  FROM object_history
-  {source_where}
-  GROUP BY object_type, object_ref_hash
-)
-""".strip()
+        latest_select_stmt = select(
+            latest.c.latest_object_history_id.label("object_history_id"),
+            latest.c.object_type,
+            latest.c.object_ref_hash,
+            latest.c.latest_object_ref.label("object_ref"),
+            latest.c.latest_object_ref_canonical.label("object_ref_canonical"),
+            latest.c.latest_object_payload.label("object_payload"),
+            latest.c.latest_recorded_at.label("recorded_at"),
+            latest.c.latest_source_event_id.label("source_event_id"),
+        ).select_from(latest)
+        if latest_filter_conditions:
+            latest_select_stmt = latest_select_stmt.where(*latest_filter_conditions)
 
-        latest_select = f"""
-SELECT
-  latest_object_history_id AS object_history_id,
-  object_type,
-  object_ref_hash,
-  latest_object_ref AS object_ref,
-  latest_object_ref_canonical AS object_ref_canonical,
-  latest_object_payload AS object_payload,
-  latest_recorded_at AS recorded_at,
-  latest_source_event_id AS source_event_id
-FROM latest
-{latest_where}
-""".strip()
-
+        ordering = (
+            desc(latest.c.latest_recorded_at),
+            latest.c.object_type,
+            latest.c.object_ref_hash,
+        )
         if residual_filters:
-            unbounded_query = f"""
-{base_latest_cte}
-{latest_select}
-ORDER BY latest_recorded_at DESC, object_type, object_ref_hash
-""".strip()
-            data_rows = await self._select_rows(unbounded_query)
+            unbounded_stmt = latest_select_stmt.order_by(*ordering)
+            data_rows = await self._select_rows(unbounded_stmt)
             all_rows = [_latest_object_row_from_clickhouse(row) for row in data_rows]
             filtered_rows = [
                 row
@@ -371,24 +420,16 @@ ORDER BY latest_recorded_at DESC, object_type, object_ref_hash
                 return ([], 0)
             return (filtered_rows[offset : offset + limit], total)
 
-        count_query = f"""
-{base_latest_cte}
-SELECT count() AS cnt
-FROM latest
-{latest_where}
-""".strip()
-        count_rows = await self._select_rows(count_query)
+        count_stmt = select(func.count().label("cnt")).select_from(latest)
+        if latest_filter_conditions:
+            count_stmt = count_stmt.where(*latest_filter_conditions)
+        count_rows = await self._select_rows(count_stmt)
         total = int(count_rows[0].get("cnt", 0)) if count_rows else 0
         if total <= 0:
             return ([], 0)
 
-        data_query = f"""
-{base_latest_cte}
-{latest_select}
-ORDER BY latest_recorded_at DESC, object_type, object_ref_hash
-LIMIT {int(limit)} OFFSET {int(offset)}
-""".strip()
-        data_rows = await self._select_rows(data_query)
+        data_stmt = latest_select_stmt.order_by(*ordering).limit(int(limit)).offset(int(offset))
+        data_rows = await self._select_rows(data_stmt)
         return ([_latest_object_row_from_clickhouse(row) for row in data_rows], total)
 
     async def fetch_object_events(
@@ -402,70 +443,62 @@ LIMIT {int(limit)} OFFSET {int(offset)}
         limit: int,
         offset: int,
     ) -> tuple[list[ObjectEventRecord], int]:
-        count_conditions = [f"l.object_type = {_sql_string_literal(object_type)}"]
-        link_conditions = [f"l.object_type = {_sql_string_literal(object_type)}"]
+        links = _EVENT_OBJECT_LINKS.alias("l")
+        events = _EVENT_HISTORY.alias("e")
+        objects = _OBJECT_HISTORY.alias("o")
+        conditions: list[Any] = [links.c.object_type == object_type]
         if object_ref_canonical is not None:
-            count_conditions.append(
-                f"l.object_ref_canonical = {_sql_string_literal(object_ref_canonical)}"
-            )
-            link_conditions.append(
-                f"l.object_ref_canonical = {_sql_string_literal(object_ref_canonical)}"
-            )
+            conditions.append(links.c.object_ref_canonical == object_ref_canonical)
         elif object_ref_hash is not None:
-            count_conditions.append(f"l.object_ref_hash = {int(object_ref_hash)}")
-            link_conditions.append(f"l.object_ref_hash = {int(object_ref_hash)}")
+            conditions.append(links.c.object_ref_hash == int(object_ref_hash))
         else:
             raise ValueError("object_ref_hash or object_ref_canonical is required")
+        occurred_or_linked = func.coalesce(events.c.occurred_at, links.c.linked_at)
         if start_at is not None:
-            start_literal = _datetime_literal(_ensure_utc(start_at))
-            count_conditions.append(
-                f"coalesce(e.occurred_at, l.linked_at) >= {start_literal}"
-            )
-            link_conditions.append(
-                f"coalesce(e.occurred_at, l.linked_at) >= {start_literal}"
-            )
+            conditions.append(occurred_or_linked >= _ensure_utc(start_at))
         if end_at is not None:
-            end_literal = _datetime_literal(_ensure_utc(end_at))
-            count_conditions.append(
-                f"coalesce(e.occurred_at, l.linked_at) <= {end_literal}"
-            )
-            link_conditions.append(
-                f"coalesce(e.occurred_at, l.linked_at) <= {end_literal}"
-            )
+            conditions.append(occurred_or_linked <= _ensure_utc(end_at))
 
-        count_query = f"""
-SELECT count() AS cnt
-FROM event_object_links AS l
-LEFT JOIN event_history AS e ON e.event_id = l.event_id
-WHERE {' AND '.join(count_conditions)}
-""".strip()
-        count_rows = await self._select_rows(count_query)
+        link_event_join = links.outerjoin(events, events.c.event_id == links.c.event_id)
+        count_stmt = (
+            select(func.count().label("cnt")).select_from(link_event_join).where(*conditions)
+        )
+        count_rows = await self._select_rows(count_stmt)
         total = int(count_rows[0].get("cnt", 0)) if count_rows else 0
         if total <= 0:
             return ([], 0)
 
-        data_query = f"""
-SELECT
-  l.event_id AS event_id,
-  l.relation_role AS relation_role,
-  l.linked_at AS linked_at,
-  l.object_history_id AS object_history_id,
-  e.occurred_at AS occurred_at,
-  e.event_type AS event_type,
-  e.source AS source,
-  e.trace_id AS trace_id,
-  e.payload AS payload,
-  e.attributes AS attributes,
-  o.recorded_at AS recorded_at,
-  o.object_payload AS object_payload
-FROM event_object_links AS l
-LEFT JOIN event_history AS e ON e.event_id = l.event_id
-LEFT JOIN object_history AS o ON o.object_history_id = l.object_history_id
-WHERE {' AND '.join(link_conditions)}
-ORDER BY coalesce(e.occurred_at, l.linked_at) DESC, l.event_id DESC, l.object_history_id DESC
-LIMIT {int(limit)} OFFSET {int(offset)}
-""".strip()
-        data_rows = await self._select_rows(data_query)
+        data_stmt = (
+            select(
+                links.c.event_id.label("event_id"),
+                links.c.relation_role.label("relation_role"),
+                links.c.linked_at.label("linked_at"),
+                links.c.object_history_id.label("object_history_id"),
+                events.c.occurred_at.label("occurred_at"),
+                events.c.event_type.label("event_type"),
+                events.c.source.label("source"),
+                events.c.trace_id.label("trace_id"),
+                events.c.payload.label("payload"),
+                events.c.attributes.label("attributes"),
+                objects.c.recorded_at.label("recorded_at"),
+                objects.c.object_payload.label("object_payload"),
+            )
+            .select_from(
+                link_event_join.outerjoin(
+                    objects,
+                    objects.c.object_history_id == links.c.object_history_id,
+                )
+            )
+            .where(*conditions)
+            .order_by(
+                desc(occurred_or_linked),
+                desc(links.c.event_id),
+                desc(links.c.object_history_id),
+            )
+            .limit(int(limit))
+            .offset(int(offset))
+        )
+        data_rows = await self._select_rows(data_stmt)
         return ([_object_event_row_from_clickhouse(row) for row in data_rows], total)
 
     async def fetch_relations(
@@ -476,38 +509,49 @@ LIMIT {int(limit)} OFFSET {int(offset)}
         object_ref_hash: int | None,
         limit: int,
     ) -> list[EventObjectRelationRecord]:
-        conditions: list[str] = []
+        links = _EVENT_OBJECT_LINKS.alias("l")
+        events = _EVENT_HISTORY.alias("e")
+        objects = _OBJECT_HISTORY.alias("o")
+        conditions: list[Any] = []
         if event_id is not None:
-            conditions.append(f"l.event_id = {_uuid_literal(event_id)}")
+            conditions.append(links.c.event_id == str(event_id))
         if object_type is not None and object_ref_hash is not None:
-            conditions.append(f"l.object_type = {_sql_string_literal(object_type)}")
-            conditions.append(f"l.object_ref_hash = {int(object_ref_hash)}")
+            conditions.append(links.c.object_type == object_type)
+            conditions.append(links.c.object_ref_hash == int(object_ref_hash))
 
-        where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        stmt = (
+            select(
+                links.c.event_id.label("event_id"),
+                links.c.object_history_id.label("object_history_id"),
+                links.c.object_type.label("object_type"),
+                links.c.object_ref.label("object_ref"),
+                links.c.object_ref_canonical.label("object_ref_canonical"),
+                links.c.object_ref_hash.label("object_ref_hash"),
+                links.c.relation_role.label("relation_role"),
+                links.c.linked_at.label("linked_at"),
+                events.c.occurred_at.label("occurred_at"),
+                events.c.event_type.label("event_type"),
+                events.c.source.label("source"),
+                objects.c.object_payload.label("object_payload"),
+                objects.c.recorded_at.label("recorded_at"),
+            )
+            .select_from(
+                links.outerjoin(events, events.c.event_id == links.c.event_id).outerjoin(
+                    objects,
+                    objects.c.object_history_id == links.c.object_history_id,
+                )
+            )
+            .order_by(
+                func.coalesce(events.c.occurred_at, links.c.linked_at),
+                links.c.event_id,
+                links.c.object_history_id,
+            )
+            .limit(int(limit))
+        )
+        if conditions:
+            stmt = stmt.where(*conditions)
 
-        query = f"""
-SELECT
-  l.event_id AS event_id,
-  l.object_history_id AS object_history_id,
-  l.object_type AS object_type,
-  l.object_ref AS object_ref,
-  l.object_ref_canonical AS object_ref_canonical,
-  l.object_ref_hash AS object_ref_hash,
-  l.relation_role AS relation_role,
-  l.linked_at AS linked_at,
-  e.occurred_at AS occurred_at,
-  e.event_type AS event_type,
-  e.source AS source,
-  o.object_payload AS object_payload,
-  o.recorded_at AS recorded_at
-FROM event_object_links AS l
-LEFT JOIN event_history AS e ON e.event_id = l.event_id
-LEFT JOIN object_history AS o ON o.object_history_id = l.object_history_id
-{where_clause}
-ORDER BY coalesce(e.occurred_at, l.linked_at), l.event_id, l.object_history_id
-LIMIT {int(limit)}
-""".strip()
-        rows = await self._select_rows(query)
+        rows = await self._select_rows(stmt)
         return [_relation_row_from_clickhouse(row) for row in rows]
 
     async def _insert_json_each_row(self, table: str, rows: Sequence[dict[str, Any]]) -> None:
@@ -518,7 +562,7 @@ LIMIT {int(limit)}
                 f"ClickHouse failed to execute ClickHouse statement: {exc}"
             ) from exc
 
-    async def _select_rows(self, query: str) -> list[dict[str, Any]]:
+    async def _select_rows(self, query: Any) -> list[dict[str, Any]]:
         try:
             return await self._shared_clickhouse_client().select_rows(query)
         except ClickHouseClientError as exc:
@@ -892,26 +936,32 @@ def _relation_row_from_clickhouse(row: dict[str, Any]) -> EventObjectRelationRec
 def _build_latest_object_filter_conditions(
     property_filters: Sequence[ObjectPropertyFilter],
     *,
-    payload_column: str = "object_payload",
-) -> tuple[list[str], list[ObjectPropertyFilter]]:
-    conditions: list[str] = []
+    payload_column: Any,
+) -> tuple[list[Any], list[ObjectPropertyFilter]]:
+    conditions: list[Any] = []
     residual_filters: list[ObjectPropertyFilter] = []
     for property_filter in property_filters:
-        key_literal = _sql_string_literal(property_filter.key)
         normalized_value_expr = (
-            "replaceRegexpAll("
-            f"coalesce(JSONExtractRaw({payload_column}, {key_literal}), ''),"
-            r" '^\"|\"$'"
-            ", '')"
+            func.replaceRegexpAll(
+                func.coalesce(
+                    func.JSONExtractRaw(payload_column, property_filter.key),
+                    "",
+                ),
+                '^"|"$',
+                "",
+            )
         )
-        value_literal = _sql_string_literal(property_filter.value)
 
         if property_filter.op == "eq":
-            conditions.append(f"{normalized_value_expr} = {value_literal}")
+            conditions.append(normalized_value_expr == property_filter.value)
             continue
         if property_filter.op == "contains":
             conditions.append(
-                f"positionCaseInsensitiveUTF8({normalized_value_expr}, {value_literal}) > 0"
+                func.positionCaseInsensitiveUTF8(
+                    normalized_value_expr,
+                    property_filter.value,
+                )
+                > 0
             )
             continue
 
@@ -920,15 +970,15 @@ def _build_latest_object_filter_conditions(
             residual_filters.append(property_filter)
             continue
         numeric_value = comparable_filter[1]
-        numeric_expr = f"toFloat64OrNull({normalized_value_expr})"
+        numeric_expr = func.toFloat64OrNull(normalized_value_expr)
         if property_filter.op == "gt":
-            conditions.append(f"{numeric_expr} > {numeric_value}")
+            conditions.append(numeric_expr > numeric_value)
         elif property_filter.op == "gte":
-            conditions.append(f"{numeric_expr} >= {numeric_value}")
+            conditions.append(numeric_expr >= numeric_value)
         elif property_filter.op == "lt":
-            conditions.append(f"{numeric_expr} < {numeric_value}")
+            conditions.append(numeric_expr < numeric_value)
         elif property_filter.op == "lte":
-            conditions.append(f"{numeric_expr} <= {numeric_value}")
+            conditions.append(numeric_expr <= numeric_value)
     return conditions, residual_filters
 
 
@@ -1078,19 +1128,6 @@ def _parse_clickhouse_datetime(value: str) -> datetime:
 def _to_clickhouse_datetime(value: datetime) -> str:
     normalized = _ensure_utc(value)
     return normalized.strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-
-
-def _datetime_literal(value: datetime) -> str:
-    return f"toDateTime64('{_to_clickhouse_datetime(value)}', 3, 'UTC')"
-
-
-def _uuid_literal(value: UUID) -> str:
-    return f"toUUID('{value}')"
-
-
-def _sql_string_literal(value: str) -> str:
-    escaped = value.replace("\\", "\\\\").replace("'", "\\'")
-    return f"'{escaped}'"
 
 
 def _ensure_utc(value: datetime) -> datetime:

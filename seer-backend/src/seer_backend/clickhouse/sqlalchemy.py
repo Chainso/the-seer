@@ -25,8 +25,11 @@ _FORMAT_JSON_SUFFIX_PATTERN: Pattern[str] = re_compile(r"(?is)\s+FORMAT\s+JSON\s
 class ClickHouseSqlAlchemyCoreClient:
     """SQLAlchemy Core ClickHouse runtime helper.
 
-    This utility intentionally supports SQLAlchemy Core execution only.
-    ClickHouse transaction semantics are not assumed beyond statement grouping.
+    Limitations encoded for runtime callers:
+    1. SQLAlchemy Core only; ORM unit-of-work semantics are intentionally unsupported.
+    2. No transaction guarantees: ``begin()/commit()/rollback()`` scope statement grouping only.
+    3. No ``UPDATE`` expectation for repository runtime paths.
+    4. No reliance on ``RETURNING`` or sequence/autoincrement semantics.
     """
 
     host: str
@@ -35,6 +38,10 @@ class ClickHouseSqlAlchemyCoreClient:
     user: str
     password: str
     timeout_seconds: float
+    connect_timeout_seconds: float | None = None
+    send_receive_timeout_seconds: float | None = None
+    compression: str | None = None
+    query_limit: int | None = None
     _engine: Engine | None = field(default=None, init=False, repr=False)
     _engine_lock: Lock = field(default_factory=Lock, init=False, repr=False)
 
@@ -48,6 +55,7 @@ class ClickHouseSqlAlchemyCoreClient:
 
     def execute(self, statement: str | Any) -> None:
         try:
+            # ClickHouse does not expose transactional guarantees through this path.
             with self._engine_instance().begin() as connection:
                 connection.execute(_to_statement(statement, strip_format_json=False))
         except Exception as exc:
@@ -66,6 +74,7 @@ class ClickHouseSqlAlchemyCoreClient:
         payload = [{column: row.get(column) for column in columns} for row in rows]
 
         try:
+            # Insert paths intentionally avoid RETURNING/sequence assumptions.
             with self._engine_instance().begin() as connection:
                 connection.execute(statement, payload)
         except Exception as exc:
@@ -85,6 +94,11 @@ class ClickHouseSqlAlchemyCoreClient:
 
         with self._engine_lock:
             if self._engine is None:
+                url_query: dict[str, str] = {}
+                if self.compression:
+                    url_query["compression"] = self.compression
+                if self.query_limit is not None:
+                    url_query["query_limit"] = str(int(self.query_limit))
                 clickhouse_url = URL.create(
                     "clickhousedb",
                     username=self.user,
@@ -92,12 +106,23 @@ class ClickHouseSqlAlchemyCoreClient:
                     host=self.host,
                     port=self.port,
                     database=self.database,
+                    query=url_query or None,
+                )
+                connect_timeout = (
+                    self.connect_timeout_seconds
+                    if self.connect_timeout_seconds is not None
+                    else self.timeout_seconds
+                )
+                send_receive_timeout = (
+                    self.send_receive_timeout_seconds
+                    if self.send_receive_timeout_seconds is not None
+                    else self.timeout_seconds
                 )
                 self._engine = create_engine(
                     clickhouse_url,
                     connect_args={
-                        "connect_timeout": self.timeout_seconds,
-                        "send_receive_timeout": self.timeout_seconds,
+                        "connect_timeout": connect_timeout,
+                        "send_receive_timeout": send_receive_timeout,
                     },
                 )
         return self._engine
