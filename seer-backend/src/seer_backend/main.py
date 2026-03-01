@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,6 +32,25 @@ from seer_backend.logging import configure_logging
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     configure_logging(settings.log_level)
+    logger = logging.getLogger(__name__)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        logger.info(
+            "backend_startup",
+            extra={
+                "environment": settings.app_env,
+                "api_prefix": settings.api_prefix,
+            },
+        )
+        if settings.actions_schema_bootstrap_on_startup:
+            try:
+                await app.state.actions_service.ensure_schema()
+            except Exception as exc:  # pragma: no cover - exercised in integration/runtime
+                reason = f"actions schema bootstrap failed: {exc}"
+                app.state.actions_service = UnavailableActionsService(reason)
+                logger.warning("actions_schema_bootstrap_failed", extra={"reason": reason})
+        yield
 
     app = FastAPI(
         title=settings.app_name,
@@ -37,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url=f"{settings.api_prefix}/docs",
         redoc_url=f"{settings.api_prefix}/redoc",
         openapi_url=f"{settings.api_prefix}/openapi.json",
+        lifespan=lifespan,
     )
     app.state.settings = settings
     app.add_middleware(
@@ -59,25 +81,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     inject_root_cause_service(app, settings)
     inject_ai_gateway_service(app)
     inject_actions_service(app, settings)
-
-    logger = logging.getLogger(__name__)
-
-    @app.on_event("startup")
-    async def on_startup() -> None:
-        logger.info(
-            "backend_startup",
-            extra={
-                "environment": settings.app_env,
-                "api_prefix": settings.api_prefix,
-            },
-        )
-        if settings.actions_schema_bootstrap_on_startup:
-            try:
-                await app.state.actions_service.ensure_schema()
-            except Exception as exc:  # pragma: no cover - exercised in integration/runtime
-                reason = f"actions schema bootstrap failed: {exc}"
-                app.state.actions_service = UnavailableActionsService(reason)
-                logger.warning("actions_schema_bootstrap_failed", extra={"reason": reason})
 
     return app
 
