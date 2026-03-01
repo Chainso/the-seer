@@ -34,7 +34,7 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
       if (!userText) return;
       await state.sendMessage(userText, options?.context);
     },
-    onCancel: () => {
+    onCancel: async () => {
       state.cancelThread(state.activeThreadId);
     },
     adapters: {
