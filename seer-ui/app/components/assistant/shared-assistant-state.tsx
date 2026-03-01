@@ -4,10 +4,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { AppendMessage, ThreadMessage } from '@assistant-ui/react';
 
 import {
-  postAssistantChat,
+  postAssistantChatStream,
   type AssistantCompletionMessage,
   type AssistantChatContext,
   type AssistantChatMessage,
+  type AssistantChatResponse,
 } from '@/app/lib/api/assistant-chat';
 
 const CANONICAL_STORAGE_KEY = 'seer_assistant_threads_v3';
@@ -49,6 +50,7 @@ interface SharedAssistantStateContextValue {
   deleteThread: (threadId: string) => void;
   renameThread: (threadId: string, title: string) => void;
   sendMessage: (userText: string, context?: AssistantChatContext) => Promise<void>;
+  cancelThread: (threadId: string) => void;
   isThreadRunning: (threadId: string) => boolean;
 }
 
@@ -218,6 +220,15 @@ function getTitleFromText(text: string): string {
   return trimmed.length <= 42 ? trimmed : `${trimmed.slice(0, 42)}...`;
 }
 
+function isAbortError(error: unknown): boolean {
+  return (
+    (typeof DOMException !== 'undefined' &&
+      error instanceof DOMException &&
+      error.name === 'AbortError') ||
+    (error instanceof Error && error.name === 'AbortError')
+  );
+}
+
 function toAssistantChatMessages(messages: StoredMessage[]): AssistantChatMessage[] {
   return messages
     .map((message) => ({
@@ -225,6 +236,29 @@ function toAssistantChatMessages(messages: StoredMessage[]): AssistantChatMessag
       content: message.text.trim(),
     }))
     .filter((message) => message.content.length > 0);
+}
+
+function upsertAssistantMessage(
+  messages: StoredMessage[],
+  messageId: string,
+  at: string,
+  text: string
+): StoredMessage[] {
+  const existingIndex = messages.findIndex((message) => message.id === messageId);
+  if (existingIndex >= 0) {
+    return messages.map((message, index) =>
+      index === existingIndex ? { ...message, text, at: message.at || at } : message
+    );
+  }
+  return [
+    ...messages,
+    {
+      id: messageId,
+      role: 'assistant',
+      text,
+      at,
+    },
+  ].slice(-MAX_THREAD_MESSAGES);
 }
 
 function getMessageText(message: AppendMessage): string {
@@ -290,6 +324,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
   const lastSerializedRef = useRef('');
   const channelRef = useRef<BroadcastChannel | null>(null);
   const instanceIdRef = useRef(makeId('assistant-instance'));
+  const abortControllersRef = useRef<Record<string, AbortController>>({});
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -354,6 +389,17 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
     };
   }, [applyRemoteState]);
 
+  useEffect(
+    () => () => {
+      const controllers = Object.values(abortControllersRef.current);
+      for (const controller of controllers) {
+        controller.abort();
+      }
+      abortControllersRef.current = {};
+    },
+    []
+  );
+
   const updateThread = useCallback((threadId: string, updater: (thread: StoredThread) => StoredThread) => {
     setThreads((previous) =>
       sortThreads(previous.map((thread) => (thread.id === threadId ? updater(thread) : thread)))
@@ -378,6 +424,11 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
 
   const deleteThread = useCallback(
     (threadId: string) => {
+      const controller = abortControllersRef.current[threadId];
+      if (controller) {
+        controller.abort();
+        delete abortControllersRef.current[threadId];
+      }
       setThreads((previous) => {
         const remaining = previous.filter((thread) => thread.id !== threadId);
         if (remaining.length === 0) {
@@ -394,6 +445,15 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
     },
     []
   );
+
+  const cancelThread = useCallback((threadId: string) => {
+    if (!threadId) return;
+    const controller = abortControllersRef.current[threadId];
+    if (!controller) return;
+    controller.abort();
+    delete abortControllersRef.current[threadId];
+    setRunningThreadIds((previous) => previous.filter((id) => id !== threadId));
+  }, []);
 
   const renameThread = useCallback(
     (threadId: string, title: string) => {
@@ -420,11 +480,19 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
         text: trimmed,
         at: now,
       };
+      const assistantMessageId = makeId('msg-assistant');
+      const assistantMessageAt = new Date().toISOString();
 
       const snapshot = threadsRef.current;
       const existingThread = snapshot.find((thread) => thread.id === currentActiveId);
       const baseThread = existingThread || createThread(trimmed);
       const nextMessages = [...baseThread.messages, userMessage].slice(-MAX_THREAD_MESSAGES);
+      const nextMessagesWithPlaceholder = upsertAssistantMessage(
+        nextMessages,
+        assistantMessageId,
+        assistantMessageAt,
+        ''
+      ).slice(-MAX_THREAD_MESSAGES);
       const nextCompletionMessages = [
         ...(baseThread.completionMessages || []),
         { role: 'user', content: trimmed } satisfies AssistantCompletionMessage,
@@ -440,7 +508,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
               id: currentActiveId,
               title: nextTitle || DEFAULT_THREAD_TITLE,
               updatedAt: Date.now(),
-              messages: nextMessages,
+              messages: nextMessagesWithPlaceholder,
               completionMessages: nextCompletionMessages,
             },
             ...previous.filter((thread) => thread.id !== currentActiveId),
@@ -451,68 +519,142 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           ...thread,
           title: nextTitle || DEFAULT_THREAD_TITLE,
           updatedAt: Date.now(),
-          messages: nextMessages,
+          messages: nextMessagesWithPlaceholder,
           completionMessages: nextCompletionMessages,
         }));
       }
 
+      abortControllersRef.current[currentActiveId]?.abort();
+      const abortController = new AbortController();
+      abortControllersRef.current[currentActiveId] = abortController;
       setRunningThreadIds((previous) =>
         previous.includes(currentActiveId) ? previous : [...previous, currentActiveId]
       );
 
-      try {
-        const response = await postAssistantChat({
-          thread_id: currentActiveId,
-          messages: toAssistantChatMessages(nextMessages),
-          completion_messages: nextCompletionMessages,
-          context,
-        });
+      let streamedAssistantText = '';
+      let finalEvent: AssistantChatResponse | null = null;
 
-        const assistantMessage: StoredMessage = {
-          id: makeId('msg-assistant'),
-          role: 'assistant',
-          text: response.answer.trim(),
-          at: new Date().toISOString(),
-        };
-
+      const setAssistantText = (nextText: string) => {
         updateThread(currentActiveId, (thread) => ({
           ...thread,
           updatedAt: Date.now(),
-          messages: [...thread.messages, assistantMessage].slice(-MAX_THREAD_MESSAGES),
-          completionMessages:
-            response.completion_messages.length > 0
-              ? response.completion_messages.slice(-MAX_COMPLETION_MESSAGES)
-              : [
-                  ...(thread.completionMessages || []),
-                  {
-                    role: 'assistant',
-                    content: assistantMessage.text,
-                  } satisfies AssistantCompletionMessage,
-                ].slice(-MAX_COMPLETION_MESSAGES),
+          messages: upsertAssistantMessage(
+            thread.messages,
+            assistantMessageId,
+            assistantMessageAt,
+            nextText
+          ).slice(-MAX_THREAD_MESSAGES),
         }));
+      };
+
+      try {
+        const streamResult = await postAssistantChatStream(
+          {
+            thread_id: currentActiveId,
+            messages: toAssistantChatMessages(nextMessages),
+            completion_messages: nextCompletionMessages,
+            context,
+          },
+          {
+            onAssistantDelta: ({ text }) => {
+              if (!text) return;
+              streamedAssistantText += text;
+              setAssistantText(streamedAssistantText);
+            },
+            onFinal: (payload) => {
+              finalEvent = payload;
+            },
+          },
+          abortController.signal
+        );
+
+        if (!finalEvent) {
+          finalEvent = streamResult.final;
+        }
+
+        const finalAnswer =
+          streamedAssistantText.trim() ||
+          (typeof finalEvent?.answer === 'string' ? finalEvent.answer.trim() : '');
+
+        updateThread(currentActiveId, (thread) => {
+          const finalizedMessages =
+            finalAnswer.length > 0
+              ? upsertAssistantMessage(
+                  thread.messages,
+                  assistantMessageId,
+                  assistantMessageAt,
+                  finalAnswer
+                ).slice(-MAX_THREAD_MESSAGES)
+              : thread.messages.filter((message) => message.id !== assistantMessageId);
+
+          const canonicalCompletionMessages = finalEvent
+            ? normalizeCompletionMessages(finalEvent.completion_messages)
+            : [];
+          const completionMessages =
+            canonicalCompletionMessages.length > 0
+              ? canonicalCompletionMessages
+              : finalAnswer.length > 0
+                ? [
+                    ...(thread.completionMessages || []),
+                    {
+                      role: 'assistant',
+                      content: finalAnswer,
+                    } satisfies AssistantCompletionMessage,
+                  ].slice(-MAX_COMPLETION_MESSAGES)
+                : thread.completionMessages;
+
+          return {
+            ...thread,
+            updatedAt: Date.now(),
+            messages: finalizedMessages,
+            completionMessages,
+          };
+        });
       } catch (error) {
+        if (isAbortError(error)) {
+          const partialAnswer = streamedAssistantText.trim();
+          updateThread(currentActiveId, (thread) => ({
+            ...thread,
+            updatedAt: Date.now(),
+            messages:
+              partialAnswer.length > 0
+                ? upsertAssistantMessage(
+                    thread.messages,
+                    assistantMessageId,
+                    assistantMessageAt,
+                    partialAnswer
+                  ).slice(-MAX_THREAD_MESSAGES)
+                : thread.messages.filter((message) => message.id !== assistantMessageId),
+          }));
+          return;
+        }
+
         const detail = error instanceof Error ? error.message : 'Assistant request failed';
-        const assistantMessage: StoredMessage = {
-          id: makeId('msg-assistant'),
-          role: 'assistant',
-          text: `I hit an error while generating a response.\n\n${detail}`,
-          at: new Date().toISOString(),
-        };
+        const errorMessage = `I hit an error while generating a response.\n\n${detail}`;
 
         updateThread(currentActiveId, (thread) => ({
           ...thread,
           updatedAt: Date.now(),
-          messages: [...thread.messages, assistantMessage].slice(-MAX_THREAD_MESSAGES),
+          messages: upsertAssistantMessage(
+            thread.messages,
+            assistantMessageId,
+            assistantMessageAt,
+            errorMessage
+          ).slice(-MAX_THREAD_MESSAGES),
           completionMessages: [
             ...(thread.completionMessages || []),
             {
               role: 'assistant',
-              content: assistantMessage.text,
+              content: errorMessage,
             } satisfies AssistantCompletionMessage,
           ].slice(-MAX_COMPLETION_MESSAGES),
         }));
       } finally {
-        setRunningThreadIds((previous) => previous.filter((id) => id !== currentActiveId));
+        const isCurrentController = abortControllersRef.current[currentActiveId] === abortController;
+        if (isCurrentController) {
+          delete abortControllersRef.current[currentActiveId];
+          setRunningThreadIds((previous) => previous.filter((id) => id !== currentActiveId));
+        }
       }
     },
     [createNewThread, updateThread]
@@ -533,6 +675,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
       deleteThread,
       renameThread,
       sendMessage,
+      cancelThread,
       isThreadRunning,
     }),
     [
@@ -544,6 +687,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
       deleteThread,
       renameThread,
       sendMessage,
+      cancelThread,
       isThreadRunning,
     ]
   );

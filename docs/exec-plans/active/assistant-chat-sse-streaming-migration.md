@@ -197,19 +197,21 @@ Validation:
 3. 2026-03-01: client-provided `system` completion messages remain ignored (backend-owned prompts only).
 4. 2026-03-01: Phase 1 SSE contract emits ordered events `meta -> assistant_delta* -> final -> done`; failures emit terminal `error` without `done`.
 5. 2026-03-01: Phase 2 added gateway/copilot streaming orchestration so assistant chat now emits runtime `tool_status` lifecycle events (started + completed/failed), streams answer deltas from the orchestration path, and preserves canonical final `completion_messages[]`.
+6. 2026-03-01: Phase 3 migrated the UI assistant chat transport to POST-based SSE parsing (`meta`, `assistant_delta`, `tool_status`, `final`, `done`, `error`), updates an in-progress assistant placeholder message incrementally, persists canonical `final.completion_messages[]`, and wires runtime cancel actions to abort in-flight streams by thread.
 
 ## Progress Tracking
 
 - [x] Phase 1 complete
 - [x] Phase 2 complete
-- [ ] Phase 3 complete
+- [x] Phase 3 complete
 - [ ] Phase 4 complete
 
 Current execution state:
 
 - `completed`: Phase 1 backend SSE endpoint migration implemented and validated (`ruff` + `pytest -k assistant_chat`).
 - `completed`: Phase 2 copilot streaming orchestration implemented in backend (`ontology_copilot` stream events, gateway forwarding, API SSE passthrough, assistant chat tests updated).
-- `in_progress`: Phase 3 UI SSE consumer + incremental rendering.
+- `completed`: Phase 3 UI SSE consumer + incremental rendering + canonical completion persistence + cancel/abort wiring implemented in `seer-ui` and validated (`lint` + `test:contracts`).
+- `in_progress`: Phase 4 hardening and transitional contract cleanup.
 
 ## Documentation Update Targets
 
