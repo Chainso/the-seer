@@ -8,7 +8,7 @@
 
 ## Dependency Status
 
-1. Previously blocked on `docs/exec-plans/active/clickhouse-connect-migration.md`.
+1. Previously blocked on `docs/exec-plans/completed/clickhouse-connect-migration.md`.
 2. Unblocked on 2026-03-01 after migration Phase 5 validation passed (`pytest -q` full suite + `ruff check src tests`) and plan status moved to completed.
 
 ## Objective
