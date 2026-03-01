@@ -13,6 +13,8 @@ from uuid import UUID
 
 import httpx
 
+from seer_backend.clickhouse.client import AsyncClickHouseClient
+from seer_backend.clickhouse.errors import ClickHouseClientError
 from seer_backend.history.errors import HistoryError, ObjectTypeMismatchError
 from seer_backend.history.models import (
     EventHistoryRecord,
@@ -132,12 +134,24 @@ class ClickHouseHistoryRepository:
             "SELECT count() AS cnt "
             "FROM event_history "
             f"WHERE event_id = {_uuid_literal(event_id)} "
-            "FORMAT JSON"
         )
-        rows = await self._select_rows(query)
+        try:
+            rows = await self._shared_clickhouse_client().select_rows(query)
+        except ClickHouseClientError as exc:
+            raise HistoryError(f"ClickHouse failed to execute ClickHouse query: {exc}") from exc
         if not rows:
             return False
         return int(rows[0].get("cnt", 0)) > 0
+
+    def _shared_clickhouse_client(self) -> AsyncClickHouseClient:
+        return AsyncClickHouseClient(
+            host=self.host,
+            port=self.port,
+            database=self.database,
+            user=self.user,
+            password=self.password,
+            timeout_seconds=self.timeout_seconds,
+        )
 
     async def insert_event_history(self, record: EventHistoryRecord) -> None:
         await self._insert_json_each_row(
