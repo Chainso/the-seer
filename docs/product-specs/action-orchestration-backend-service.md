@@ -1,0 +1,110 @@
+# Action Orchestration Backend Service Spec
+
+**Status:** completed  
+**Owner phase:** `docs/exec-plans/completed/action-orchestration-backend-service.md`  
+**Last updated:** 2026-03-01
+
+---
+
+## Purpose
+
+Define user-visible and operator-visible behavior for Seer action orchestration.
+
+This spec covers:
+1. action submit-time validation and enqueue semantics,
+2. pull-based claiming by user instances,
+3. completion/failure lifecycle behavior with retries/dead-letter transitions,
+4. status visibility for UI/operator surfaces.
+
+## Canonical Lifecycle
+
+1. `queued`
+2. `leased`
+3. `retry_wait`
+4. `completed`
+5. `failed_terminal`
+6. `dead_letter`
+
+Notes:
+1. `running` remains a reserved status value in API contracts for future executor start-ack flows.
+2. Current backend lifecycle transitions do not require an explicit `running` callback.
+
+## Primary Flows
+
+## Submit Flow
+
+1. Client calls `POST /api/v1/actions/submit` with `user_id`, `action_uri`, `payload`, optional `idempotency_key`, and optional `priority`.
+2. Backend validates the action contract against the current ontology release.
+3. Backend validates payload shape/cardinality/type against ontology-derived input metadata.
+4. On success, backend enqueues action with backend-generated UUID `action_id`, status `queued`, pinned `ontology_release_id`, and deterministic `validation_contract_hash`.
+5. If `(user_id, idempotency_key)` already exists, backend returns the existing action with `dedupe_hit=true`.
+
+## Claim Flow
+
+1. Instance calls `POST /api/v1/actions/claim` with `user_id`, `instance_id`, `capacity`, and optional `max_actions`.
+2. Backend heartbeats/upserts the instance before claiming.
+3. Backend returns up to `min(capacity, max_actions)` eligible actions.
+4. Claim ordering is deterministic: `priority DESC`, then FIFO by `submitted_at`, then `action_id`.
+5. Claimed actions are leased to the caller instance with `lease_expires_at` and incremented `attempt_count`.
+6. Draining instances (`status=draining`) receive zero new claims.
+
+## Lifecycle Callback Flow
+
+1. Lease owner calls `POST /api/v1/actions/{action_id}/complete` to complete action.
+2. Lease owner calls `POST /api/v1/actions/{action_id}/fail` with canonical failure code to report failure.
+3. Backend enforces active lease ownership for complete/fail callbacks.
+4. Retryable failures transition to `retry_wait` with computed `next_visible_at`.
+5. Retryable failures at max attempts transition to `dead_letter`.
+6. Terminal failures transition to `failed_terminal`.
+7. Duplicate completion callbacks for already completed actions are idempotent.
+
+## Status Visibility Flow
+
+1. `GET /api/v1/actions/{action_id}` returns canonical per-action status/audit payload.
+2. `GET /api/v1/actions` returns user-scoped filtered/paginated list (`status`, `submitted_after`, `submitted_before`, `page`, `size`).
+3. `GET /api/v1/actions/{action_id}/stream` emits SSE events:
+   - `snapshot` as initial state,
+   - `update` when tracked status token changes,
+   - `terminal` once terminal state is reached.
+
+## Failure Taxonomy (Accepted `error_code`)
+
+Retryable:
+1. `lease_expired`
+2. `instance_unreachable`
+3. `upstream_timeout`
+4. `transient_dependency_error`
+5. `rate_limited`
+
+Terminal:
+1. `input_validation_failed`
+2. `ontology_contract_missing`
+3. `authorization_failed`
+4. `unsupported_action_capability`
+5. `executor_protocol_violation`
+
+## Error Semantics
+
+1. Validation failures return `422` with actionable `issues[]` details.
+2. Lease/state conflicts return `409` with deterministic conflict code.
+3. Missing actions return `404`.
+4. Unavailable action dependencies return `503`.
+5. Unexpected action domain failures are mapped to `502`.
+
+## Acceptance Expectations
+
+1. Valid submit requests return stable `action_id` and `queued` status.
+2. Unknown/non-executable action URIs are rejected at submit with actionable `422` response.
+3. Invalid payload fields/cardinality/type are rejected at submit with actionable `422` response.
+4. Competing claimers cannot hold the same active lease simultaneously.
+5. Expired leases are reclaimable, preserving at-least-once delivery behavior.
+6. Complete/fail callbacks are accepted only from current lease owner while lease is active.
+7. Retry progression is deterministic and reaches `dead_letter` when retryable failures exhaust max attempts.
+8. Status list/detail/stream contracts expose consistent lifecycle state transitions.
+
+## Out of Scope
+
+1. Exactly-once side-effect guarantees (executor must dedupe by `action_id`).
+2. Push-first delivery/webhook orchestration as canonical path.
+3. Dedicated sweeper/maintenance runtime service in this phase.
+4. Broker-first queue architecture (Kafka/SQS/Celery) in this phase.

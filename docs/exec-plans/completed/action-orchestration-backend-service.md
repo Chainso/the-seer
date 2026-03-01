@@ -1,10 +1,10 @@
 # Post-MVP Exec Plan: Action Orchestration Backend Service
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 5  
 **Agent slot:** ORCH-ACT-1  
 **Predecessor:** none (new post-MVP track)  
-**Successor:** TBD  
+**Successor:** none  
 **Last updated:** 2026-03-01
 
 ---
@@ -635,13 +635,13 @@ Rationale:
 - [x] Phase 4 complete
 - [x] Phase 5 complete
 - [x] Phase 6 complete
-- [ ] Phase 7 complete
+- [x] Phase 7 complete
 
 Current execution state:
 
-- `in_progress`: Phase 7 documentation ratification + plan closeout
+- `in_progress`: none
 - `blocked`: none
-- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics; Phase 4 complete/fail APIs + retry scheduling + dead-letter lifecycle; Phase 5 status query endpoints + filtered list transport + status SSE stream; Phase 6 hardening with contention + fault-injection validation
+- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics; Phase 4 complete/fail APIs + retry scheduling + dead-letter lifecycle; Phase 5 status query endpoints + filtered list transport + status SSE stream; Phase 6 hardening with contention + fault-injection validation; Phase 7 documentation ratification + plan closeout/archive
 
 ## Baseline Failure Ledger
 
@@ -737,6 +737,38 @@ Current execution state:
 6. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py tests/test_actions_status_api.py tests/test_actions_concurrency.py tests/test_actions_faults.py` -> pass (`30 passed`).
 7. Regression warnings remain unchanged and non-blocking (FastAPI `on_event` deprecation and `HTTP_422_UNPROCESSABLE_ENTITY` deprecation).
 
+## Phase 7 Acceptance Evidence
+
+1. Ratified canonical architecture scope/contracts/invariants for actions control-plane delivery in `ARCHITECTURE.md`:
+   - added explicit actions domain boundary and PostgreSQL control-plane data-plane mapping,
+   - added action API contract and failure taxonomy contract,
+   - updated invariants for ontology-pinned submit validation, pull/lease at-least-once semantics, lifecycle ownership checks, and retry/dead-letter behavior.
+2. Ratified product/design truth:
+   - `VISION.md` now includes action orchestration as in-scope product behavior and PostgreSQL action control-plane store in topology/data model,
+   - `DESIGN.md` now includes the pull/lease + ontology-validated action orchestration theme.
+3. Added product spec coverage for user-facing behavior:
+   - new `docs/product-specs/action-orchestration-backend-service.md`,
+   - indexed in `docs/product-specs/index.md`.
+4. Closed and archived plan lifecycle docs:
+   - updated `docs/exec-plans/active/index.md` to remove active entry and set `in_progress` to none,
+   - moved this plan to `docs/exec-plans/completed/action-orchestration-backend-service.md`,
+   - added completed-plan index entry in `docs/exec-plans/completed/README.md`.
+5. Recorded intentional deferral in `docs/exec-plans/tech-debt-tracker.md`:
+   - dedicated sweeper/maintenance runtime for proactive lease-expiry reconciliation is deferred.
+6. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_*.py` -> pass (`All checks passed!`).
+7. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py tests/test_actions_status_api.py tests/test_actions_concurrency.py tests/test_actions_faults.py` -> pass (`30 passed, 44 warnings`; warnings unchanged and non-blocking: FastAPI startup `on_event` + `HTTP_422_UNPROCESSABLE_ENTITY` deprecations).
+
+## Completion Summary
+
+1. Delivered a complete backend action orchestration domain with ontology-validated submit contracts, pull-based claim/lease delivery, lifecycle completion/failure transitions, retry/dead-letter handling, and status/list/SSE visibility contracts.
+2. Ratified architecture/product/design docs and added dedicated product-spec coverage so source-of-truth docs match shipped behavior.
+3. Closed Phase 7 and completed plan lifecycle archive updates across active/completed indexes.
+
+## Known Issues and Deferrals
+
+1. Dedicated sweeper/maintenance runtime implementation (including advisory-lock singleton runtime ownership) remains deferred; current behavior relies on claim-time lease-expiry reclaim logic.
+2. Deeper semantic payload type validation (enum/domain/date strictness beyond current ontology-driven shape/cardinality/type checks) remains deferred.
+
 ## Decision Log
 
 1. 2026-03-01: Selected pull-based claim routing with lease semantics as canonical delivery model.
@@ -760,16 +792,12 @@ Current execution state:
 19. 2026-03-01: Phase 4 completed with complete/fail lifecycle transports, lease ownership enforcement, retry scheduling, and dead-letter transition behavior; dedicated sweeper runtime remains deferred by phase scope.
 20. 2026-03-01: Phase 5 completed with action status query transports, filtered/paginated list API, and deterministic polling-backed status SSE stream (`snapshot/update/terminal`) aligned to persisted state transitions.
 21. 2026-03-01: Phase 6 completed with deterministic concurrency contention tests and fault-injection lifecycle tests validating no duplicate lease claims, stale-lease conflict handling, duplicate-complete idempotency, and retry-to-dead-letter progression under induced failures; no runtime code changes were required for this phase.
+22. 2026-03-01: Phase 7 completed with canonical doc ratification (`ARCHITECTURE.md`, `VISION.md`, `DESIGN.md`), new product spec coverage, active/completed index closeout updates, and plan archive move preparation.
+23. 2026-03-01: Deferred dedicated sweeper runtime implementation is explicitly tracked in `docs/exec-plans/tech-debt-tracker.md`; current claim-time lease-expiry reclaim semantics remain the active behavior.
 
-## Next-Phase Starter Context
+## Post-Completion Follow-up Context
 
-1. Backend entrypoint and service wiring: `seer-backend/src/seer_backend/main.py`
-2. Ontology contract/query services:
-   - `seer-backend/src/seer_backend/api/ontology.py`
-   - `seer-backend/src/seer_backend/ontology/service.py`
-3. Existing status/streaming interaction patterns:
-   - `seer-backend/src/seer_backend/api/ai.py`
-   - `seer-ui/app/lib/api/assistant-chat.ts`
-4. Existing immutable event/history patterns for audit references:
-   - `seer-backend/src/seer_backend/history/models.py`
-   - `seer-backend/src/seer_backend/history/service.py`
+1. Action API transport and contracts: `seer-backend/src/seer_backend/api/actions.py`.
+2. Action domain service and validation adapters: `seer-backend/src/seer_backend/actions/service.py`.
+3. Action persistence semantics and transactional claim/lifecycle behavior: `seer-backend/src/seer_backend/actions/repository.py`.
+4. Canonical user-facing behavior contract: `docs/product-specs/action-orchestration-backend-service.md`.

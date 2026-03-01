@@ -65,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `docs/exec-plans/active/action-orchestration-backend-service.md` (`agent_slot: ORCH-ACT-1`, in_progress)
+None.
 
 ## Post-MVP Status Tracking
 
@@ -77,12 +77,13 @@ Current execution state:
 - [x] Assistant dedicated page rewrite + surface unification complete
 - [x] Ontology-driven field display centralization complete
 - [x] Global assistant shell layer + generic AI assistant endpoint complete
-- [ ] Action orchestration backend service in progress
+- [x] Action orchestration backend service complete
 
 Current post-MVP execution state:
 
-- `in_progress`: `docs/exec-plans/active/action-orchestration-backend-service.md` (Phase 2 submit/validation/enqueue in progress as of 2026-03-01; Phase 0-1 complete)
+- `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/action-orchestration-backend-service.md` (all phases complete; docs ratified and archived on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/ocdfg-ui-layout-engine-upgrade.md` (all phases complete; validation/docs/archive ratified on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/ocdfg-multi-object-depth-scope.md` (all phases complete; ratified and archived on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/ocdfg-pm4py-backend-ui-first-diagram.md` (Phases A-C complete; validation/docs/archive ratified on 2026-03-01)

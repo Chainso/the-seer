@@ -1,7 +1,7 @@
 # Seer Product Vision and Strategy
 
 **Status:** Canonical product source of truth  
-**Date:** 2026-02-22
+**Date:** 2026-03-01
 
 ---
 
@@ -28,15 +28,16 @@ The product goal is speed to usable process intelligence, not platform complexit
 3. SHACL validation against Prophet base metamodel.
 4. Upsert of ontology definitions into Fuseki.
 5. Event/object history persistence in ClickHouse.
-6. Process mining workflows in Python with `pm4py`.
-7. AI-assisted analytics and discovery workflows.
-8. Ontology-driven field/state display consistency through one shared UI display policy.
+6. Action orchestration backend service with ontology-validated submit, pull-based claim/lease delivery, and at-least-once lifecycle completion semantics.
+7. Process mining workflows in Python with `pm4py`.
+8. AI-assisted analytics and discovery workflows.
+9. Ontology-driven field/state display consistency through one shared UI display policy.
 
 ## 2.2 Out of Scope (Current Phase)
 
 1. Ontology authoring in Seer UI.
 2. Multi-tenant data-layer complexity.
-3. Heavy reliability features (dead-letter orchestration, replay subsystem, schema/version compatibility governance).
+3. Broker-first/global replay orchestration platforms and schema/version compatibility governance.
 4. Governance and trust-center feature suites.
 
 ---
@@ -50,6 +51,7 @@ The product goal is speed to usable process intelligence, not platform complexit
 - **Ontology store:** Apache Jena Fuseki
 - **Ontology query integration:** RDFLib + SPARQL
 - **History store:** ClickHouse
+- **Action orchestration control-plane store:** PostgreSQL
 - **Local runtime:** Docker Compose
 - **Repository model:** Monorepo
 
@@ -64,9 +66,11 @@ flowchart LR
 
   API --> ONT["Ontology Service\n(RDFLib + SPARQL)"]
   API --> HIS["History + Analytics Service\n(ClickHouse + pm4py)"]
+  API --> ACT["Action Orchestration Service\n(Submit + Claim + Lifecycle)"]
 
   ONT --> FUSEKI["Fuseki"]
   HIS --> CH["ClickHouse"]
+  ACT --> PG["PostgreSQL"]
 
   EXT["Event Producers"] --> ING["Ingestion API"]
   ING --> CH
@@ -134,9 +138,12 @@ UI does not support:
 
 ## 5. Data Model (Current Product Shape)
 
-No derived tables are required for this phase.
+Seer uses two storage planes for product behavior:
 
-Core tables only:
+1. immutable process intelligence history in ClickHouse, and
+2. action orchestration control-plane state in PostgreSQL.
+
+History core tables:
 - `event_history`
 - `object_history`
 - `event_object_links`
@@ -228,6 +235,22 @@ This model gives:
 - object-first timeline reconstruction,
 - direct traversal from an object to co-participating objects via shared events,
 - and a clean substrate for object-centric process mining.
+
+## 5.6 Action Orchestration Control-Plane Tables
+
+Purpose: durable backend lifecycle tracking for submitted actions and executor delivery semantics.
+
+Canonical tables:
+- `actions`
+- `action_attempts`
+- `instances`
+- `action_dead_letters`
+
+Rules:
+- every submitted action gets a backend-generated UUID `action_id`,
+- each action persists `ontology_release_id` and `validation_contract_hash` from submit-time validation,
+- action lifecycle is pull/lease-based with at-least-once completion semantics,
+- retryable max-attempt exhaustion transitions to `dead_letter`.
 
 ---
 

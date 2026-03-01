@@ -18,13 +18,14 @@ Capture design-level decisions that sit between product vision and concrete arch
 1. Ontology is consumed in Seer as read-only semantic context (authoring in Prophet).
 2. Event/object/link history is first-class and immutable.
 3. UUID-based identities are required for event and object history records.
-4. Object-centric process mining is implemented in Python with `pm4py`.
-5. RCA uses a pluggable extraction layer plus ranking methods.
-6. AI UX uses a shared backend gateway with module-scoped permissions and policy-aware evidence/caveat rendering.
-7. Ontology concept discovery for explorer workflows is backend-filtered to user-graph concepts and graph-safe categories only.
-8. User-visible field/state display in inspector flows is centralized in a shared ontology display layer (ontology-first, consistent fallbacks).
-9. Interactive agent conversations in Seer UI are implemented with `assistant-ui` as the standard frontend conversation/runtime framework across assistant surfaces.
-10. Seer UI components are built on Radix UI primitives as the standard accessibility and interaction foundation for reusable frontend components.
+4. Action orchestration uses a pull/lease execution model with ontology-validated submit contracts and at-least-once lifecycle guarantees.
+5. Object-centric process mining is implemented in Python with `pm4py`.
+6. RCA uses a pluggable extraction layer plus ranking methods.
+7. AI UX uses a shared backend gateway with module-scoped permissions and policy-aware evidence/caveat rendering.
+8. Ontology concept discovery for explorer workflows is backend-filtered to user-graph concepts and graph-safe categories only.
+9. User-visible field/state display in inspector flows is centralized in a shared ontology display layer (ontology-first, consistent fallbacks).
+10. Interactive agent conversations in Seer UI are implemented with `assistant-ui` as the standard frontend conversation/runtime framework across assistant surfaces.
+11. Seer UI components are built on Radix UI primitives as the standard accessibility and interaction foundation for reusable frontend components.
 
 ## Design Docs Index
 
