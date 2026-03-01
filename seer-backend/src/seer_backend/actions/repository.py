@@ -29,12 +29,17 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Connection, Engine, RowMapping
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-from seer_backend.actions.errors import ActionRepositoryError
+from seer_backend.actions.errors import (
+    ActionConflictError,
+    ActionNotFoundError,
+    ActionRepositoryError,
+)
 from seer_backend.actions.models import (
     ActionAttemptRecord,
     ActionCreate,
     ActionRecord,
     ActionStatus,
+    AttemptOutcome,
     InstanceRecord,
     InstanceStatus,
 )
@@ -96,6 +101,26 @@ instances_table = Table(
     Column("metadata", JSON, nullable=True),
 )
 
+action_dead_letters_table = Table(
+    "action_dead_letters",
+    metadata,
+    Column(
+        "action_id",
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("actions.action_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("dead_lettered_at", postgresql.TIMESTAMP(timezone=True), nullable=False),
+    Column("reason_code", String(255), nullable=False),
+    Column("reason_detail", Text, nullable=True),
+    Column(
+        "replayed_from_action_id",
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("actions.action_id"),
+        nullable=True,
+    ),
+)
+
 
 class ActionsRepository(Protocol):
     def ensure_schema(self) -> None: ...
@@ -134,6 +159,26 @@ class ActionsRepository(Protocol):
         metadata: Mapping[str, object] | None = None,
         now: datetime | None = None,
     ) -> InstanceRecord: ...
+
+    def complete_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+        now: datetime | None = None,
+    ) -> ActionRecord: ...
+
+    def fail_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+        error_code: str,
+        error_detail: str | None,
+        retryable: bool,
+        retry_delay_seconds: int,
+        now: datetime | None = None,
+    ) -> ActionRecord: ...
 
 
 @dataclass(slots=True)
@@ -425,6 +470,179 @@ class PostgresActionsRepository:
             )
         return _instance_from_row(instance_row)
 
+    def complete_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+        now: datetime | None = None,
+    ) -> ActionRecord:
+        now_utc = _ensure_utc(now or datetime.now(UTC))
+        try:
+            with self._engine_instance().begin() as connection:
+                row = self._load_action_row_by_id_for_update(connection, action_id)
+                if row is None:
+                    raise ActionNotFoundError(f"action '{action_id}' was not found")
+                action = _action_from_row(row)
+                if action.status == ActionStatus.COMPLETED:
+                    return action
+
+                _assert_owned_active_lease(action=action, instance_id=instance_id, now_utc=now_utc)
+                update_result = connection.execute(
+                    update(action_attempts_table)
+                    .where(
+                        and_(
+                            action_attempts_table.c.action_id == action_id,
+                            action_attempts_table.c.attempt_no == action.attempt_count,
+                        )
+                    )
+                    .values(
+                        finished_at=now_utc,
+                        outcome=AttemptOutcome.COMPLETED.value,
+                        error_code=None,
+                        error_detail=None,
+                    )
+                )
+                if (update_result.rowcount or 0) < 1:
+                    raise ActionRepositoryError(
+                        "action attempt record missing for completion "
+                        f"(action_id='{action_id}', attempt_no={action.attempt_count})"
+                    )
+
+                connection.execute(
+                    update(actions_table)
+                    .where(actions_table.c.action_id == action_id)
+                    .values(
+                        status=ActionStatus.COMPLETED.value,
+                        next_visible_at=now_utc,
+                        lease_owner_instance_id=None,
+                        lease_expires_at=None,
+                        last_error_code=None,
+                        last_error_detail=None,
+                        updated_at=now_utc,
+                        completed_at=now_utc,
+                    )
+                )
+                updated_row = self._load_action_row_by_id(connection, action_id)
+        except (ActionConflictError, ActionNotFoundError):
+            raise
+        except SQLAlchemyError as exc:
+            raise ActionRepositoryError(f"Postgres complete action failed: {exc}") from exc
+
+        if updated_row is None:
+            raise ActionRepositoryError(
+                f"completed action '{action_id}' could not be loaded after update"
+            )
+        return _action_from_row(updated_row)
+
+    def fail_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+        error_code: str,
+        error_detail: str | None,
+        retryable: bool,
+        retry_delay_seconds: int,
+        now: datetime | None = None,
+    ) -> ActionRecord:
+        now_utc = _ensure_utc(now or datetime.now(UTC))
+        delay_seconds = max(int(retry_delay_seconds), 1)
+        try:
+            with self._engine_instance().begin() as connection:
+                row = self._load_action_row_by_id_for_update(connection, action_id)
+                if row is None:
+                    raise ActionNotFoundError(f"action '{action_id}' was not found")
+                action = _action_from_row(row)
+                if action.status == ActionStatus.COMPLETED:
+                    raise ActionConflictError(
+                        code="action_already_completed",
+                        message=(
+                            f"Action '{action_id}' is already completed and cannot be failed."
+                        ),
+                    )
+
+                _assert_owned_active_lease(action=action, instance_id=instance_id, now_utc=now_utc)
+                exceeded_attempts = action.attempt_count >= action.max_attempts
+                should_dead_letter = retryable and exceeded_attempts
+                if retryable and not exceeded_attempts:
+                    next_status = ActionStatus.RETRY_WAIT
+                    next_visible_at = now_utc + timedelta(seconds=delay_seconds)
+                    attempt_outcome = AttemptOutcome.RETRYABLE_FAILED
+                elif should_dead_letter:
+                    next_status = ActionStatus.DEAD_LETTER
+                    next_visible_at = now_utc
+                    attempt_outcome = AttemptOutcome.TERMINAL_FAILED
+                else:
+                    next_status = ActionStatus.FAILED_TERMINAL
+                    next_visible_at = now_utc
+                    attempt_outcome = AttemptOutcome.TERMINAL_FAILED
+
+                attempt_update = connection.execute(
+                    update(action_attempts_table)
+                    .where(
+                        and_(
+                            action_attempts_table.c.action_id == action_id,
+                            action_attempts_table.c.attempt_no == action.attempt_count,
+                        )
+                    )
+                    .values(
+                        finished_at=now_utc,
+                        outcome=attempt_outcome.value,
+                        error_code=error_code,
+                        error_detail=error_detail,
+                    )
+                )
+                if (attempt_update.rowcount or 0) < 1:
+                    raise ActionRepositoryError(
+                        "action attempt record missing for fail transition "
+                        f"(action_id='{action_id}', attempt_no={action.attempt_count})"
+                    )
+
+                connection.execute(
+                    update(actions_table)
+                    .where(actions_table.c.action_id == action_id)
+                    .values(
+                        status=next_status.value,
+                        next_visible_at=next_visible_at,
+                        lease_owner_instance_id=None,
+                        lease_expires_at=None,
+                        last_error_code=error_code,
+                        last_error_detail=error_detail,
+                        updated_at=now_utc,
+                        completed_at=None,
+                    )
+                )
+                if should_dead_letter:
+                    reason_code = "max_attempts_exhausted"
+                    dead_letter_stmt = postgresql.insert(action_dead_letters_table).values(
+                        action_id=action_id,
+                        dead_lettered_at=now_utc,
+                        reason_code=reason_code,
+                        reason_detail=error_detail,
+                        replayed_from_action_id=None,
+                    )
+                    connection.execute(
+                        dead_letter_stmt.on_conflict_do_update(
+                            index_elements=[action_dead_letters_table.c.action_id],
+                            set_={
+                                "dead_lettered_at": now_utc,
+                                "reason_code": reason_code,
+                                "reason_detail": error_detail,
+                            },
+                        )
+                    )
+
+                updated_row = self._load_action_row_by_id(connection, action_id)
+        except (ActionConflictError, ActionNotFoundError):
+            raise
+        except SQLAlchemyError as exc:
+            raise ActionRepositoryError(f"Postgres fail action failed: {exc}") from exc
+
+        if updated_row is None:
+            raise ActionRepositoryError(f"failed action '{action_id}' could not be loaded")
+        return _action_from_row(updated_row)
+
     def _upsert_instance(
         self,
         *,
@@ -492,6 +710,21 @@ class PostgresActionsRepository:
             .first()
         )
 
+    def _load_action_row_by_id_for_update(
+        self,
+        connection: Connection,
+        action_id: UUID,
+    ) -> Mapping[str, object] | RowMapping | None:
+        return (
+            connection.execute(
+                select(*actions_table.c)
+                .where(actions_table.c.action_id == action_id)
+                .with_for_update()
+            )
+            .mappings()
+            .first()
+        )
+
     def _load_action_row_by_idempotency_key(
         self,
         *,
@@ -535,6 +768,7 @@ class InMemoryActionsRepository:
         self._lock = Lock()
         self._actions: dict[UUID, ActionRecord] = {}
         self._attempts: list[ActionAttemptRecord] = []
+        self._dead_letters: dict[UUID, tuple[datetime, str, str | None]] = {}
         self._instances: dict[tuple[str, str], InstanceRecord] = {}
         self._idempotency_index: dict[tuple[str, str], UUID] = {}
 
@@ -707,6 +941,149 @@ class InMemoryActionsRepository:
             )
             self._instances[key] = record
             return _clone_instance(record)
+
+    def complete_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+        now: datetime | None = None,
+    ) -> ActionRecord:
+        now_utc = _ensure_utc(now or datetime.now(UTC))
+        with self._lock:
+            action = self._actions.get(action_id)
+            if action is None:
+                raise ActionNotFoundError(f"action '{action_id}' was not found")
+            if action.status == ActionStatus.COMPLETED:
+                return _clone_action(action)
+
+            _assert_owned_active_lease(action=action, instance_id=instance_id, now_utc=now_utc)
+            attempt = self._load_attempt(action_id=action_id, attempt_no=action.attempt_count)
+            if attempt is None:
+                raise ActionRepositoryError(
+                    "action attempt record missing for completion "
+                    f"(action_id='{action_id}', attempt_no={action.attempt_count})"
+                )
+
+            attempt.finished_at = now_utc
+            attempt.outcome = AttemptOutcome.COMPLETED
+            attempt.error_code = None
+            attempt.error_detail = None
+            action.status = ActionStatus.COMPLETED
+            action.next_visible_at = now_utc
+            action.lease_owner_instance_id = None
+            action.lease_expires_at = None
+            action.last_error_code = None
+            action.last_error_detail = None
+            action.updated_at = now_utc
+            action.completed_at = now_utc
+            return _clone_action(action)
+
+    def fail_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+        error_code: str,
+        error_detail: str | None,
+        retryable: bool,
+        retry_delay_seconds: int,
+        now: datetime | None = None,
+    ) -> ActionRecord:
+        now_utc = _ensure_utc(now or datetime.now(UTC))
+        delay_seconds = max(int(retry_delay_seconds), 1)
+        with self._lock:
+            action = self._actions.get(action_id)
+            if action is None:
+                raise ActionNotFoundError(f"action '{action_id}' was not found")
+            if action.status == ActionStatus.COMPLETED:
+                raise ActionConflictError(
+                    code="action_already_completed",
+                    message=f"Action '{action_id}' is already completed and cannot be failed.",
+                )
+
+            _assert_owned_active_lease(action=action, instance_id=instance_id, now_utc=now_utc)
+            attempt = self._load_attempt(action_id=action_id, attempt_no=action.attempt_count)
+            if attempt is None:
+                raise ActionRepositoryError(
+                    "action attempt record missing for fail transition "
+                    f"(action_id='{action_id}', attempt_no={action.attempt_count})"
+                )
+
+            exceeded_attempts = action.attempt_count >= action.max_attempts
+            should_dead_letter = retryable and exceeded_attempts
+            if retryable and not exceeded_attempts:
+                next_status = ActionStatus.RETRY_WAIT
+                next_visible_at = now_utc + timedelta(seconds=delay_seconds)
+                attempt_outcome = AttemptOutcome.RETRYABLE_FAILED
+            elif should_dead_letter:
+                next_status = ActionStatus.DEAD_LETTER
+                next_visible_at = now_utc
+                attempt_outcome = AttemptOutcome.TERMINAL_FAILED
+            else:
+                next_status = ActionStatus.FAILED_TERMINAL
+                next_visible_at = now_utc
+                attempt_outcome = AttemptOutcome.TERMINAL_FAILED
+
+            attempt.finished_at = now_utc
+            attempt.outcome = attempt_outcome
+            attempt.error_code = error_code
+            attempt.error_detail = error_detail
+            action.status = next_status
+            action.next_visible_at = next_visible_at
+            action.lease_owner_instance_id = None
+            action.lease_expires_at = None
+            action.last_error_code = error_code
+            action.last_error_detail = error_detail
+            action.updated_at = now_utc
+            action.completed_at = None
+            if should_dead_letter:
+                self._dead_letters[action_id] = (
+                    now_utc,
+                    "max_attempts_exhausted",
+                    error_detail,
+                )
+            return _clone_action(action)
+
+    def _load_attempt(self, *, action_id: UUID, attempt_no: int) -> ActionAttemptRecord | None:
+        for attempt in reversed(self._attempts):
+            if attempt.action_id == action_id and attempt.attempt_no == attempt_no:
+                return attempt
+        return None
+
+
+def _assert_owned_active_lease(
+    *,
+    action: ActionRecord,
+    instance_id: str,
+    now_utc: datetime,
+) -> None:
+    if action.status not in {ActionStatus.LEASED, ActionStatus.RUNNING}:
+        raise ActionConflictError(
+            code="action_not_in_progress",
+            message=(
+                f"Action '{action.action_id}' is in status '{action.status.value}' and cannot "
+                "accept lifecycle callbacks."
+            ),
+        )
+    if not action.lease_owner_instance_id:
+        raise ActionConflictError(
+            code="lease_owner_missing",
+            message=f"Action '{action.action_id}' does not have an active lease owner.",
+        )
+    if action.lease_owner_instance_id != instance_id:
+        raise ActionConflictError(
+            code="invalid_lease_owner",
+            message=(
+                f"Instance '{instance_id}' does not own the active lease for action "
+                f"'{action.action_id}'."
+            ),
+        )
+    if action.lease_expires_at is None or action.lease_expires_at <= now_utc:
+        raise ActionConflictError(
+            code="lease_expired",
+            message=f"Action '{action.action_id}' lease has expired and cannot be updated.",
+        )
 
 
 def _is_claim_eligible(action: ActionRecord, now_utc: datetime) -> bool:

@@ -17,6 +17,21 @@ class ActionRepositoryError(ActionError):
     """Raised for persistence-layer failures in the action domain."""
 
 
+class ActionNotFoundError(ActionError):
+    """Raised when an action does not exist."""
+
+
+@dataclass(slots=True, frozen=True)
+class ActionConflictError(ActionError):
+    """Raised when lifecycle transitions conflict with current action state."""
+
+    code: str
+    message: str
+
+    def __str__(self) -> str:
+        return self.message
+
+
 @dataclass(slots=True, frozen=True)
 class ActionValidationIssue:
     code: str

@@ -10,11 +10,13 @@ from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from seer_backend.actions.errors import (
+    ActionConflictError,
     ActionDependencyUnavailableError,
     ActionError,
+    ActionNotFoundError,
     ActionValidationError,
 )
-from seer_backend.actions.models import InstanceStatus
+from seer_backend.actions.models import ActionRecord, InstanceStatus
 from seer_backend.ontology.errors import OntologyDependencyUnavailableError, OntologyError
 from seer_backend.ontology.models import assert_valid_iri
 
@@ -103,6 +105,37 @@ class InstanceHeartbeatResponse(BaseModel):
     metadata: dict[str, Any] | None = None
 
 
+class ActionCompleteRequest(BaseModel):
+    instance_id: str = Field(min_length=1, max_length=255)
+
+
+class ActionFailRequest(BaseModel):
+    instance_id: str = Field(min_length=1, max_length=255)
+    error_code: str = Field(min_length=1, max_length=255)
+    error_detail: str | None = Field(default=None, max_length=4096)
+
+    @field_validator("error_code")
+    @classmethod
+    def normalize_error_code(cls, error_code: str) -> str:
+        normalized = error_code.strip().lower()
+        if not normalized:
+            raise ValueError("error_code must not be blank")
+        return normalized
+
+
+class ActionLifecycleResponse(BaseModel):
+    action_id: UUID
+    status: Literal["completed", "retry_wait", "failed_terminal", "dead_letter"]
+    attempt_count: int
+    max_attempts: int
+    next_visible_at: datetime
+    lease_owner_instance_id: str | None = None
+    lease_expires_at: datetime | None = None
+    completed_at: datetime | None = None
+    last_error_code: str | None = None
+    last_error_detail: str | None = None
+
+
 @router.post("/submit", response_model=ActionSubmitResponse)
 async def submit_action(
     payload: ActionSubmitRequest,
@@ -122,17 +155,7 @@ async def submit_action(
     except ActionValidationError as exc:
         raise _http_error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            ActionSubmitValidationDetail(
-                message=exc.message,
-                issues=[
-                    ActionSubmitValidationIssue(
-                        code=issue.code,
-                        message=issue.message,
-                        field=issue.field,
-                    )
-                    for issue in exc.issues
-                ],
-            ).model_dump(),
+            _validation_error_detail(exc),
         ) from exc
     except (ActionDependencyUnavailableError, OntologyDependencyUnavailableError) as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
@@ -194,6 +217,70 @@ async def claim_actions(
     )
 
 
+@router.post("/{action_id}/complete", response_model=ActionLifecycleResponse)
+async def complete_action(
+    action_id: UUID,
+    payload: ActionCompleteRequest,
+    request: Request,
+) -> ActionLifecycleResponse:
+    actions_service = request.app.state.actions_service
+    try:
+        action = await actions_service.complete_action(
+            action_id=action_id,
+            instance_id=payload.instance_id,
+        )
+    except ActionNotFoundError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except ActionConflictError as exc:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            {"code": exc.code, "message": exc.message},
+        ) from exc
+    except ActionValidationError as exc:
+        raise _http_error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            _validation_error_detail(exc),
+        ) from exc
+    except ActionDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ActionError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return _lifecycle_response(action)
+
+
+@router.post("/{action_id}/fail", response_model=ActionLifecycleResponse)
+async def fail_action(
+    action_id: UUID,
+    payload: ActionFailRequest,
+    request: Request,
+) -> ActionLifecycleResponse:
+    actions_service = request.app.state.actions_service
+    try:
+        action = await actions_service.fail_action(
+            action_id=action_id,
+            instance_id=payload.instance_id,
+            error_code=payload.error_code,
+            error_detail=payload.error_detail,
+        )
+    except ActionNotFoundError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except ActionConflictError as exc:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            {"code": exc.code, "message": exc.message},
+        ) from exc
+    except ActionValidationError as exc:
+        raise _http_error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            _validation_error_detail(exc),
+        ) from exc
+    except ActionDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except ActionError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return _lifecycle_response(action)
+
+
 @router.post("/instances/heartbeat", response_model=InstanceHeartbeatResponse)
 async def heartbeat_instance(
     payload: InstanceHeartbeatRequest,
@@ -223,6 +310,35 @@ async def heartbeat_instance(
         last_seen_at=instance.last_seen_at,
         capacity=instance.capacity,
         metadata=instance.metadata,
+    )
+
+
+def _validation_error_detail(exc: ActionValidationError) -> dict[str, Any]:
+    return ActionSubmitValidationDetail(
+        message=exc.message,
+        issues=[
+            ActionSubmitValidationIssue(
+                code=issue.code,
+                message=issue.message,
+                field=issue.field,
+            )
+            for issue in exc.issues
+        ],
+    ).model_dump()
+
+
+def _lifecycle_response(action: ActionRecord) -> ActionLifecycleResponse:
+    return ActionLifecycleResponse(
+        action_id=action.action_id,
+        status=action.status.value,
+        attempt_count=action.attempt_count,
+        max_attempts=action.max_attempts,
+        next_visible_at=action.next_visible_at,
+        lease_owner_instance_id=action.lease_owner_instance_id,
+        lease_expires_at=action.lease_expires_at,
+        completed_at=action.completed_at,
+        last_error_code=action.last_error_code,
+        last_error_detail=action.last_error_detail,
     )
 
 

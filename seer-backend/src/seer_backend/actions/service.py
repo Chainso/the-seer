@@ -13,6 +13,7 @@ from uuid import UUID
 
 from seer_backend.actions.errors import (
     ActionDependencyUnavailableError,
+    ActionNotFoundError,
     ActionValidationError,
     ActionValidationIssue,
 )
@@ -65,6 +66,21 @@ _STRING_TYPE_TOKENS = {"string"}
 _INTEGER_TYPE_TOKENS = {"int", "integer"}
 _NUMBER_TYPE_TOKENS = {"decimal", "double", "float", "number"}
 _BOOLEAN_TYPE_TOKENS = {"bool", "boolean"}
+_RETRYABLE_FAILURE_CODES = {
+    "lease_expired",
+    "instance_unreachable",
+    "upstream_timeout",
+    "transient_dependency_error",
+    "rate_limited",
+}
+_TERMINAL_FAILURE_CODES = {
+    "input_validation_failed",
+    "ontology_contract_missing",
+    "authorization_failed",
+    "unsupported_action_capability",
+    "executor_protocol_violation",
+}
+_FAILURE_CODES = _RETRYABLE_FAILURE_CODES | _TERMINAL_FAILURE_CODES
 
 
 @dataclass(slots=True, frozen=True)
@@ -271,6 +287,70 @@ class ActionsService:
             metadata=metadata,
         )
 
+    async def complete_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+    ) -> ActionRecord:
+        await self.ensure_schema()
+        return await asyncio.to_thread(
+            self._repository.complete_action,
+            action_id=action_id,
+            instance_id=instance_id,
+        )
+
+    async def fail_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+        error_code: str,
+        error_detail: str | None = None,
+    ) -> ActionRecord:
+        await self.ensure_schema()
+        normalized_error_code = _normalize_failure_code(error_code)
+        if not normalized_error_code:
+            raise ActionValidationError(
+                "Failure error_code is required",
+                issues=[
+                    ActionValidationIssue(
+                        code="missing_failure_code",
+                        field="error_code",
+                        message="Provide a non-empty error_code for fail callbacks.",
+                    )
+                ],
+            )
+        if normalized_error_code not in _FAILURE_CODES:
+            raise ActionValidationError(
+                "Failure error_code is not part of the supported taxonomy",
+                issues=[
+                    ActionValidationIssue(
+                        code="unknown_failure_code",
+                        field="error_code",
+                        message=(
+                            f"Unsupported failure code '{normalized_error_code}'. "
+                            "Use one of the canonical retryable or terminal failure codes."
+                        ),
+                    )
+                ],
+            )
+
+        current = await self.get_action(action_id)
+        if current is None:
+            raise ActionNotFoundError(f"action '{action_id}' was not found")
+        retryable = normalized_error_code in _RETRYABLE_FAILURE_CODES
+        retry_delay_seconds = _compute_retry_delay_seconds(current.attempt_count)
+        return await asyncio.to_thread(
+            self._repository.fail_action,
+            action_id=action_id,
+            instance_id=instance_id,
+            error_code=normalized_error_code,
+            error_detail=error_detail,
+            retryable=retryable,
+            retry_delay_seconds=retry_delay_seconds,
+        )
+
     async def submit_action(
         self,
         *,
@@ -395,6 +475,26 @@ class UnavailableActionsService:
         del ontology_service, user_id, action_uri, payload, idempotency_key, priority
         raise ActionDependencyUnavailableError(self.reason)
 
+    async def complete_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+    ) -> ActionRecord:
+        del action_id, instance_id
+        raise ActionDependencyUnavailableError(self.reason)
+
+    async def fail_action(
+        self,
+        *,
+        action_id: UUID,
+        instance_id: str,
+        error_code: str,
+        error_detail: str | None = None,
+    ) -> ActionRecord:
+        del action_id, instance_id, error_code, error_detail
+        raise ActionDependencyUnavailableError(self.reason)
+
 
 def build_actions_service(settings: Settings) -> ActionsService | UnavailableActionsService:
     try:
@@ -430,6 +530,15 @@ def _normalize_optional_iri(value: str | None) -> str | None:
         return None
     normalized = value.strip()
     return normalized if normalized else None
+
+
+def _normalize_failure_code(value: str) -> str:
+    return value.strip().lower()
+
+
+def _compute_retry_delay_seconds(attempt_no: int) -> int:
+    exponent = max(int(attempt_no) - 1, 0)
+    return min(2 * (2**exponent), 300)
 
 
 def _parse_optional_int(value: str | None) -> int | None:

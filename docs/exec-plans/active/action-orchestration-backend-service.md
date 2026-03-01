@@ -632,16 +632,16 @@ Rationale:
 - [x] Phase 1 complete
 - [x] Phase 2 complete
 - [x] Phase 3 complete
-- [ ] Phase 4 complete
+- [x] Phase 4 complete
 - [ ] Phase 5 complete
 - [ ] Phase 6 complete
 - [ ] Phase 7 complete
 
 Current execution state:
 
-- `in_progress`: Phase 4 complete/fail APIs + retry sweeper + dead letter
+- `in_progress`: Phase 5 status query + streamed updates + operator surfaces
 - `blocked`: none
-- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics
+- `completed`: Phase 0 baseline/failure ledger; Phase 1 domain skeleton + persistence migrations; Phase 2 submit API + ontology validation + enqueue; Phase 3 claim API + instance registry semantics; Phase 4 complete/fail APIs + retry scheduling + dead-letter lifecycle
 
 ## Baseline Failure Ledger
 
@@ -681,6 +681,25 @@ Current execution state:
 7. `cd seer-backend && uv run pytest -q tests/test_actions_claim.py` -> pass (`5 passed`).
 8. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py` -> pass (`13 passed`).
 
+## Phase 4 Acceptance Evidence
+
+1. Added `POST /api/v1/actions/{action_id}/complete` transport with lease-owner + active-lease enforcement and idempotent duplicate-complete semantics returning canonical terminal state.
+2. Added `POST /api/v1/actions/{action_id}/fail` transport with canonical failure-taxonomy classification (`retryable` vs `terminal`) and deterministic exponential retry scheduling (`base=2s`, capped at `300s`) persisted via `next_visible_at`.
+3. Added dead-letter transition behavior when retryable failures occur at max-attempt budget (`attempt_count >= max_attempts`), including persistence to `action_dead_letters` in the PostgreSQL repository implementation.
+4. Added lifecycle repository/service methods for completion/failure transitions and attempt outcome persistence (`action_attempts.finished_at/outcome/error_*`) across both Postgres and in-memory repositories.
+5. Added `tests/test_actions_lifecycle.py` covering:
+   - complete success transition,
+   - duplicate complete idempotency,
+   - retryable fail -> `retry_wait` + future `next_visible_at`,
+   - terminal fail -> `failed_terminal`,
+   - retry exhaustion -> `dead_letter`,
+   - invalid lease-owner conflict mapping (actionable `409`),
+   - dependency-unavailable mapping (`503`) for complete/fail APIs.
+6. Phase scope note: dedicated sweeper process/runtime is intentionally deferred; retry visibility is represented through `retry_wait` + `next_visible_at` and enforced by existing claim eligibility logic.
+7. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_lifecycle.py` -> pass (`All checks passed!`).
+8. `cd seer-backend && uv run pytest -q tests/test_actions_lifecycle.py` -> pass (`7 passed`).
+9. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py` -> pass (`20 passed`).
+
 ## Decision Log
 
 1. 2026-03-01: Selected pull-based claim routing with lease semantics as canonical delivery model.
@@ -701,6 +720,7 @@ Current execution state:
 16. 2026-03-01: Phase 2 completed with best-available ontology input validation (`acceptsInput` + `hasProperty` + cardinality + basic type/object-reference checks) and deterministic contract hashing.
 17. 2026-03-01: Deferred deeper semantic type validation (enum/domain-specific constraints/date-format strictness) to later phases; current behavior returns actionable 422s for contract coverage available today.
 18. 2026-03-01: Phase 3 completed with claim transport, instance heartbeat transport, claim-path instance upsert, draining claim exclusion, and lease-expiry reclaim coverage.
+19. 2026-03-01: Phase 4 completed with complete/fail lifecycle transports, lease ownership enforcement, retry scheduling, and dead-letter transition behavior; dedicated sweeper runtime remains deferred by phase scope.
 
 ## Next-Phase Starter Context
 
