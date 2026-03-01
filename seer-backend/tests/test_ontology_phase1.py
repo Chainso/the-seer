@@ -530,6 +530,43 @@ def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
     assert body["tool_result"]["rows"][0]["description"]
 
 
+def test_copilot_injects_missing_standard_prefixes_for_tool_query() -> None:
+    model_output = CopilotStructuredOutput(
+        mode="tool_call",
+        answer="I need a read-only query to confirm labels.",
+        evidence=[],
+        tool_call=CopilotToolCall(
+            tool="sparql_read_only_query",
+            query=(
+                "PREFIX prophet: <http://prophet.platform/ontology#>\n"
+                "SELECT ?concept ?label\n"
+                "WHERE {\n"
+                "  ?concept a prophet:ObjectModel .\n"
+                "  OPTIONAL { ?concept rdfs:label ?label . }\n"
+                "}\n"
+                "LIMIT 5"
+            ),
+        ),
+    )
+    client = build_client(model_output)
+    _ingest_success(client, release_id="phase1-copilot-prefix-inject")
+
+    response = client.post(
+        "/api/v1/ontology/copilot",
+        json={"question": "List object model labels", "conversation": []},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["mode"] == "direct_answer"
+    assert body["tool_result"]["error"] is None
+    assert body["tool_result"]["query_type"] == "SELECT"
+    assert (
+        "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>"
+        in body["tool_result"]["query"]
+    )
+
+
 def test_copilot_rejects_unsafe_tool_call_query() -> None:
     model_output = CopilotStructuredOutput(
         mode="tool_call",

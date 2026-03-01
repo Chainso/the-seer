@@ -35,12 +35,24 @@ _PROPHET_PREFIX = "prophet"
 _STD_PREFIX = "std"
 _PROPHET_NAMESPACE = "http://prophet.platform/ontology#"
 _STD_NAMESPACE = "http://prophet.platform/standard-types#"
+_RDF_NAMESPACE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+_RDFS_NAMESPACE = "http://www.w3.org/2000/01/rdf-schema#"
+_OWL_NAMESPACE = "http://www.w3.org/2002/07/owl#"
+_XSD_NAMESPACE = "http://www.w3.org/2001/XMLSchema#"
 _LOCAL_ONTOLOGY_NAMESPACE_PREFIX = "http://prophet.platform/local/"
 _BASE_CONCEPT_IRI_PREFIXES = (
     _PROPHET_NAMESPACE,
     _STD_NAMESPACE,
     "http://www.w3.org/",
 )
+_SPARQL_STANDARD_PREFIXES = {
+    _PROPHET_PREFIX: _PROPHET_NAMESPACE,
+    _STD_PREFIX: _STD_NAMESPACE,
+    "rdf": _RDF_NAMESPACE,
+    "rdfs": _RDFS_NAMESPACE,
+    "owl": _OWL_NAMESPACE,
+    "xsd": _XSD_NAMESPACE,
+}
 
 _BASE_ONTOLOGY_SYSTEM_PROMPT_TEMPLATE = """
 Authoritative Prophet base ontology (verbatim Turtle).
@@ -86,6 +98,10 @@ SPARQL query rules:
 - Use explicit prefixes whenever possible:
   PREFIX prophet: <http://prophet.platform/ontology#>
   PREFIX std: <http://prophet.platform/standard-types#>
+  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+  PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+  PREFIX owl: <http://www.w3.org/2002/07/owl#>
+  PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
 Answer style:
 - Be concise and concrete.
@@ -151,6 +167,10 @@ LIMIT 100
 _PREFIX_DECLARATION_PATTERN = re.compile(
     r"^@prefix\s+([A-Za-z_][\w-]*):\s*<([^>]+)>\s*\.$",
     re.MULTILINE,
+)
+_SPARQL_PREFIX_DECLARATION_PATTERN = re.compile(
+    r"^\s*PREFIX\s+([A-Za-z_][\w-]*)\s*:\s*<[^>]+>\s*$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 _ONTOLOGY_INDEX_TOP_LEVEL_CONCEPTS_QUERY = """
@@ -538,7 +558,8 @@ class OntologyCopilotService:
         return markdown
 
     async def _execute_tool_call(self, tool_call: CopilotToolCall) -> CopilotToolResult:
-        query_text = tool_call.query.strip()
+        query_text = _inject_missing_standard_prefixes(tool_call.query.strip())
+        executed_tool_call = tool_call.model_copy(update={"query": query_text})
         try:
             query_response = await self._ontology_service.run_read_only_query(query_text)
         except OntologyReadOnlyViolationError as exc:
@@ -560,7 +581,7 @@ class OntologyCopilotService:
 
         return _to_tool_result(
             query_response,
-            tool_call=tool_call,
+            tool_call=executed_tool_call,
             row_limit=self._query_row_limit,
         )
 
@@ -795,6 +816,30 @@ def _extract_prefix_map(turtle: str) -> dict[str, str]:
     for alias, iri in _PREFIX_DECLARATION_PATTERN.findall(turtle):
         prefixes[alias] = iri
     return prefixes
+
+
+def _inject_missing_standard_prefixes(query: str) -> str:
+    if not query:
+        return query
+
+    declared = {
+        alias.lower()
+        for alias in _SPARQL_PREFIX_DECLARATION_PATTERN.findall(query)
+    }
+    missing_lines: list[str] = []
+    for alias, namespace in _SPARQL_STANDARD_PREFIXES.items():
+        if alias in declared:
+            continue
+        if _query_references_prefix(query, alias):
+            missing_lines.append(f"PREFIX {alias}: <{namespace}>")
+    if not missing_lines:
+        return query
+    return "\n".join([*missing_lines, query])
+
+
+def _query_references_prefix(query: str, alias: str) -> bool:
+    pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(alias)}:[A-Za-z_]")
+    return pattern.search(query) is not None
 
 
 def _normalize_completion_conversation(
