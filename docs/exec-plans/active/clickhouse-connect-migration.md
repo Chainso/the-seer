@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: Migrate Backend ClickHouse Access to clickhouse-connect
 
-**Status:** in_progress  
+**Status:** completed  
 **Track:** post-MVP backend data-plane hardening  
 **Predecessor:** none  
 **Successor:** `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md`  
