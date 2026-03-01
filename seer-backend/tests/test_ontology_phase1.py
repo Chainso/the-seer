@@ -4,8 +4,10 @@ import asyncio
 import json
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from openai import APIError
 
 pytest.importorskip("rdflib")
 pytest.importorskip("pyshacl")
@@ -251,6 +253,133 @@ def test_openai_runtime_collects_multiple_tool_calls() -> None:
     assert output.tool_call.call_id == "call_1"
     assert len(output.tool_calls) == 2
     assert output.tool_calls[1].call_id == "call_2"
+
+
+def test_openai_runtime_normalizes_long_provider_tool_call_ids() -> None:
+    long_id = "call_abc123__sig__" + ("x" * 4096)
+
+    class FakeCompletions:
+        async def create(self, **kwargs: object) -> object:
+            del kwargs
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": long_id,
+                                    "function": {
+                                        "name": "sparql_read_only_query",
+                                        "arguments": json.dumps(
+                                            {"query": "ASK WHERE { ?s ?p ?o }"}
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        chat = type("FakeChat", (), {"completions": FakeCompletions()})()
+
+    runtime = OpenAiChatCompletionsRuntime(
+        base_url="http://localhost:8787/v1",
+        model="local-model",
+        api_key="test-key",
+        timeout_seconds=12.0,
+        client=FakeClient(),
+    )
+    output = asyncio.run(
+        runtime.run_messages([{"role": "user", "content": "Explain Ticket"}])
+    )
+
+    assert output.mode == "tool_call"
+    assert output.tool_call is not None
+    assert output.tool_call.call_id is not None
+    assert len(output.tool_call.call_id) <= 120
+    assert "__sig__" not in output.tool_call.call_id
+    assert output.tool_call.call_id.startswith("call_")
+
+
+def test_openai_runtime_retries_transient_input_stream_error() -> None:
+    class FakeCompletions:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def create(self, **kwargs: object) -> object:
+            del kwargs
+            self.calls += 1
+            if self.calls == 1:
+                raise APIError(
+                    "Error in input stream",
+                    request=httpx.Request("POST", "http://localhost:8787/v1/chat/completions"),
+                    body=None,
+                )
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Recovered answer after transient stream parsing failure."
+                        }
+                    }
+                ]
+            }
+
+    completions = FakeCompletions()
+
+    class FakeClient:
+        chat = type("FakeChat", (), {"completions": completions})()
+
+    runtime = OpenAiChatCompletionsRuntime(
+        base_url="http://localhost:8787/v1",
+        model="local-model",
+        api_key="test-key",
+        timeout_seconds=12.0,
+        client=FakeClient(),
+    )
+    output = asyncio.run(
+        runtime.run_messages([{"role": "user", "content": "Explain Ticket"}])
+    )
+
+    assert output.mode == "direct_answer"
+    assert output.answer == "Recovered answer after transient stream parsing failure."
+    assert completions.calls == 2
+
+
+def test_openai_runtime_raises_after_transient_retry_exhausted() -> None:
+    class FakeCompletions:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def create(self, **kwargs: object) -> object:
+            del kwargs
+            self.calls += 1
+            raise APIError(
+                "Error in input stream",
+                request=httpx.Request("POST", "http://localhost:8787/v1/chat/completions"),
+                body=None,
+            )
+
+    completions = FakeCompletions()
+
+    class FakeClient:
+        chat = type("FakeChat", (), {"completions": completions})()
+
+    runtime = OpenAiChatCompletionsRuntime(
+        base_url="http://localhost:8787/v1",
+        model="local-model",
+        api_key="test-key",
+        timeout_seconds=12.0,
+        client=FakeClient(),
+    )
+
+    with pytest.raises(OntologyError, match="OpenAI chat completion failed: Error in input stream"):
+        asyncio.run(runtime.run_messages([{"role": "user", "content": "Explain Ticket"}]))
+
+    assert completions.calls == 2
 
 
 def test_build_services_keeps_ontology_available_when_openai_unconfigured() -> None:

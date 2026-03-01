@@ -460,6 +460,97 @@ def test_ai_assistant_chat_accepts_completions_format_messages() -> None:
     assert events[-1][0] == "done"
 
 
+def test_ai_assistant_chat_sanitizes_tool_call_ids_but_keeps_tool_history() -> None:
+    class CapturingCopilot:
+        def __init__(self) -> None:
+            self.captured_completion_conversation: list[dict[str, object]] | None = None
+
+        async def answer(
+            self,
+            question: str,
+            conversation: list[CopilotConversationMessage] | None = None,
+            completion_conversation: list[dict[str, object]] | None = None,
+        ) -> CopilotChatResponse:
+            del question, conversation
+            self.captured_completion_conversation = completion_conversation
+            return CopilotChatResponse(
+                mode="direct_answer",
+                answer="Sanitized tool call id context.",
+                evidence=[],
+                current_release_id="phase5-test-release",
+                tool_call=None,
+                tool_result=None,
+                completion_messages_delta=[
+                    {"role": "assistant", "content": "Sanitized tool call id context."}
+                ],
+            )
+
+        async def answer_stream(
+            self,
+            question: str,
+            conversation: list[CopilotConversationMessage] | None = None,
+            completion_conversation: list[dict[str, object]] | None = None,
+        ) -> AsyncIterator[CopilotAnswerStreamEvent]:
+            response = await self.answer(
+                question,
+                conversation=conversation,
+                completion_conversation=completion_conversation,
+            )
+            yield CopilotAssistantDeltaEvent(text=response.answer)
+            yield CopilotAnswerFinalEvent(response=response)
+
+    copilot = CapturingCopilot()
+    client = build_client_with_copilot(copilot)
+
+    long_id = "call_preserve_me__sig__" + ("x" * 512)
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "First question"},
+                {
+                    "role": "assistant",
+                    "content": "Tool run",
+                    "tool_calls": [
+                        {
+                            "id": long_id,
+                            "type": "function",
+                            "function": {
+                                "name": "sparql_read_only_query",
+                                "arguments": "{\"query\":\"ASK WHERE { ?s ?p ?o }\"}",
+                            },
+                        }
+                    ],
+                },
+                {"role": "tool", "tool_call_id": long_id, "content": "{\"row_count\":1}"},
+                {"role": "user", "content": "Follow-up question"},
+            ],
+            "thread_id": "thread-sanitize-ids-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    events = _parse_sse_events(response.text)
+    final_event = next(payload for event, payload in events if event == "final")
+
+    captured = copilot.captured_completion_conversation
+    assert captured is not None
+    assert [item["role"] for item in captured] == ["user", "assistant", "tool"]
+    assistant_tool_calls = captured[1].get("tool_calls")
+    assert isinstance(assistant_tool_calls, list)
+    assert assistant_tool_calls
+    normalized_id = assistant_tool_calls[0]["id"]
+    assert isinstance(normalized_id, str)
+    assert normalized_id.startswith("call_")
+    assert "__sig__" not in normalized_id
+    assert len(normalized_id) <= 120
+    assert captured[2]["tool_call_id"] == normalized_id
+
+    completion_messages = final_event["completion_messages"]
+    assert completion_messages[1]["tool_calls"][0]["id"] == normalized_id
+    assert completion_messages[2]["tool_call_id"] == normalized_id
+
+
 def test_ai_assistant_chat_rejects_completion_messages_without_user_turn() -> None:
     client = build_client()
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import re
 from collections.abc import AsyncIterator
@@ -30,6 +31,9 @@ from seer_backend.ontology.service import OntologyService, UnavailableOntologySe
 _TOOL_CALL_MAX_ROUNDS = 6
 _TOOL_CALL_MAX_TOTAL = 8
 _ONTOLOGY_INDEX_CACHE_KEY_EMPTY_RELEASE = "__none__"
+_OPENAI_TRANSIENT_MAX_RETRIES = 1
+_OPENAI_RETRY_BACKOFF_SECONDS = 0.2
+_TOOL_CALL_ID_MAX_LENGTH = 120
 
 _PROPHET_PREFIX = "prophet"
 _STD_PREFIX = "std"
@@ -315,26 +319,34 @@ class OpenAiChatCompletionsRuntime:
         self,
         messages: list[dict[str, Any]],
     ) -> CopilotStructuredOutput:
-        try:
-            response = await self._client.chat.completions.create(
-                model=self._model,
-                messages=messages,
-                stream=False,
-                temperature=0,
-                tools=[_SPARQL_READ_ONLY_TOOL_SCHEMA],
-                tool_choice="auto",
-                parallel_tool_calls=True,
-            )
-        except APIConnectionError as exc:
-            raise OntologyDependencyUnavailableError(
-                f"OpenAI endpoint is unavailable: {exc}"
-            ) from exc
-        except APITimeoutError as exc:
-            raise OntologyError(
-                f"OpenAI request timed out after {self._timeout_seconds:.1f}s"
-            ) from exc
-        except APIError as exc:
-            raise OntologyError(f"OpenAI chat completion failed: {exc}") from exc
+        for attempt in range(_OPENAI_TRANSIENT_MAX_RETRIES + 1):
+            try:
+                response = await self._client.chat.completions.create(
+                    model=self._model,
+                    messages=messages,
+                    stream=False,
+                    temperature=0,
+                    tools=[_SPARQL_READ_ONLY_TOOL_SCHEMA],
+                    tool_choice="auto",
+                    parallel_tool_calls=True,
+                )
+                break
+            except APIConnectionError as exc:
+                raise OntologyDependencyUnavailableError(
+                    f"OpenAI endpoint is unavailable: {exc}"
+                ) from exc
+            except APITimeoutError as exc:
+                raise OntologyError(
+                    f"OpenAI request timed out after {self._timeout_seconds:.1f}s"
+                ) from exc
+            except APIError as exc:
+                if (
+                    attempt < _OPENAI_TRANSIENT_MAX_RETRIES
+                    and _is_retryable_openai_api_error(exc)
+                ):
+                    await asyncio.sleep(_OPENAI_RETRY_BACKOFF_SECONDS * (attempt + 1))
+                    continue
+                raise OntologyError(f"OpenAI chat completion failed: {exc}") from exc
 
         return _to_structured_output(response)
 
@@ -692,7 +704,9 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
         call_id = getattr(tool, "id", None)
         if call_id is None and isinstance(tool, dict):
             call_id = tool.get("id")
-        if not isinstance(call_id, str) or not call_id.strip():
+        if isinstance(call_id, str) and call_id.strip():
+            call_id = _normalize_tool_call_id(call_id)
+        else:
             call_id = None
 
         parsed_calls.append(
@@ -731,6 +745,28 @@ def _extract_tool_query_from_arguments(arguments: Any) -> str | None:
             return query.strip()
 
     return None
+
+
+def _normalize_tool_call_id(raw_call_id: str) -> str:
+    normalized = raw_call_id.strip()
+    if "__sig__" in normalized:
+        normalized = normalized.split("__sig__", 1)[0]
+    normalized = re.sub(r"[^A-Za-z0-9._:-]+", "_", normalized)
+    normalized = normalized.strip("._:-_")
+    if (
+        normalized
+        and len(normalized) <= _TOOL_CALL_ID_MAX_LENGTH
+        and normalized.startswith("call")
+    ):
+        return normalized
+
+    digest = hashlib.sha256(raw_call_id.encode("utf-8")).hexdigest()[:24]
+    return f"call_{digest}"
+
+
+def _is_retryable_openai_api_error(exc: APIError) -> bool:
+    message = str(exc).lower()
+    return "error in input stream" in message
 
 
 def _direct_answer_output(answer: str) -> CopilotStructuredOutput:
@@ -856,11 +892,31 @@ def _normalize_completion_conversation(
         if role not in {"user", "assistant", "tool"}:
             continue
         sanitized: dict[str, Any] = {"role": role}
-        for key in ("content", "tool_calls", "tool_call_id", "name"):
-            if key in message:
-                sanitized[key] = message[key]
+        if "content" in message:
+            sanitized["content"] = message["content"]
+        if "name" in message:
+            sanitized["name"] = message["name"]
+        tool_call_id = message.get("tool_call_id")
+        if isinstance(tool_call_id, str) and tool_call_id.strip():
+            sanitized["tool_call_id"] = _normalize_tool_call_id(tool_call_id)
+        tool_calls = message.get("tool_calls")
+        if isinstance(tool_calls, list):
+            sanitized["tool_calls"] = _normalize_tool_calls(tool_calls)
         normalized.append(sanitized)
     return normalized
+
+
+def _normalize_tool_calls(tool_calls: list[Any]) -> list[dict[str, Any]]:
+    normalized_calls: list[dict[str, Any]] = []
+    for tool_call in tool_calls:
+        if not isinstance(tool_call, dict):
+            continue
+        normalized_call = dict(tool_call)
+        call_id = normalized_call.get("id")
+        if isinstance(call_id, str) and call_id.strip():
+            normalized_call["id"] = _normalize_tool_call_id(call_id)
+        normalized_calls.append(normalized_call)
+    return normalized_calls
 
 
 def _is_base_concept_iri(concept_iri: str) -> bool:

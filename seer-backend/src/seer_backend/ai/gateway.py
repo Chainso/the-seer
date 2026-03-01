@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import re
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 from typing import Any, Literal
@@ -29,6 +31,8 @@ from seer_backend.analytics.rca_models import (
 from seer_backend.analytics.rca_service import RootCauseService, UnavailableRootCauseService
 from seer_backend.analytics.service import ProcessMiningService, UnavailableProcessMiningService
 from seer_backend.ontology.models import CopilotChatResponse, CopilotConversationMessage
+
+_TOOL_CALL_ID_MAX_LENGTH = 120
 
 
 class AiEvidenceItem(BaseModel):
@@ -745,7 +749,43 @@ def _completion_message_to_dict(
     if role == "system":
         # System prompts are backend-owned; ignore client-supplied system messages.
         return None
+    tool_call_id = data.get("tool_call_id")
+    if isinstance(tool_call_id, str) and tool_call_id.strip():
+        data["tool_call_id"] = _normalize_tool_call_id(tool_call_id)
+    tool_calls = data.get("tool_calls")
+    if isinstance(tool_calls, list):
+        data["tool_calls"] = _normalize_tool_calls(tool_calls)
     return data
+
+
+def _normalize_tool_calls(tool_calls: list[Any]) -> list[dict[str, Any]]:
+    normalized_calls: list[dict[str, Any]] = []
+    for tool_call in tool_calls:
+        if not isinstance(tool_call, dict):
+            continue
+        normalized_call = dict(tool_call)
+        call_id = normalized_call.get("id")
+        if isinstance(call_id, str) and call_id.strip():
+            normalized_call["id"] = _normalize_tool_call_id(call_id)
+        normalized_calls.append(normalized_call)
+    return normalized_calls
+
+
+def _normalize_tool_call_id(raw_call_id: str) -> str:
+    normalized = raw_call_id.strip()
+    if "__sig__" in normalized:
+        normalized = normalized.split("__sig__", 1)[0]
+    normalized = re.sub(r"[^A-Za-z0-9._:-]+", "_", normalized)
+    normalized = normalized.strip("._:-_")
+    if (
+        normalized
+        and len(normalized) <= _TOOL_CALL_ID_MAX_LENGTH
+        and normalized.startswith("call")
+    ):
+        return normalized
+
+    digest = hashlib.sha256(raw_call_id.encode("utf-8")).hexdigest()[:24]
+    return f"call_{digest}"
 
 
 def _message_content_to_text(content: Any) -> str:
