@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -70,6 +70,18 @@ class AiAssistantChatMessage(BaseModel):
     content: str = Field(min_length=1, max_length=4000)
 
 
+class AiAssistantCompletionMessage(BaseModel):
+    """OpenAI Chat Completions-style persisted message."""
+
+    model_config = ConfigDict(extra="allow")
+
+    role: Literal["system", "user", "assistant", "tool"]
+    content: Any = None
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    tool_call_id: str | None = None
+    name: str | None = None
+
+
 class AiAssistantContext(BaseModel):
     """Optional module and route context for generic assistant turns."""
 
@@ -88,14 +100,24 @@ class AiAssistantChatRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    messages: list[AiAssistantChatMessage] = Field(min_length=1, max_length=120)
+    messages: list[AiAssistantChatMessage] = Field(default_factory=list, max_length=120)
+    completion_messages: list[AiAssistantCompletionMessage] = Field(
+        default_factory=list,
+        max_length=400,
+    )
     context: AiAssistantContext | None = None
     thread_id: str | None = Field(default=None, min_length=1, max_length=120)
 
     @model_validator(mode="after")
     def validate_has_user_turn(self) -> AiAssistantChatRequest:
-        if not any(message.role == "user" for message in self.messages):
-            raise ValueError("messages must include at least one user message")
+        has_simple_user = any(message.role == "user" for message in self.messages)
+        has_completion_user = any(
+            message.role == "user" for message in self.completion_messages
+        )
+        if not (has_simple_user or has_completion_user):
+            raise ValueError(
+                "messages or completion_messages must include at least one user message"
+            )
         return self
 
 
@@ -105,6 +127,7 @@ class AiAssistantChatResponse(AiAssistEnvelope):
     thread_id: str
     answer: str
     copilot: CopilotChatResponse
+    completion_messages: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AiProcessInterpretRequest(BaseModel):
@@ -225,13 +248,26 @@ class AiGatewayService:
         self,
         payload: AiAssistantChatRequest,
     ) -> AiAssistantChatResponse:
-        question, conversation = _to_copilot_turn(payload.messages, payload.context)
+        (
+            question,
+            conversation,
+            completion_conversation,
+            completion_messages,
+        ) = _to_copilot_turn(
+            payload.messages,
+            payload.completion_messages,
+            payload.context,
+        )
         copilot = await self._ontology_copilot_service.answer(
             question,
             conversation=conversation,
+            completion_conversation=completion_conversation,
         )
         evidence, caveats = _build_copilot_evidence_and_caveats(copilot)
         thread_id = payload.thread_id or str(uuid4())
+        completion_messages = _truncate_completion_messages(
+            completion_messages + copilot.completion_messages_delta
+        )
 
         if payload.context is not None:
             context_details = _format_context_details(payload.context)
@@ -262,6 +298,7 @@ class AiGatewayService:
             ],
             thread_id=thread_id,
             copilot=copilot,
+            completion_messages=completion_messages,
         )
 
     async def process_interpret(
@@ -578,8 +615,57 @@ def _build_copilot_evidence_and_caveats(
 
 def _to_copilot_turn(
     messages: list[AiAssistantChatMessage],
+    completion_messages: list[AiAssistantCompletionMessage],
     context: AiAssistantContext | None,
-) -> tuple[str, list[CopilotConversationMessage]]:
+) -> tuple[
+    str,
+    list[CopilotConversationMessage],
+    list[dict[str, Any]] | None,
+    list[dict[str, Any]],
+]:
+    if completion_messages:
+        normalized_completion_messages = [
+            item
+            for item in (
+                _completion_message_to_dict(message)
+                for message in completion_messages
+            )
+            if item is not None
+        ]
+        last_user_index = max(
+            (
+                index
+                for index, message in enumerate(normalized_completion_messages)
+                if message.get("role") == "user"
+            ),
+            default=-1,
+        )
+        if last_user_index < 0:
+            raise ValueError(
+                "completion_messages must include at least one user message"
+            )
+
+        question = _message_content_to_text(
+            normalized_completion_messages[last_user_index].get("content")
+        )
+        if not question:
+            raise ValueError("last user completion message must include text content")
+        if context is not None:
+            context_lines = _context_lines(context)
+            if context_lines:
+                question = (
+                    "Context for this request:\n"
+                    + "\n".join(f"- {line}" for line in context_lines)
+                    + f"\n\nUser request:\n{question}"
+                )
+
+        return (
+            question,
+            [],
+            normalized_completion_messages[:last_user_index],
+            normalized_completion_messages[: last_user_index + 1],
+        )
+
     last_user_index = max(
         (index for index, message in enumerate(messages) if message.role == "user"),
         default=-1,
@@ -601,7 +687,62 @@ def _to_copilot_turn(
         CopilotConversationMessage(role=message.role, content=message.content)
         for message in messages[:last_user_index]
     ]
-    return question, conversation
+    completion_messages_for_thread = _simple_to_completion_messages(
+        messages[: last_user_index + 1]
+    )
+    return question, conversation, None, completion_messages_for_thread
+
+
+def _completion_message_to_dict(
+    message: AiAssistantCompletionMessage,
+) -> dict[str, Any] | None:
+    data = message.model_dump(mode="json", exclude_none=True)
+    role = data.get("role")
+    if role == "system":
+        # System prompts are backend-owned; ignore client-supplied system messages.
+        return None
+    return data
+
+
+def _message_content_to_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    parts.append(text)
+            else:
+                text = getattr(item, "text", None)
+                if isinstance(text, str):
+                    parts.append(text)
+        return "".join(parts).strip()
+    return ""
+
+
+def _simple_to_completion_messages(
+    messages: list[AiAssistantChatMessage],
+) -> list[dict[str, Any]]:
+    output: list[dict[str, Any]] = []
+    for message in messages:
+        output.append(
+            {
+                "role": message.role,
+                "content": message.content,
+            }
+        )
+    return output
+
+
+def _truncate_completion_messages(
+    messages: list[dict[str, Any]],
+    max_messages: int = 400,
+) -> list[dict[str, Any]]:
+    if len(messages) <= max_messages:
+        return messages
+    return messages[-max_messages:]
 
 
 def _context_lines(context: AiAssistantContext) -> list[str]:

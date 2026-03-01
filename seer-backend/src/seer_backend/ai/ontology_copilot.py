@@ -21,8 +21,6 @@ from seer_backend.ontology.models import (
     CopilotStructuredOutput,
     CopilotToolCall,
     CopilotToolResult,
-    OntologyConceptDetail,
-    OntologyConceptSummary,
     OntologySparqlQueryResponse,
 )
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
@@ -315,17 +313,22 @@ class OntologyCopilotService:
         self,
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
+        completion_conversation: list[dict[str, Any]] | None = None,
     ) -> CopilotChatResponse:
         current = await self._ontology_service.current()
-        context = await self._build_context(question)
         ontology_index_markdown = await self._build_ontology_index_markdown(
             current_release_id=current.release_id
         )
+        conversation_messages = _normalize_completion_conversation(completion_conversation)
+        if conversation_messages is None:
+            conversation_messages = [
+                {"role": message.role, "content": message.content}
+                for message in (conversation or [])
+            ]
         messages = _build_messages(
             question=question,
-            conversation=conversation or [],
+            conversation_messages=conversation_messages,
             current_release_id=current.release_id,
-            context=context,
             base_ontology_system_prompt=self._base_ontology_system_prompt,
             ontology_index_markdown=ontology_index_markdown,
         )
@@ -334,12 +337,16 @@ class OntologyCopilotService:
         tool_call: CopilotToolCall | None = None
         answer_text = ""
         total_tool_calls = 0
+        completion_messages_delta: list[dict[str, Any]] = []
 
         for round_index in range(_TOOL_CALL_MAX_ROUNDS):
             model_output = await self._model_runtime.run_messages(messages)
             answer_text = model_output.answer
             requested_calls = _requested_tool_calls(model_output)
             if not requested_calls:
+                completion_messages_delta.append(
+                    {"role": "assistant", "content": answer_text}
+                )
                 return CopilotChatResponse(
                     mode="direct_answer",
                     answer=answer_text,
@@ -347,6 +354,7 @@ class OntologyCopilotService:
                     current_release_id=current.release_id,
                     tool_call=tool_call,
                     tool_result=tool_result,
+                    completion_messages_delta=completion_messages_delta,
                 )
 
             remaining_budget = _TOOL_CALL_MAX_TOTAL - total_tool_calls
@@ -382,36 +390,20 @@ class OntologyCopilotService:
                 )
                 messages.append(assistant_message)
                 messages.append(tool_message)
+                completion_messages_delta.append(assistant_message)
+                completion_messages_delta.append(tool_message)
 
+        fallback_answer = _summarize_tool_result(tool_result)
+        completion_messages_delta.append({"role": "assistant", "content": fallback_answer})
         return CopilotChatResponse(
             mode="direct_answer",
-            answer=_summarize_tool_result(tool_result),
+            answer=fallback_answer,
             evidence=[],
             current_release_id=current.release_id,
             tool_call=tool_call,
             tool_result=tool_result,
+            completion_messages_delta=completion_messages_delta,
         )
-
-    async def _build_context(self, question: str) -> str:
-        concepts = await self._find_candidate_concepts(question)
-        detail_tasks = [
-            self._ontology_service.concept_detail(concept.iri)
-            for concept in concepts[:3]
-        ]
-        details = await asyncio.gather(*detail_tasks) if detail_tasks else []
-        return _format_context_lines(concepts=concepts, details=details)
-
-    async def _find_candidate_concepts(self, question: str) -> list[OntologyConceptSummary]:
-        direct_hits = await self._ontology_service.list_concepts(search=question, limit=8)
-        if direct_hits:
-            return direct_hits
-
-        tokens = _tokenize(question)
-        for token in tokens:
-            token_hits = await self._ontology_service.list_concepts(search=token, limit=8)
-            if token_hits:
-                return token_hits
-        return []
 
     async def _build_ontology_index_markdown(self, current_release_id: str | None) -> str:
         cache_key = current_release_id or _ONTOLOGY_INDEX_CACHE_KEY_EMPTY_RELEASE
@@ -672,9 +664,8 @@ def _direct_answer_output(answer: str) -> CopilotStructuredOutput:
 
 def _build_messages(
     question: str,
-    conversation: list[CopilotConversationMessage],
+    conversation_messages: list[dict[str, Any]],
     current_release_id: str | None,
-    context: str,
     base_ontology_system_prompt: str,
     ontology_index_markdown: str,
 ) -> list[dict[str, Any]]:
@@ -684,42 +675,14 @@ def _build_messages(
         {"role": "system", "content": _COPILOT_WORKFLOW_SYSTEM_PROMPT},
         {
             "role": "system",
-            "content": (
-                f"Current ontology release: {release_text}\n\n"
-                "Ontology and evidence context:\n"
-                f"{context}"
-            ),
+            "content": f"Current ontology release: {release_text}",
         },
         {"role": "system", "content": ontology_index_markdown},
     ]
-    for message in conversation:
-        messages.append({"role": message.role, "content": message.content})
+    for message in conversation_messages:
+        messages.append(message)
     messages.append({"role": "user", "content": question})
     return messages
-
-
-def _format_context_lines(
-    concepts: list[OntologyConceptSummary],
-    details: list[OntologyConceptDetail],
-) -> str:
-    if not concepts:
-        return "No concept matches were found for the conversation terms."
-
-    summary_lines = []
-    for concept in concepts[:8]:
-        summary_lines.append(
-            f"- Concept: {concept.label} | IRI: {concept.iri} | Category: {concept.category}"
-        )
-
-    detail_lines = []
-    for detail in details[:3]:
-        detail_lines.append(
-            f"- Detail: {detail.label} ({detail.iri}) | "
-            f"outgoing={', '.join(detail.outgoing_relations[:6]) or 'none'} | "
-            f"incoming={', '.join(detail.incoming_relations[:6]) or 'none'}"
-        )
-
-    return "\n".join(summary_lines + detail_lines)
 
 
 def _to_tool_result(
@@ -767,16 +730,32 @@ def _infer_variables(
     return ordered
 
 
-def _tokenize(value: str) -> list[str]:
-    tokens = [token.lower() for token in re.findall(r"[A-Za-z0-9_:-]{3,}", value)]
-    return tokens[:5]
-
-
 def _extract_prefix_map(turtle: str) -> dict[str, str]:
     prefixes: dict[str, str] = {}
     for alias, iri in _PREFIX_DECLARATION_PATTERN.findall(turtle):
         prefixes[alias] = iri
     return prefixes
+
+
+def _normalize_completion_conversation(
+    completion_conversation: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]] | None:
+    if completion_conversation is None:
+        return None
+
+    normalized: list[dict[str, Any]] = []
+    for message in completion_conversation:
+        if not isinstance(message, dict):
+            continue
+        role = message.get("role")
+        if role not in {"user", "assistant", "tool"}:
+            continue
+        sanitized: dict[str, Any] = {"role": role}
+        for key in ("content", "tool_calls", "tool_call_id", "name"):
+            if key in message:
+                sanitized[key] = message[key]
+        normalized.append(sanitized)
+    return normalized
 
 
 def _is_base_concept_iri(concept_iri: str) -> bool:

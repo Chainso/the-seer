@@ -1,10 +1,20 @@
 import { fetchApi } from './client';
 
 export type AssistantChatRole = 'user' | 'assistant';
+export type AssistantCompletionRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface AssistantChatMessage {
   role: AssistantChatRole;
   content: string;
+}
+
+export interface AssistantCompletionMessage {
+  role: AssistantCompletionRole;
+  content?: unknown;
+  tool_calls?: Array<Record<string, unknown>>;
+  tool_call_id?: string;
+  name?: string;
+  [key: string]: unknown;
 }
 
 export interface AssistantChatContext {
@@ -18,6 +28,7 @@ export interface AssistantChatContext {
 
 export interface AssistantChatRequest {
   messages: AssistantChatMessage[];
+  completion_messages?: AssistantCompletionMessage[];
   context?: AssistantChatContext;
   thread_id?: string;
 }
@@ -39,6 +50,7 @@ export interface AssistantChatResponse {
   caveats: string[];
   next_actions: string[];
   thread_id: string;
+  completion_messages: AssistantCompletionMessage[];
 }
 
 export async function postAssistantChat(

@@ -5,6 +5,7 @@ import type { AppendMessage, ThreadMessage } from '@assistant-ui/react';
 
 import {
   postAssistantChat,
+  type AssistantCompletionMessage,
   type AssistantChatContext,
   type AssistantChatMessage,
 } from '@/app/lib/api/assistant-chat';
@@ -14,6 +15,7 @@ const STORAGE_SYNC_CHANNEL = 'seer_assistant_threads_sync_v1';
 
 export const DEFAULT_THREAD_TITLE = 'New conversation';
 const MAX_THREAD_MESSAGES = 120;
+const MAX_COMPLETION_MESSAGES = 400;
 
 type StoredRole = 'user' | 'assistant';
 
@@ -29,6 +31,7 @@ export interface StoredThread {
   title: string;
   updatedAt: number;
   messages: StoredMessage[];
+  completionMessages: AssistantCompletionMessage[];
 }
 
 interface PersistedThreadPayloadV3 {
@@ -76,6 +79,7 @@ function createThread(seedText?: string): StoredThread {
     title,
     updatedAt: now,
     messages: [],
+    completionMessages: [],
   };
 }
 
@@ -127,16 +131,42 @@ function normalizeThreads(rawThreads: unknown): StoredThread[] {
               .filter((message): message is StoredMessage => !!message)
               .slice(-MAX_THREAD_MESSAGES)
           : [];
+        const completionMessages = normalizeCompletionMessages(
+          (maybe as { completionMessages?: unknown[] }).completionMessages
+        );
 
         return {
           id: maybe.id,
           title,
           updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
           messages,
+          completionMessages,
         };
       })
       .filter((thread): thread is StoredThread => !!thread)
   );
+}
+
+function normalizeCompletionMessages(raw: unknown): AssistantCompletionMessage[] {
+  if (!Array.isArray(raw)) return [];
+
+  const normalized: AssistantCompletionMessage[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const maybe = entry as Record<string, unknown>;
+    const role = maybe.role;
+    if (role !== 'system' && role !== 'user' && role !== 'assistant' && role !== 'tool') {
+      continue;
+    }
+    const next: AssistantCompletionMessage = { role };
+    for (const [key, value] of Object.entries(maybe)) {
+      if (key === 'role') continue;
+      next[key] = value;
+    }
+    normalized.push(next);
+  }
+
+  return normalized.slice(-MAX_COMPLETION_MESSAGES);
 }
 
 function parseV3Payload(raw: string): PersistedThreadPayloadV3 | null {
@@ -395,6 +425,10 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
       const existingThread = snapshot.find((thread) => thread.id === currentActiveId);
       const baseThread = existingThread || createThread(trimmed);
       const nextMessages = [...baseThread.messages, userMessage].slice(-MAX_THREAD_MESSAGES);
+      const nextCompletionMessages = [
+        ...(baseThread.completionMessages || []),
+        { role: 'user', content: trimmed } satisfies AssistantCompletionMessage,
+      ].slice(-MAX_COMPLETION_MESSAGES);
       const nextTitle =
         baseThread.title === DEFAULT_THREAD_TITLE ? getTitleFromText(trimmed) : baseThread.title;
 
@@ -407,6 +441,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
               title: nextTitle || DEFAULT_THREAD_TITLE,
               updatedAt: Date.now(),
               messages: nextMessages,
+              completionMessages: nextCompletionMessages,
             },
             ...previous.filter((thread) => thread.id !== currentActiveId),
           ])
@@ -417,6 +452,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           title: nextTitle || DEFAULT_THREAD_TITLE,
           updatedAt: Date.now(),
           messages: nextMessages,
+          completionMessages: nextCompletionMessages,
         }));
       }
 
@@ -428,6 +464,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
         const response = await postAssistantChat({
           thread_id: currentActiveId,
           messages: toAssistantChatMessages(nextMessages),
+          completion_messages: nextCompletionMessages,
           context,
         });
 
@@ -442,6 +479,16 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           ...thread,
           updatedAt: Date.now(),
           messages: [...thread.messages, assistantMessage].slice(-MAX_THREAD_MESSAGES),
+          completionMessages:
+            response.completion_messages.length > 0
+              ? response.completion_messages.slice(-MAX_COMPLETION_MESSAGES)
+              : [
+                  ...(thread.completionMessages || []),
+                  {
+                    role: 'assistant',
+                    content: assistantMessage.text,
+                  } satisfies AssistantCompletionMessage,
+                ].slice(-MAX_COMPLETION_MESSAGES),
         }));
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Assistant request failed';
@@ -456,6 +503,13 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           ...thread,
           updatedAt: Date.now(),
           messages: [...thread.messages, assistantMessage].slice(-MAX_THREAD_MESSAGES),
+          completionMessages: [
+            ...(thread.completionMessages || []),
+            {
+              role: 'assistant',
+              content: assistantMessage.text,
+            } satisfies AssistantCompletionMessage,
+          ].slice(-MAX_COMPLETION_MESSAGES),
         }));
       } finally {
         setRunningThreadIds((previous) => previous.filter((id) => id !== currentActiveId));

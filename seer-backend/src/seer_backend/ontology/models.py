@@ -171,6 +171,7 @@ class CopilotChatResponse(BaseModel):
     current_release_id: str | None = None
     tool_call: CopilotToolCall | None = None
     tool_result: CopilotToolResult | None = None
+    completion_messages_delta: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def parse_copilot_structured_output(output_json_text: str) -> CopilotStructuredOutput:
