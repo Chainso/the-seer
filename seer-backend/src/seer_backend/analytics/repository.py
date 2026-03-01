@@ -131,10 +131,13 @@ class ClickHouseProcessMiningRepository:
         max_events: int,
         max_relations: int,
     ) -> ExtractedProcessFrames:
-        include_object_types = payload.include_object_types
-        anchor_events = _anchor_events_subquery(payload)
+        include_object_types = _effective_include_object_types(payload)
+        scoped_events = _events_scope_subquery(
+            payload=payload,
+            include_object_types=include_object_types,
+        )
 
-        event_count_stmt = select(func.count().label("cnt")).select_from(anchor_events)
+        event_count_stmt = select(func.count().label("cnt")).select_from(scoped_events)
         event_count_rows = await self._select_rows(event_count_stmt)
         event_count = int(event_count_rows[0].get("cnt", 0)) if event_count_rows else 0
         if event_count > max_events:
@@ -145,12 +148,12 @@ class ClickHouseProcessMiningRepository:
             )
 
         links = _EVENT_OBJECT_LINKS.alias("l")
-        relation_source = links.join(anchor_events, anchor_events.c.event_id == links.c.event_id)
-        relation_count_stmt = select(func.count().label("cnt")).select_from(relation_source)
-        if include_object_types:
-            relation_count_stmt = relation_count_stmt.where(
-                links.c.object_type.in_(include_object_types)
-            )
+        relation_source = links.join(scoped_events, scoped_events.c.event_id == links.c.event_id)
+        relation_count_stmt = (
+            select(func.count().label("cnt"))
+            .select_from(relation_source)
+            .where(links.c.object_type.in_(include_object_types))
+        )
         relation_count_rows = await self._select_rows(relation_count_stmt)
         relation_count = int(relation_count_rows[0].get("cnt", 0)) if relation_count_rows else 0
         if relation_count > max_relations:
@@ -169,7 +172,7 @@ class ClickHouseProcessMiningRepository:
                 events.c.source,
                 events.c.trace_id,
             )
-            .select_from(events.join(anchor_events, anchor_events.c.event_id == events.c.event_id))
+            .select_from(events.join(scoped_events, scoped_events.c.event_id == events.c.event_id))
             .order_by(events.c.occurred_at, events.c.event_id)
         )
 
@@ -183,6 +186,7 @@ class ClickHouseProcessMiningRepository:
                 links.c.relation_role,
             )
             .select_from(relation_source)
+            .where(links.c.object_type.in_(include_object_types))
             .order_by(
                 links.c.event_id,
                 links.c.object_type,
@@ -190,16 +194,13 @@ class ClickHouseProcessMiningRepository:
                 links.c.object_history_id,
             )
         )
-        if include_object_types:
-            relations_stmt = relations_stmt.where(links.c.object_type.in_(include_object_types))
 
-        relation_objects_stmt = select(links.c.object_history_id).distinct().select_from(
-            relation_source
+        relation_objects_stmt = (
+            select(links.c.object_history_id)
+            .distinct()
+            .select_from(relation_source)
+            .where(links.c.object_type.in_(include_object_types))
         )
-        if include_object_types:
-            relation_objects_stmt = relation_objects_stmt.where(
-                links.c.object_type.in_(include_object_types)
-            )
         relation_objects = relation_objects_stmt.subquery("relation_objects")
 
         objects = _OBJECT_HISTORY.alias("o")
@@ -244,12 +245,15 @@ class ClickHouseProcessMiningRepository:
         max_events: int,
         max_relations: int,
     ) -> ExtractedOcdfgFrames:
-        include_object_types = payload.include_object_types
-        anchor_events = _anchor_events_subquery(payload)
+        include_object_types = _effective_include_object_types(payload)
+        scoped_events = _events_scope_subquery(
+            payload=payload,
+            include_object_types=include_object_types,
+        )
         events = _EVENT_HISTORY.alias("e")
         links = _EVENT_OBJECT_LINKS.alias("l")
 
-        event_count_stmt = select(func.count().label("cnt")).select_from(anchor_events)
+        event_count_stmt = select(func.count().label("cnt")).select_from(scoped_events)
         event_count_rows = await self._select_rows(event_count_stmt)
         event_count = int(event_count_rows[0].get("cnt", 0)) if event_count_rows else 0
         if event_count > max_events:
@@ -259,12 +263,12 @@ class ClickHouseProcessMiningRepository:
                 "narrow time window or object-type filters"
             )
 
-        relation_source = links.join(anchor_events, anchor_events.c.event_id == links.c.event_id)
-        relation_count_stmt = select(func.count().label("cnt")).select_from(relation_source)
-        if include_object_types:
-            relation_count_stmt = relation_count_stmt.where(
-                links.c.object_type.in_(include_object_types)
-            )
+        relation_source = links.join(scoped_events, scoped_events.c.event_id == links.c.event_id)
+        relation_count_stmt = (
+            select(func.count().label("cnt"))
+            .select_from(relation_source)
+            .where(links.c.object_type.in_(include_object_types))
+        )
         relation_count_rows = await self._select_rows(relation_count_stmt)
         relation_count = int(relation_count_rows[0].get("cnt", 0)) if relation_count_rows else 0
         if relation_count > max_relations:
@@ -280,7 +284,7 @@ class ClickHouseProcessMiningRepository:
                 events.c.event_type.label("ocel_activity"),
                 events.c.occurred_at.label("ocel_timestamp"),
             )
-            .select_from(events.join(anchor_events, anchor_events.c.event_id == events.c.event_id))
+            .select_from(events.join(scoped_events, scoped_events.c.event_id == events.c.event_id))
             .order_by(events.c.occurred_at, events.c.event_id)
         )
 
@@ -293,11 +297,12 @@ class ClickHouseProcessMiningRepository:
                 links.c.object_ref_hash.label("object_ref_hash"),
             )
             .select_from(
-                links.join(anchor_events, anchor_events.c.event_id == links.c.event_id).join(
+                links.join(scoped_events, scoped_events.c.event_id == links.c.event_id).join(
                     events,
                     events.c.event_id == links.c.event_id,
                 )
             )
+            .where(links.c.object_type.in_(include_object_types))
             .order_by(
                 events.c.occurred_at,
                 links.c.event_id,
@@ -305,20 +310,17 @@ class ClickHouseProcessMiningRepository:
                 links.c.object_ref_hash,
             )
         )
-        if include_object_types:
-            relations_stmt = relations_stmt.where(links.c.object_type.in_(include_object_types))
 
         objects_stmt = (
             select(
                 links.c.object_type.label("ocel_type"),
                 links.c.object_ref_hash.label("object_ref_hash"),
             )
-            .select_from(links.join(anchor_events, anchor_events.c.event_id == links.c.event_id))
+            .select_from(links.join(scoped_events, scoped_events.c.event_id == links.c.event_id))
+            .where(links.c.object_type.in_(include_object_types))
             .distinct()
             .order_by(links.c.object_type, links.c.object_ref_hash)
         )
-        if include_object_types:
-            objects_stmt = objects_stmt.where(links.c.object_type.in_(include_object_types))
 
         event_frame = await self._select_dataframe(events_stmt)
         relation_frame = await self._select_dataframe(relations_stmt)
@@ -465,10 +467,11 @@ class InMemoryProcessMiningRepository:
         self._materialize_from_history_repo()
         window_start = _ensure_utc(payload.start_at)
         window_end = _ensure_utc(payload.end_at)
+        include_object_types = set(_effective_include_object_types(payload))
 
-        anchor_event_ids: set[UUID] = set()
+        scoped_event_ids: set[UUID] = set()
         for relation in self._relations:
-            if relation.object_type != payload.anchor_object_type:
+            if relation.object_type not in include_object_types:
                 continue
             event_row = self._events.get(relation.event_id)
             if event_row is None:
@@ -476,19 +479,18 @@ class InMemoryProcessMiningRepository:
             occurred_at = _ensure_utc(event_row.occurred_at)
             if occurred_at < window_start or occurred_at > window_end:
                 continue
-            anchor_event_ids.add(event_row.event_id)
+            scoped_event_ids.add(event_row.event_id)
 
         selected_events = [
-            event for event in self._events.values() if event.event_id in anchor_event_ids
+            event for event in self._events.values() if event.event_id in scoped_event_ids
         ]
         selected_events.sort(key=lambda row: (_ensure_utc(row.occurred_at), str(row.event_id)))
 
-        object_type_filter = set(payload.include_object_types or [])
         selected_relations = [
             relation
             for relation in self._relations
-            if relation.event_id in anchor_event_ids
-            and (not object_type_filter or relation.object_type in object_type_filter)
+            if relation.event_id in scoped_event_ids
+            and relation.object_type in include_object_types
         ]
         selected_relations.sort(
             key=lambda row: (
@@ -597,7 +599,11 @@ class InMemoryProcessMiningRepository:
         )
 
 
-def _anchor_events_subquery(payload: ProcessMiningRequest) -> Any:
+def _events_scope_subquery(
+    *,
+    payload: ProcessMiningRequest,
+    include_object_types: list[str],
+) -> Any:
     links = _EVENT_OBJECT_LINKS.alias("l")
     events = _EVENT_HISTORY.alias("e")
     return (
@@ -605,12 +611,19 @@ def _anchor_events_subquery(payload: ProcessMiningRequest) -> Any:
         .distinct()
         .select_from(links.join(events, events.c.event_id == links.c.event_id))
         .where(
-            links.c.object_type == payload.anchor_object_type,
+            links.c.object_type.in_(include_object_types),
             events.c.occurred_at >= _ensure_utc(payload.start_at),
             events.c.occurred_at <= _ensure_utc(payload.end_at),
         )
-        .subquery("anchor_events")
+        .subquery("scoped_events")
     )
+
+
+def _effective_include_object_types(payload: ProcessMiningRequest) -> list[str]:
+    include_object_types = payload.include_object_types
+    if include_object_types:
+        return include_object_types
+    return [payload.anchor_object_type]
 
 
 def _split_sql_statements(sql_text: str) -> list[str]:

@@ -15,6 +15,8 @@ from seer_backend.history.service import HistoryService
 from seer_backend.main import create_app
 
 _ORDER_URI = "urn:seer:test:order"
+_INVOICE_URI = "urn:seer:test:invoice"
+_INVOICE_REMINDER_EVENT_URI = "urn:seer:test:invoice_reminded"
 
 
 def _to_uri_identifier(value: str) -> str:
@@ -174,6 +176,22 @@ def _seed_phase2_style_dataset(client: TestClient) -> None:
                 },
             ],
         },
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T10:35:00Z",
+            "event_type": "invoice.reminded",
+            "source": "billing",
+            "trace_id": "trace-order-100",
+            "payload": {"invoice_id": "INV-100", "status": "reminded"},
+            "updated_objects": [
+                {
+                    "object_type": "Invoice",
+                    "object_ref": {"tenant": "acme", "invoice_id": "INV-100"},
+                    "object": {"object_type": "Invoice", "status": "reminded"},
+                    "relation_role": "primary",
+                }
+            ],
+        },
     ]
 
     for payload in events:
@@ -229,6 +247,45 @@ def test_process_mining_is_deterministic_for_same_snapshot() -> None:
     assert first_body["edges"] == second_body["edges"]
     assert first_body["object_types"] == second_body["object_types"]
     assert first_body["path_stats"] == second_body["path_stats"]
+
+
+def test_process_mining_include_object_types_expands_event_scope() -> None:
+    client = build_client()
+    _seed_phase2_style_dataset(client)
+
+    anchor_only = client.post(
+        "/api/v1/process/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+        },
+    )
+    include_invoice = client.post(
+        "/api/v1/process/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "include_object_types": [_INVOICE_URI],
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+        },
+    )
+
+    assert anchor_only.status_code == 200, anchor_only.text
+    assert include_invoice.status_code == 200, include_invoice.text
+
+    anchor_body = anchor_only.json()
+    include_body = include_invoice.json()
+
+    anchor_node_labels = {node["label"] for node in anchor_body["nodes"]}
+    include_node_labels = {node["label"] for node in include_body["nodes"]}
+    assert _INVOICE_REMINDER_EVENT_URI not in anchor_node_labels
+    assert _INVOICE_REMINDER_EVENT_URI in include_node_labels
+
+    anchor_edge_types = {edge["object_type"] for edge in anchor_body["edges"]}
+    include_edge_types = {edge["object_type"] for edge in include_body["edges"]}
+    assert anchor_edge_types == {_ORDER_URI}
+    assert include_edge_types == {_ORDER_URI, _INVOICE_URI}
 
 
 def test_process_mining_validation_errors_are_actionable() -> None:
@@ -363,6 +420,43 @@ def test_ocdfg_mining_is_deterministic_for_same_snapshot() -> None:
     assert first_body["end_activities"] == second_body["end_activities"]
     assert first_body["object_types"] == second_body["object_types"]
     assert first_body["warnings"] == second_body["warnings"]
+
+
+def test_ocdfg_mining_include_object_types_expands_event_scope() -> None:
+    client = build_client()
+    _seed_phase2_style_dataset(client)
+
+    anchor_only = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+        },
+    )
+    include_invoice = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "include_object_types": [_INVOICE_URI],
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+        },
+    )
+
+    assert anchor_only.status_code == 200, anchor_only.text
+    assert include_invoice.status_code == 200, include_invoice.text
+
+    anchor_body = anchor_only.json()
+    include_body = include_invoice.json()
+
+    anchor_activities = {node["activity"] for node in anchor_body["nodes"]}
+    include_activities = {node["activity"] for node in include_body["nodes"]}
+    assert _INVOICE_REMINDER_EVENT_URI not in anchor_activities
+    assert _INVOICE_REMINDER_EVENT_URI in include_activities
+
+    assert set(anchor_body["object_types"]) == {_ORDER_URI}
+    assert set(include_body["object_types"]) == {_ORDER_URI, _INVOICE_URI}
 
 
 def test_ocdfg_mining_validation_errors_are_actionable() -> None:
