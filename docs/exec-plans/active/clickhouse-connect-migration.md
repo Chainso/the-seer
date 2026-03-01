@@ -183,7 +183,7 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 ## Progress Checklist
 
 - [x] Phase 1 complete
-- [ ] Phase 2 complete
+- [x] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
@@ -193,3 +193,4 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 1. 2026-03-01: Created dedicated migration plan to decouple transport modernization from OC-DFG feature delivery and reduce execution risk.
 2. 2026-03-01: Added explicit SQLAlchemy dialect spike phase to evaluate `clickhousedb` integration with documented scope limits before adoption.
 3. 2026-03-01: Shared client now raises explicit transport exceptions (`ClickHouseQueryExecutionError`, `ClickHouseCommandExecutionError`); repositories map these to module domain errors (`HistoryError` now, Process/RCA in later phases).
+4. 2026-03-01: Phase 2 migrated `ClickHouseHistoryRepository` read/write execution to `AsyncClickHouseClient`, removed direct `httpx` transport helpers, and kept repository-level `HistoryError` mapping stable for query/statement failure paths.
