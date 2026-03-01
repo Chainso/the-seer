@@ -50,13 +50,27 @@ def test_dropped_callback_and_stale_lease_trigger_redelivery_before_completion()
         now=now,
     )
     # Simulate dropped completion callback from instance-a and lease expiry.
-    second_claim = repository.claim_actions(
+    no_claim_before_sweep = repository.claim_actions(
         user_id="user-faults-1",
         instance_id="instance-b",
         capacity=1,
         max_actions=1,
         lease_seconds=60,
         now=now + timedelta(seconds=61),
+    )
+    sweep = repository.sweep_expired_leases(
+        advisory_lock_id=301,
+        batch_size=10,
+        retry_delay_seconds=0,
+        now=now + timedelta(seconds=61),
+    )
+    second_claim = repository.claim_actions(
+        user_id="user-faults-1",
+        instance_id="instance-b",
+        capacity=1,
+        max_actions=1,
+        lease_seconds=60,
+        now=now + timedelta(seconds=62),
     )
 
     with pytest.raises(ActionConflictError, match="does not own the active lease") as exc_info:
@@ -74,6 +88,9 @@ def test_dropped_callback_and_stale_lease_trigger_redelivery_before_completion()
     )
 
     assert len(first_claim) == 1
+    assert no_claim_before_sweep == []
+    assert sweep.leadership_acquired
+    assert sweep.transitioned_retry_wait == 1
     assert len(second_claim) == 1
     assert first_claim[0].action_id == created.action_id
     assert second_claim[0].action_id == created.action_id

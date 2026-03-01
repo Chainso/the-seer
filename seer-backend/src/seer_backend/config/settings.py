@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     actions_heartbeat_seconds: int = Field(default=20, ge=5, le=3600)
     actions_stale_instance_seconds: int = Field(default=90, ge=10, le=3600)
     actions_sweeper_interval_seconds: int = Field(default=20, ge=1, le=3600)
+    actions_sweeper_enabled: bool = True
+    actions_sweeper_batch_size: int = Field(default=100, ge=1, le=5000)
+    actions_sweeper_advisory_lock_id: int = Field(default=104_729, ge=1, le=2_147_483_647)
+    actions_sweeper_retry_delay_seconds: int = Field(default=2, ge=0, le=3600)
     actions_schema_bootstrap_on_startup: bool = False
     process_mining_max_events: int = Field(default=5_000, ge=100, le=200_000)
     process_mining_max_relations: int = Field(default=40_000, ge=100, le=500_000)

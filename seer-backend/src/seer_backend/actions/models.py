@@ -99,3 +99,13 @@ class InstanceRecord:
     last_seen_at: datetime
     capacity: int | None
     metadata: JsonObject | None
+
+
+@dataclass(slots=True, frozen=True)
+class LeaseSweepResult:
+    leadership_acquired: bool
+    scanned_actions: int = 0
+    transitioned_retry_wait: int = 0
+    transitioned_dead_letter: int = 0
+    attempts_marked_lease_expired: int = 0
+    dead_letter_upserts: int = 0

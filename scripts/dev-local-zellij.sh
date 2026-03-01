@@ -54,6 +54,11 @@ export SEER_CLICKHOUSE_DATABASE="${SEER_CLICKHOUSE_DATABASE:-${CLICKHOUSE_DB:-se
 export SEER_CLICKHOUSE_USER="${SEER_CLICKHOUSE_USER:-${CLICKHOUSE_USER:-seer}}"
 export SEER_CLICKHOUSE_PASSWORD="${SEER_CLICKHOUSE_PASSWORD:-${CLICKHOUSE_PASSWORD:-seer}}"
 export SEER_ACTIONS_DB_DSN="${SEER_ACTIONS_DB_DSN:-postgresql+psycopg://${SEER_ACTIONS_POSTGRES_USER:-seer}:${SEER_ACTIONS_POSTGRES_PASSWORD:-seer}@localhost:${SEER_ACTIONS_DB_PORT:-5432}/${SEER_ACTIONS_POSTGRES_DB:-seer_actions}}"
+export SEER_ACTIONS_SWEEPER_ENABLED="${SEER_ACTIONS_SWEEPER_ENABLED:-true}"
+export SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS="${SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS:-20}"
+export SEER_ACTIONS_SWEEPER_BATCH_SIZE="${SEER_ACTIONS_SWEEPER_BATCH_SIZE:-100}"
+export SEER_ACTIONS_SWEEPER_ADVISORY_LOCK_ID="${SEER_ACTIONS_SWEEPER_ADVISORY_LOCK_ID:-104729}"
+export SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS="${SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS:-2}"
 export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}"
 
 docker compose -f docker-compose.db.yml up -d
@@ -88,8 +93,13 @@ layout {
         pane name="backend" command="bash" cwd="${ROOT_DIR}/seer-backend" {
           args "-lc" "uv run uvicorn seer_backend.main:app --reload --host 0.0.0.0 --port 8000"
         }
-        pane name="ui" command="bash" cwd="${ROOT_DIR}/seer-ui" {
-          args "-lc" "npm run dev"
+        pane split_direction="Vertical" {
+          pane name="ui" command="bash" cwd="${ROOT_DIR}/seer-ui" {
+            args "-lc" "npm run dev"
+          }
+          pane name="actions-sweeper" command="bash" cwd="${ROOT_DIR}/seer-backend" {
+            args "-lc" "uv run seer-actions-maintenance"
+          }
         }
       }
       pane split_direction="Horizontal" {

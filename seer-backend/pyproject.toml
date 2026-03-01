@@ -21,6 +21,9 @@ dependencies = [
   "psycopg[binary]>=3.2.10,<4",
 ]
 
+[project.scripts]
+seer-actions-maintenance = "seer_backend.actions.maintenance:run"
+
 [project.optional-dependencies]
 dev = [
   "pytest>=8.4.0,<9",

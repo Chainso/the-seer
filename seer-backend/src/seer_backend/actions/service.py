@@ -25,6 +25,7 @@ from seer_backend.actions.models import (
     ActionSubmitResult,
     InstanceRecord,
     InstanceStatus,
+    LeaseSweepResult,
 )
 from seer_backend.actions.repository import (
     ActionsRepository,
@@ -374,6 +375,21 @@ class ActionsService:
             retry_delay_seconds=retry_delay_seconds,
         )
 
+    async def sweep_expired_leases(
+        self,
+        *,
+        advisory_lock_id: int,
+        batch_size: int,
+        retry_delay_seconds: int,
+    ) -> LeaseSweepResult:
+        await self.ensure_schema()
+        return await asyncio.to_thread(
+            self._repository.sweep_expired_leases,
+            advisory_lock_id=advisory_lock_id,
+            batch_size=batch_size,
+            retry_delay_seconds=retry_delay_seconds,
+        )
+
     async def submit_action(
         self,
         *,
@@ -531,21 +547,33 @@ class UnavailableActionsService:
         del action_id, instance_id, error_code, error_detail
         raise ActionDependencyUnavailableError(self.reason)
 
+    async def sweep_expired_leases(
+        self,
+        *,
+        advisory_lock_id: int,
+        batch_size: int,
+        retry_delay_seconds: int,
+    ) -> LeaseSweepResult:
+        del advisory_lock_id, batch_size, retry_delay_seconds
+        raise ActionDependencyUnavailableError(self.reason)
+
+
+def build_actions_repository(settings: Settings) -> PostgresActionsRepository:
+    backend_root = Path(__file__).resolve().parents[3]
+    migrations_dir = Path(settings.actions_db_migrations_dir)
+    if not migrations_dir.is_absolute():
+        migrations_dir = backend_root / migrations_dir
+    return PostgresActionsRepository(
+        dsn=settings.actions_db_dsn,
+        migrations_dir=migrations_dir,
+        pool_size=settings.actions_db_pool_size,
+        max_overflow=settings.actions_db_max_overflow,
+    )
+
 
 def build_actions_service(settings: Settings) -> ActionsService | UnavailableActionsService:
     try:
-        backend_root = Path(__file__).resolve().parents[3]
-        migrations_dir = Path(settings.actions_db_migrations_dir)
-        if not migrations_dir.is_absolute():
-            migrations_dir = backend_root / migrations_dir
-
-        repository = PostgresActionsRepository(
-            dsn=settings.actions_db_dsn,
-            migrations_dir=migrations_dir,
-            pool_size=settings.actions_db_pool_size,
-            max_overflow=settings.actions_db_max_overflow,
-        )
-        return ActionsService(repository=repository)
+        return ActionsService(repository=build_actions_repository(settings))
     except Exception as exc:  # pragma: no cover - tested through fallback behavior
         return UnavailableActionsService(f"actions service initialization failed: {exc}")
 

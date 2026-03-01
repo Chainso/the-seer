@@ -670,7 +670,7 @@ Current execution state:
 1. Added `POST /api/v1/actions/claim` with capacity-aware batch leasing (`capacity` + optional `max_actions`) and lease metadata in responses.
 2. Added explicit `POST /api/v1/actions/instances/heartbeat` endpoint with minimum viable liveness/status/capacity/metadata updates.
 3. Added claim-path heartbeat/upsert semantics in repository/service and enforced draining exclusion (`draining` instances receive zero new claims).
-4. Expanded claim eligibility to include reclaim after lease expiry and preserved lease exclusivity across competing instances.
+4. Preserved lease exclusivity across competing instances with claim eligibility constrained to `queued/retry_wait`; lease-expiry reconciliation is handled by sweeper maintenance.
 5. Added `tests/test_actions_claim.py` covering:
    - lease exclusivity between two instances,
    - reclaim after lease expiry,
@@ -695,7 +695,7 @@ Current execution state:
    - retry exhaustion -> `dead_letter`,
    - invalid lease-owner conflict mapping (actionable `409`),
    - dependency-unavailable mapping (`503`) for complete/fail APIs.
-6. Phase scope note: dedicated sweeper process/runtime is intentionally deferred; retry visibility is represented through `retry_wait` + `next_visible_at` and enforced by existing claim eligibility logic.
+6. Reliability hardening follow-up delivered dedicated sweeper process/runtime with advisory-lock singleton leadership; expired `leased/running` actions now reconcile proactively to `retry_wait`/`dead_letter`.
 7. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_lifecycle.py` -> pass (`All checks passed!`).
 8. `cd seer-backend && uv run pytest -q tests/test_actions_lifecycle.py` -> pass (`7 passed`).
 9. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py` -> pass (`20 passed`).
@@ -753,8 +753,7 @@ Current execution state:
    - updated `docs/exec-plans/active/index.md` to remove active entry and set `in_progress` to none,
    - moved this plan to `docs/exec-plans/completed/action-orchestration-backend-service.md`,
    - added completed-plan index entry in `docs/exec-plans/completed/README.md`.
-5. Recorded intentional deferral in `docs/exec-plans/tech-debt-tracker.md`:
-   - dedicated sweeper/maintenance runtime for proactive lease-expiry reconciliation is deferred.
+5. Closed dedicated sweeper-runtime debt item in `docs/exec-plans/tech-debt-tracker.md` after reliability-hardening implementation.
 6. `cd seer-backend && uv run ruff check src/seer_backend/actions src/seer_backend/api tests/test_actions_*.py` -> pass (`All checks passed!`).
 7. `cd seer-backend && uv run pytest -q tests/test_actions_repository.py tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_lifecycle.py tests/test_actions_status_api.py tests/test_actions_concurrency.py tests/test_actions_faults.py` -> pass (`30 passed, 44 warnings`; warnings unchanged and non-blocking: FastAPI startup `on_event` + `HTTP_422_UNPROCESSABLE_ENTITY` deprecations).
 
@@ -766,8 +765,7 @@ Current execution state:
 
 ## Known Issues and Deferrals
 
-1. Dedicated sweeper/maintenance runtime implementation (including advisory-lock singleton runtime ownership) remains deferred; current behavior relies on claim-time lease-expiry reclaim logic.
-2. Deeper semantic payload type validation (enum/domain/date strictness beyond current ontology-driven shape/cardinality/type checks) remains deferred.
+1. Deeper semantic payload type validation (enum/domain/date strictness beyond current ontology-driven shape/cardinality/type checks) remains deferred.
 
 ## Decision Log
 
@@ -788,12 +786,12 @@ Current execution state:
 15. 2026-03-01: Added plan guardrail requiring per-phase scoped commits (including worker-owned phase implementation slices).
 16. 2026-03-01: Phase 2 completed with best-available ontology input validation (`acceptsInput` + `hasProperty` + cardinality + basic type/object-reference checks) and deterministic contract hashing.
 17. 2026-03-01: Deferred deeper semantic type validation (enum/domain-specific constraints/date-format strictness) to later phases; current behavior returns actionable 422s for contract coverage available today.
-18. 2026-03-01: Phase 3 completed with claim transport, instance heartbeat transport, claim-path instance upsert, draining claim exclusion, and lease-expiry reclaim coverage.
-19. 2026-03-01: Phase 4 completed with complete/fail lifecycle transports, lease ownership enforcement, retry scheduling, and dead-letter transition behavior; dedicated sweeper runtime remains deferred by phase scope.
+18. 2026-03-01: Phase 3 completed with claim transport, instance heartbeat transport, claim-path instance upsert, and draining claim exclusion; lease-expiry reclaim moved to dedicated sweeper runtime during reliability hardening.
+19. 2026-03-01: Phase 4 completed with complete/fail lifecycle transports, lease ownership enforcement, retry scheduling, and dead-letter transition behavior.
 20. 2026-03-01: Phase 5 completed with action status query transports, filtered/paginated list API, and deterministic polling-backed status SSE stream (`snapshot/update/terminal`) aligned to persisted state transitions.
 21. 2026-03-01: Phase 6 completed with deterministic concurrency contention tests and fault-injection lifecycle tests validating no duplicate lease claims, stale-lease conflict handling, duplicate-complete idempotency, and retry-to-dead-letter progression under induced failures; no runtime code changes were required for this phase.
 22. 2026-03-01: Phase 7 completed with canonical doc ratification (`ARCHITECTURE.md`, `VISION.md`, `DESIGN.md`), new product spec coverage, active/completed index closeout updates, and plan archive move preparation.
-23. 2026-03-01: Deferred dedicated sweeper runtime implementation is explicitly tracked in `docs/exec-plans/tech-debt-tracker.md`; current claim-time lease-expiry reclaim semantics remain the active behavior.
+23. 2026-03-01: Reliability hardening delivered dedicated sweeper runtime with advisory-lock singleton leadership and proactive lease-expiry reconciliation as the canonical recovery path.
 
 ## Post-Completion Follow-up Context
 

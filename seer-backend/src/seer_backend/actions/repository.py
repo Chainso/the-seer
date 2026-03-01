@@ -43,6 +43,7 @@ from seer_backend.actions.models import (
     AttemptOutcome,
     InstanceRecord,
     InstanceStatus,
+    LeaseSweepResult,
 )
 
 metadata = MetaData()
@@ -191,6 +192,15 @@ class ActionsRepository(Protocol):
         retry_delay_seconds: int,
         now: datetime | None = None,
     ) -> ActionRecord: ...
+
+    def sweep_expired_leases(
+        self,
+        *,
+        advisory_lock_id: int,
+        batch_size: int,
+        retry_delay_seconds: int,
+        now: datetime | None = None,
+    ) -> LeaseSweepResult: ...
 
 
 @dataclass(slots=True)
@@ -409,22 +419,8 @@ class PostgresActionsRepository:
                         .where(
                             and_(
                                 actions_table.c.user_id == user_id,
-                                (
-                                    and_(
-                                        actions_table.c.status.in_(queued_statuses),
-                                        actions_table.c.next_visible_at <= now_utc,
-                                    )
-                                    | and_(
-                                        actions_table.c.status.in_(
-                                            (
-                                                ActionStatus.LEASED.value,
-                                                ActionStatus.RUNNING.value,
-                                            )
-                                        ),
-                                        actions_table.c.lease_expires_at.is_not(None),
-                                        actions_table.c.lease_expires_at <= now_utc,
-                                    )
-                                ),
+                                actions_table.c.status.in_(queued_statuses),
+                                actions_table.c.next_visible_at <= now_utc,
                             )
                         )
                         .order_by(
@@ -701,6 +697,153 @@ class PostgresActionsRepository:
             raise ActionRepositoryError(f"failed action '{action_id}' could not be loaded")
         return _action_from_row(updated_row)
 
+    def sweep_expired_leases(
+        self,
+        *,
+        advisory_lock_id: int,
+        batch_size: int,
+        retry_delay_seconds: int,
+        now: datetime | None = None,
+    ) -> LeaseSweepResult:
+        now_utc = _ensure_utc(now or datetime.now(UTC))
+        batch_limit = max(int(batch_size), 1)
+        retry_delay = max(int(retry_delay_seconds), 0)
+        try:
+            with self._engine_instance().begin() as connection:
+                leadership_acquired = bool(
+                    connection.execute(
+                        select(func.pg_try_advisory_xact_lock(int(advisory_lock_id)))
+                    ).scalar_one()
+                )
+                if not leadership_acquired:
+                    return LeaseSweepResult(leadership_acquired=False)
+
+                candidate_rows = (
+                    connection.execute(
+                        select(
+                            actions_table.c.action_id,
+                            actions_table.c.attempt_count,
+                            actions_table.c.max_attempts,
+                            actions_table.c.lease_owner_instance_id,
+                            actions_table.c.lease_expires_at,
+                        )
+                        .where(
+                            and_(
+                                actions_table.c.status.in_(
+                                    (ActionStatus.LEASED.value, ActionStatus.RUNNING.value)
+                                ),
+                                actions_table.c.lease_expires_at.is_not(None),
+                                actions_table.c.lease_expires_at <= now_utc,
+                            )
+                        )
+                        .order_by(
+                            actions_table.c.lease_expires_at,
+                            actions_table.c.submitted_at,
+                            actions_table.c.action_id,
+                        )
+                        .limit(batch_limit)
+                        .with_for_update(skip_locked=True)
+                    )
+                    .mappings()
+                    .all()
+                )
+                if not candidate_rows:
+                    return LeaseSweepResult(leadership_acquired=True)
+
+                transitioned_retry_wait = 0
+                transitioned_dead_letter = 0
+                attempts_marked_lease_expired = 0
+                dead_letter_upserts = 0
+                for row in candidate_rows:
+                    action_id = UUID(str(row["action_id"]))
+                    attempt_count = int(row["attempt_count"])
+                    max_attempts = int(row["max_attempts"])
+                    lease_owner = _optional_string(row["lease_owner_instance_id"])
+                    lease_expires_at = _to_optional_datetime(row["lease_expires_at"])
+                    error_detail = _lease_expired_error_detail(
+                        lease_owner=lease_owner,
+                        lease_expires_at=lease_expires_at,
+                    )
+
+                    attempt_update = connection.execute(
+                        update(action_attempts_table)
+                        .where(
+                            and_(
+                                action_attempts_table.c.action_id == action_id,
+                                action_attempts_table.c.attempt_no == attempt_count,
+                            )
+                        )
+                        .values(
+                            finished_at=now_utc,
+                            outcome=AttemptOutcome.LEASE_EXPIRED.value,
+                            error_code="lease_expired",
+                            error_detail=error_detail,
+                        )
+                    )
+                    if (attempt_update.rowcount or 0) < 1:
+                        raise ActionRepositoryError(
+                            "action attempt record missing for lease-expiry sweep "
+                            f"(action_id='{action_id}', attempt_no={attempt_count})"
+                        )
+
+                    attempts_marked_lease_expired += 1
+                    should_dead_letter = attempt_count >= max_attempts
+                    if should_dead_letter:
+                        next_status = ActionStatus.DEAD_LETTER
+                        next_visible_at = now_utc
+                        transitioned_dead_letter += 1
+                    else:
+                        next_status = ActionStatus.RETRY_WAIT
+                        next_visible_at = now_utc + timedelta(seconds=retry_delay)
+                        transitioned_retry_wait += 1
+
+                    connection.execute(
+                        update(actions_table)
+                        .where(actions_table.c.action_id == action_id)
+                        .values(
+                            status=next_status.value,
+                            next_visible_at=next_visible_at,
+                            lease_owner_instance_id=None,
+                            lease_expires_at=None,
+                            last_error_code="lease_expired",
+                            last_error_detail=error_detail,
+                            updated_at=now_utc,
+                            completed_at=None,
+                        )
+                    )
+
+                    if should_dead_letter:
+                        reason_code = "max_attempts_exhausted"
+                        dead_letter_stmt = postgresql.insert(action_dead_letters_table).values(
+                            action_id=action_id,
+                            dead_lettered_at=now_utc,
+                            reason_code=reason_code,
+                            reason_detail=error_detail,
+                            replayed_from_action_id=None,
+                        )
+                        connection.execute(
+                            dead_letter_stmt.on_conflict_do_update(
+                                index_elements=[action_dead_letters_table.c.action_id],
+                                set_={
+                                    "dead_lettered_at": now_utc,
+                                    "reason_code": reason_code,
+                                    "reason_detail": error_detail,
+                                },
+                            )
+                        )
+                        dead_letter_upserts += 1
+
+                return LeaseSweepResult(
+                    leadership_acquired=True,
+                    scanned_actions=len(candidate_rows),
+                    transitioned_retry_wait=transitioned_retry_wait,
+                    transitioned_dead_letter=transitioned_dead_letter,
+                    attempts_marked_lease_expired=attempts_marked_lease_expired,
+                    dead_letter_upserts=dead_letter_upserts,
+                )
+        except SQLAlchemyError as exc:
+            raise ActionRepositoryError(f"Postgres sweep expired leases failed: {exc}") from exc
+
     def _upsert_instance(
         self,
         *,
@@ -824,6 +967,7 @@ class InMemoryActionsRepository:
     def __init__(self) -> None:
         self._schema_ensure_calls = 0
         self._lock = Lock()
+        self._sweeper_leadership_lock = Lock()
         self._actions: dict[UUID, ActionRecord] = {}
         self._attempts: list[ActionAttemptRecord] = []
         self._dead_letters: dict[UUID, tuple[datetime, str, str | None]] = {}
@@ -1141,6 +1285,100 @@ class InMemoryActionsRepository:
                 )
             return _clone_action(action)
 
+    def sweep_expired_leases(
+        self,
+        *,
+        advisory_lock_id: int,
+        batch_size: int,
+        retry_delay_seconds: int,
+        now: datetime | None = None,
+    ) -> LeaseSweepResult:
+        del advisory_lock_id
+        if not self._sweeper_leadership_lock.acquire(blocking=False):
+            return LeaseSweepResult(leadership_acquired=False)
+
+        try:
+            now_utc = _ensure_utc(now or datetime.now(UTC))
+            batch_limit = max(int(batch_size), 1)
+            retry_delay = max(int(retry_delay_seconds), 0)
+            with self._lock:
+                candidates = [
+                    action
+                    for action in self._actions.values()
+                    if action.status in {ActionStatus.LEASED, ActionStatus.RUNNING}
+                    and action.lease_expires_at is not None
+                    and action.lease_expires_at <= now_utc
+                ]
+                candidates.sort(
+                    key=lambda row: (
+                        row.lease_expires_at or now_utc,
+                        row.submitted_at,
+                        str(row.action_id),
+                    )
+                )
+                selected = candidates[:batch_limit]
+                if not selected:
+                    return LeaseSweepResult(leadership_acquired=True)
+
+                transitioned_retry_wait = 0
+                transitioned_dead_letter = 0
+                attempts_marked_lease_expired = 0
+                dead_letter_upserts = 0
+                for action in selected:
+                    error_detail = _lease_expired_error_detail(
+                        lease_owner=action.lease_owner_instance_id,
+                        lease_expires_at=action.lease_expires_at,
+                    )
+                    attempt = self._load_attempt(
+                        action_id=action.action_id,
+                        attempt_no=action.attempt_count,
+                    )
+                    if attempt is None:
+                        raise ActionRepositoryError(
+                            "action attempt record missing for lease-expiry sweep "
+                            f"(action_id='{action.action_id}', attempt_no={action.attempt_count})"
+                        )
+
+                    attempt.finished_at = now_utc
+                    attempt.outcome = AttemptOutcome.LEASE_EXPIRED
+                    attempt.error_code = "lease_expired"
+                    attempt.error_detail = error_detail
+                    attempts_marked_lease_expired += 1
+
+                    should_dead_letter = action.attempt_count >= action.max_attempts
+                    if should_dead_letter:
+                        action.status = ActionStatus.DEAD_LETTER
+                        action.next_visible_at = now_utc
+                        transitioned_dead_letter += 1
+                        self._dead_letters[action.action_id] = (
+                            now_utc,
+                            "max_attempts_exhausted",
+                            error_detail,
+                        )
+                        dead_letter_upserts += 1
+                    else:
+                        action.status = ActionStatus.RETRY_WAIT
+                        action.next_visible_at = now_utc + timedelta(seconds=retry_delay)
+                        transitioned_retry_wait += 1
+
+                    action.lease_owner_instance_id = None
+                    action.lease_expires_at = None
+                    action.last_error_code = "lease_expired"
+                    action.last_error_detail = error_detail
+                    action.updated_at = now_utc
+                    action.completed_at = None
+
+                return LeaseSweepResult(
+                    leadership_acquired=True,
+                    scanned_actions=len(selected),
+                    transitioned_retry_wait=transitioned_retry_wait,
+                    transitioned_dead_letter=transitioned_dead_letter,
+                    attempts_marked_lease_expired=attempts_marked_lease_expired,
+                    dead_letter_upserts=dead_letter_upserts,
+                )
+        finally:
+            self._sweeper_leadership_lock.release()
+
     def _load_attempt(self, *, action_id: UUID, attempt_no: int) -> ActionAttemptRecord | None:
         for attempt in reversed(self._attempts):
             if attempt.action_id == action_id and attempt.attempt_no == attempt_no:
@@ -1185,9 +1423,20 @@ def _assert_owned_active_lease(
 def _is_claim_eligible(action: ActionRecord, now_utc: datetime) -> bool:
     if action.status in {ActionStatus.QUEUED, ActionStatus.RETRY_WAIT}:
         return action.next_visible_at <= now_utc
-    if action.status in {ActionStatus.LEASED, ActionStatus.RUNNING} and action.lease_expires_at:
-        return action.lease_expires_at <= now_utc
     return False
+
+
+def _lease_expired_error_detail(
+    *,
+    lease_owner: str | None,
+    lease_expires_at: datetime | None,
+) -> str:
+    owner = lease_owner or "unknown"
+    expires_iso = lease_expires_at.isoformat() if lease_expires_at is not None else "unknown"
+    return (
+        "Lease expired before lifecycle callback "
+        f"(lease_owner_instance_id='{owner}', lease_expires_at='{expires_iso}')."
+    )
 
 
 def _action_from_row(row: Mapping[str, object] | RowMapping) -> ActionRecord:

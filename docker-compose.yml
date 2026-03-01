@@ -37,6 +37,27 @@ services:
       - clickhouse
       - postgres
 
+  seer-actions-sweeper:
+    build:
+      context: ./seer-backend
+      dockerfile: Dockerfile
+    container_name: seer-actions-sweeper
+    command: ["seer-actions-maintenance"]
+    environment:
+      SEER_APP_ENV: local
+      SEER_LOG_LEVEL: INFO
+      SEER_ACTIONS_DB_DSN: ${SEER_ACTIONS_DB_DSN:-postgresql+psycopg://seer:seer@postgres:5432/seer_actions}
+      SEER_ACTIONS_DB_POOL_SIZE: ${SEER_ACTIONS_DB_POOL_SIZE:-5}
+      SEER_ACTIONS_DB_MAX_OVERFLOW: ${SEER_ACTIONS_DB_MAX_OVERFLOW:-10}
+      SEER_ACTIONS_DB_MIGRATIONS_DIR: ${SEER_ACTIONS_DB_MIGRATIONS_DIR:-migrations/postgres}
+      SEER_ACTIONS_SWEEPER_ENABLED: ${SEER_ACTIONS_SWEEPER_ENABLED:-true}
+      SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS: ${SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS:-20}
+      SEER_ACTIONS_SWEEPER_BATCH_SIZE: ${SEER_ACTIONS_SWEEPER_BATCH_SIZE:-100}
+      SEER_ACTIONS_SWEEPER_ADVISORY_LOCK_ID: ${SEER_ACTIONS_SWEEPER_ADVISORY_LOCK_ID:-104729}
+      SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS: ${SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS:-2}
+    depends_on:
+      - postgres
+
   seer-ui:
     build:
       context: ./seer-ui

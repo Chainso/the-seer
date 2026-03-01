@@ -92,7 +92,7 @@ def test_claim_excludes_other_instances_during_active_lease() -> None:
     assert second_body["actions"] == []
 
 
-def test_claim_reclaims_after_lease_expiry() -> None:
+def test_claim_reclaims_after_lease_expiry_once_sweeper_reconciles() -> None:
     repository = InMemoryActionsRepository()
     now = datetime(2026, 3, 1, 12, 30, tzinfo=UTC)
     created = repository.create_action(
@@ -123,11 +123,28 @@ def test_claim_reclaims_after_lease_expiry() -> None:
         lease_seconds=60,
         now=now + timedelta(seconds=61),
     )
+    sweep = repository.sweep_expired_leases(
+        advisory_lock_id=201,
+        batch_size=10,
+        retry_delay_seconds=0,
+        now=now + timedelta(seconds=61),
+    )
+    third = repository.claim_actions(
+        user_id="user-claim-2",
+        instance_id="instance-b",
+        capacity=1,
+        max_actions=1,
+        lease_seconds=60,
+        now=now + timedelta(seconds=62),
+    )
     current = repository.get_action(created.action_id)
 
     assert len(first) == 1
-    assert len(second) == 1
-    assert second[0].lease_owner_instance_id == "instance-b"
+    assert second == []
+    assert sweep.leadership_acquired
+    assert sweep.transitioned_retry_wait == 1
+    assert len(third) == 1
+    assert third[0].lease_owner_instance_id == "instance-b"
     assert current is not None
     assert current.status == ActionStatus.LEASED
     assert current.attempt_count == 2
