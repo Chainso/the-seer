@@ -2,7 +2,6 @@
 
 import type { ReactNode } from "react";
 
-import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -87,9 +86,6 @@ export function InspectorScopeFilters({
         >
           Last 30d
         </Button>
-        <Badge variant="outline" className="ml-1">
-          {windowPreset === "custom" ? "Custom window" : `Preset: ${windowPreset}`}
-        </Badge>
       </div>
 
       <div
