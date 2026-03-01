@@ -1,10 +1,15 @@
 # Post-MVP Exec Plan: OC-DFG as Primary Process Diagram (pm4py + ClickHouse/Polars)
 
-**Status:** blocked (depends on clickhouse-connect migration)  
+**Status:** in_progress (clickhouse-connect migration dependency cleared on 2026-03-01)  
 **Track:** post-MVP analytics UX + backend contract extension  
 **Last updated:** 2026-03-01
 
 ---
+
+## Dependency Status
+
+1. Previously blocked on `docs/exec-plans/active/clickhouse-connect-migration.md`.
+2. Unblocked on 2026-03-01 after migration Phase 5 validation passed (`pytest -q` full suite + `ruff check src tests`) and plan status moved to completed.
 
 ## Objective
 

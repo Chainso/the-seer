@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: Migrate Backend ClickHouse Access to clickhouse-connect
 
-**Status:** in_progress  
+**Status:** completed  
 **Track:** post-MVP backend data-plane hardening  
 **Predecessor:** none  
 **Successor:** `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md`  
@@ -17,6 +17,7 @@ Replace direct raw HTTP ClickHouse access (`httpx` + `FORMAT JSON`/`JSONEachRow`
 1. Forward-only migration: do not preserve legacy repository transport behavior by default.
 2. If optimal architecture requires contract or behavior changes, make them directly and update docs/specs in the same change.
 3. Legacy compatibility concessions must be explicitly justified in the decision log; default is no concession.
+4. Intermediate-phase breakage is acceptable while migrating; only phase exit gates determine acceptability.
 
 ## Why This Plan Exists
 
@@ -60,6 +61,24 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 1. Use the `clickhousedb` SQLAlchemy dialect in all runtime ClickHouse repository code for query construction and execution.
 2. Keep forward-only scope: if adopting SQLAlchemy changes query shape or behavior, update tests/contracts/docs rather than preserving legacy quirks.
 3. Record explicit boundaries for unsupported ORM/transaction semantics.
+
+## SQLAlchemy Dialect Utilization Model
+
+1. Engine/DSN standard:
+   - use `clickhousedb://` or `clickhousedb+connect://`,
+   - expose DSN query parameters for ClickHouse settings and client options (`compression`, timeout options, query limit).
+2. Core-first query model (required):
+   - `SELECT` with joins/filters/order/limit/offset/distinct via SQLAlchemy Core statements,
+   - lightweight `DELETE` only with explicit `WHERE`,
+   - Core `INSERT` where practical for repository write paths.
+3. DDL/reflection usage:
+   - use dialect DDL helpers and reflection where schema introspection reduces hard-coded table metadata,
+   - do not introduce ORM relationship features as runtime dependencies.
+4. ClickHouse-aware limitations (must be encoded in docs/code comments):
+   - no `UPDATE` support expectation,
+   - no transaction guarantees (`begin/commit/rollback` semantics are not DB transactions),
+   - no reliance on `RETURNING`, advanced isolation, or sequence semantics,
+   - SQLAlchemy `primary_key=True` is identity metadata, not a server-enforced constraint.
 
 ## Phase Map
 
@@ -184,7 +203,7 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 - [x] Phase 2 complete
 - [x] Phase 3 complete
 - [x] Phase 4 complete
-- [ ] Phase 5 complete
+- [x] Phase 5 complete
 
 ## Decision Log
 
@@ -194,3 +213,4 @@ Current repositories handcraft SQL transport and response parsing at multiple ca
 4. 2026-03-01: Phase 2 migrated `ClickHouseHistoryRepository` read/write execution to `AsyncClickHouseClient`, removed direct `httpx` transport helpers, and kept repository-level `HistoryError` mapping stable for query/statement failure paths.
 5. 2026-03-01: Phase 3 migrated `ClickHouseProcessMiningRepository` and `ClickHouseRootCauseRepository` transport paths to `AsyncClickHouseClient`, removed repository-local `httpx.AsyncClient` usage, and preserved deterministic ordering plus repository-level domain error mapping.
 6. 2026-03-01: Phase 4 made SQLAlchemy Core (`clickhousedb` dialect) the single runtime ClickHouse path by introducing a shared SQLAlchemy utility, switching shared client execution to that utility, removing `FORMAT JSON` query-shape dependencies from history/process/RCA repositories, and retaining repository-level domain error translation and deterministic ordering semantics.
+7. 2026-03-01: Phase 5 ran full backend validation and docs finalization: `cd seer-backend && uv run pytest -q` passed (`59 passed, 99 warnings in 21.38s`; warnings are existing FastAPI deprecation notices), `cd seer-backend && uv run ruff check src tests` passed (`All checks passed!`). Post-MVP execution state was updated and OC-DFG dependency block was cleared.

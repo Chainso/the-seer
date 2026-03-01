@@ -64,8 +64,8 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `docs/exec-plans/active/clickhouse-connect-migration.md` - in_progress
-2. `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md` - blocked (depends on clickhouse-connect migration)
+1. `docs/exec-plans/active/clickhouse-connect-migration.md` - completed (all phases complete and validated as of 2026-03-01)
+2. `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md` - in_progress (dependency unblocked by clickhouse migration completion)
 
 ## Post-MVP Status Tracking
 
@@ -80,8 +80,9 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: `docs/exec-plans/active/clickhouse-connect-migration.md`
-- `blocked`: `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md` (waiting on clickhouse-connect migration)
+- `in_progress`: `docs/exec-plans/active/ocdfg-pm4py-backend-ui-first-diagram.md` (dependency cleared after clickhouse migration completion on 2026-03-01)
+- `blocked`: none
+- `completed`: `docs/exec-plans/active/clickhouse-connect-migration.md` (Phase 5 regression + docs finalization validated on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/object-centric-history-inspector-consolidation.md` (all phases complete and ratified as of 2026-02-28)
 - `completed`: `docs/exec-plans/completed/post-mvp-ontology-process-readonly-adaptation.md` (all phases complete and plan closed as of 2026-02-28)
 - `completed`: `docs/exec-plans/completed/adaptive-lifecycle-label-display.md` (Phases 1-3 complete and validated as of 2026-02-28)

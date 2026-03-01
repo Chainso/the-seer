@@ -11,6 +11,13 @@ FastAPI scaffold for Seer MVP.
 
 Copy `.env.example` to `.env` and adjust values as needed.
 
+## ClickHouse Client Approach
+
+1. Runtime ClickHouse repositories use SQLAlchemy Core with the `clickhousedb` dialect as the canonical query/execution path.
+2. Backend transport is centralized through the shared `clickhouse-connect` client utilities instead of per-repository HTTP wiring.
+3. Direct repository `httpx` + `FORMAT JSON` transport/parsing paths are intentionally removed.
+4. ClickHouse connection settings continue to come from `SEER_CLICKHOUSE_*` environment variables.
+
 ## Phase 2 History APIs
 
 1. `POST /api/v1/history/events/ingest`
