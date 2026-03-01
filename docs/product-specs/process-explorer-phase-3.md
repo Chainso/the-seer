@@ -1,7 +1,7 @@
 # Process Explorer Phase 3 Spec
 
 **Status:** completed  
-**Owner phase:** `docs/exec-plans/completed/ocdfg-pm4py-backend-ui-first-diagram.md`  
+**Owner phase:** `docs/exec-plans/completed/ocdfg-multi-object-depth-scope.md`  
 **Last updated:** 2026-03-01
 
 ---
@@ -15,27 +15,40 @@ Define user-facing behavior for OC-DFG-first process mining and trace drill-down
 1. User opens `/inspector/insights` and selects `Process Mining`.
 2. User enters:
    - `anchor_object_type`,
+   - `depth` (default `1`),
    - `start_at`,
    - `end_at`.
-3. User runs mining request.
-4. UI requests `POST /api/v1/process/ocdfg/mine` and renders OC-DFG first:
+3. UI resolves included object models from ontology graph using anchor + depth:
+   - `depth=1`: anchor only,
+   - `depth=2`: models sharing ontology event references with anchor,
+   - `depth>=3`: recursive expansion by shared event references.
+4. UI shows resolved included object models before mining runs.
+5. User runs mining request.
+6. UI requests `POST /api/v1/process/ocdfg/mine` and renders OC-DFG first:
    - `nodes`,
    - `edges`,
    - `start_activities`,
    - `end_activities`,
    - `object_types`,
    - optional edge performance percentiles (`p50_seconds`, `p95_seconds`).
-5. UI keeps secondary diagrams available:
+7. UI keeps secondary diagrams available:
    - `POST /api/v1/process/mine` for OCPN,
    - derived BPMN path from collapsed OCPN.
-6. User clicks a node, edge, start activity, or end activity entry.
-7. UI requests trace drill-down with the backend handle and renders matching traces.
+8. User clicks a node, edge, start activity, or end activity entry.
+9. UI requests trace drill-down with the backend handle and renders matching traces.
 
 ## Backend Contracts Consumed by UI
 
 1. `POST /api/v1/process/ocdfg/mine` (primary mining run)
 2. `POST /api/v1/process/mine` (secondary OCPN path)
 3. `GET /api/v1/process/traces` (shared drill-down for OC-DFG and OCPN handles)
+
+Mining request scope semantics:
+
+1. UI sends explicit `include_object_types[]` (resolved from selected object models) to both mining endpoints.
+2. Backend mines events in the time window where at least one included object type participates.
+3. Relation/object extraction is filtered to included object types.
+4. If `include_object_types` is omitted, backend falls back to anchor-only behavior (`anchor_object_type`).
 
 ## Acceptance Expectations
 
@@ -45,6 +58,8 @@ Define user-facing behavior for OC-DFG-first process mining and trace drill-down
 4. Shared drill-down returns trace lists keyed by selected OC-DFG or OCPN model element.
 5. Empty/oversized/invalid requests produce actionable error messages surfaced in UI.
 6. Re-running against unchanged data snapshot produces deterministic ordering for OC-DFG payload arrays.
+7. Depth changes update included object scope immediately in the UI.
+8. OC-DFG and OCPN mining calls use the same resolved multi-object scope per run.
 
 ## Out of Scope (Phase 3)
 

@@ -27,3 +27,4 @@ Each completed plan should preserve:
 15. `assistant-chat-sse-streaming-migration.md` - completed (2026-03-01)
 16. `clickhouse-connect-migration.md` - completed (2026-03-01)
 17. `ocdfg-pm4py-backend-ui-first-diagram.md` - completed (2026-03-01)
+18. `ocdfg-multi-object-depth-scope.md` - completed (2026-03-01)

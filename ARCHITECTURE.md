@@ -49,6 +49,7 @@ Primary responsibilities:
 2. AI interaction surfaces (chat and guided analysis flows).
 3. visualization and drill-down over backend-provided results.
 4. unified assistant experience across global slide-over panel and dedicated `/assistant` page, backed by one shared frontend runtime/state model.
+5. process-mining depth scope resolution from ontology graph and explicit multi-object scope submission to mining APIs.
 
 Expected internal areas:
 1. route/application structure (`app` with Next.js App Router).
@@ -179,6 +180,8 @@ Flow:
    - primary process diagram endpoint: `POST /api/v1/process/ocdfg/mine`
    - secondary OCPN endpoint: `POST /api/v1/process/mine`
    - shared drill-down endpoint for stateless handles: `GET /api/v1/process/traces`
+   - UI resolves depth-expanded object-model scope and sends explicit `include_object_types[]` for mining runs
+   - backend mining execution treats `include_object_types[]` as the effective multi-object scope for event selection and relation/object extraction, with anchor-only fallback when omitted
 7. AI gateway contract:
    - single backend `/ai` API surface for ontology/process/RCA AI interactions plus generic assistant chat
    - generic assistant chat route: `POST /api/v1/ai/assistant/chat` is SSE-first (`text/event-stream`)
@@ -215,6 +218,8 @@ The following invariants are deliberate and must hold unless explicitly changed 
 21. Ontology concept index responses for UI exploration exclude Prophet base concepts and non-graph concept categories.
 22. Ontology graph views are limited to object/action/event/trigger concepts; property and custom-type concepts are excluded from graph navigation.
 23. User-visible field label, state label, and field-value display policy in inspector flows is centralized in the shared UI ontology display layer (`seer-ui/app/lib/ontology-display/`), not page-local fallback chains.
+24. Process-mining depth scope resolution is frontend-owned and derived from ontology graph event-sharing relationships.
+25. OC-DFG and OCPN mining executions must apply the same effective object-type scope (`include_object_types[]`, else anchor-only fallback) within the selected time window.
 
 ## Boundaries and Dependency Direction
 

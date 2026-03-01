@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: OC-DFG Multi-Object Depth Scope
 
-**Status:** in_progress  
+**Status:** completed  
 **Track:** post-MVP analytics UX + backend contract extension  
 **Last updated:** 2026-03-01
 
@@ -152,6 +152,20 @@ Validation:
 5. Kept OC-DFG first and OCPN/BPMN as secondary panels; no regressions in primary/secondary panel ordering or labels.
 6. Ran Phase 2 validation gates (`lint`, contract tests, build); all passed.
 
+### 2026-03-01 - Phase 3 Completed (Ratification, Docs, Plan Archive)
+
+1. Ran full backend validation gates:
+   - `cd seer-backend && .venv/bin/ruff check src tests` (pass)
+   - `cd seer-backend && .venv/bin/pytest` (pass)
+   - `cd seer-backend && uv build` (pass)
+2. Ran full UI validation gates:
+   - `cd seer-ui && npm run lint` (pass)
+   - `cd seer-ui && npm run test:contracts` (pass)
+   - `cd seer-ui && npm run build` (pass)
+3. Updated `docs/product-specs/process-explorer-phase-3.md` with frontend-owned depth resolution semantics, explicit included-object scope behavior, and acceptance expectations for multi-object scope parity across OC-DFG/OCPN.
+4. Updated `ARCHITECTURE.md` to codify frontend depth-scope ownership and backend explicit `include_object_types[]` execution semantics as architecture-level contracts/invariants.
+5. Archived plan to `docs/exec-plans/completed/ocdfg-multi-object-depth-scope.md` and updated active/completed indexes to reflect closed status.
+
 ## Decision Log
 
 ### 2026-03-01
@@ -166,9 +180,11 @@ Validation:
 6. Frontend depth traversal is a bounded breadth-first expansion over object models, where model adjacency is defined by shared event references in ontology relationships.
 7. Event-sharing scope resolution includes direct event-to-model links and action-produced-event propagation so derived references stay aligned with ontology semantics.
 8. Process Mining UI now treats explicit multi-object scope as the default request shape, replacing anchor-only frontend request behavior.
+9. Final ratification requires no additional feature work; only validation, documentation alignment, and archival/index consistency updates are permitted in Phase 3.
 
 ## Required Docs Updates In This Plan
 
 1. `docs/product-specs/process-explorer-phase-3.md`
 2. `ARCHITECTURE.md` (frontend-owned depth resolution + backend multi-object execution semantics)
-3. `docs/exec-plans/active/index.md` and completed index files on archive
+3. `docs/exec-plans/active/index.md`
+4. `docs/exec-plans/completed/README.md`
