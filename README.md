@@ -38,6 +38,20 @@ First bootstrap happens automatically through the devcontainer post-create hook:
 /usr/local/share/devcontainer/bootstrap-workspace.sh
 ```
 
+Host-side helper scripts:
+
+```bash
+./scripts/devcontainer-up.sh
+./scripts/devcontainer-shell.sh
+./scripts/devcontainer-sync-from-host.sh
+```
+
+Use them to:
+
+1. build/start the devcontainer,
+2. jump into an interactive shell in the isolated workspace,
+3. resync host checkout changes into the isolated workspace when you want to refresh it.
+
 Once the devcontainer is open, the normal inner-loop command is still:
 
 ```bash

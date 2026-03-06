@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE_DIR="/tmp/host-workspace"
+SOURCE_DIR="/mnt/host-workspace"
 TARGET_DIR="/workspaces/seer-python"
 SEED_MARKER="${TARGET_DIR}/.devcontainer-seeded"
 SYNC_SCRIPT="/usr/local/share/devcontainer/sync-from-host.sh"
@@ -31,13 +31,13 @@ if [ ! -e "${SEED_MARKER}" ]; then
   touch "${SEED_MARKER}"
 fi
 
-if [ -f /tmp/host-gitconfig ]; then
-  cp /tmp/host-gitconfig /root/.gitconfig
+if [ -f /mnt/host-gitconfig ]; then
+  cp /mnt/host-gitconfig /root/.gitconfig
 fi
 
-if [ -d /tmp/host-ssh ]; then
+if [ -d /mnt/host-ssh ]; then
   mkdir -p /root/.ssh
-  rsync -a /tmp/host-ssh/ /root/.ssh/
+  rsync -a /mnt/host-ssh/ /root/.ssh/
   chmod 700 /root/.ssh
   find /root/.ssh -type f -name "*.pub" -exec chmod 644 {} +
   find /root/.ssh -type f ! -name "*.pub" -exec chmod 600 {} +

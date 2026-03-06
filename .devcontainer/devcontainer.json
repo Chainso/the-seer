@@ -35,6 +35,7 @@
       "onAutoForward": "notify"
     }
   },
+  "containerUser": "root",
   "remoteUser": "root",
   "remoteEnv": {
     "SEER_DEVCONTAINER": "1",
@@ -44,10 +45,10 @@
   "overrideCommand": true,
   "init": true,
   "mounts": [
-    "source=${localWorkspaceFolder},target=/tmp/host-workspace,type=bind,readonly",
+    "source=${localWorkspaceFolder},target=/mnt/host-workspace,type=bind,readonly",
     "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind",
-    "source=${localEnv:HOME}/.gitconfig,target=/tmp/host-gitconfig,type=bind,readonly",
-    "source=${localEnv:HOME}/.ssh,target=/tmp/host-ssh,type=bind,readonly"
+    "source=${localEnv:HOME}/.gitconfig,target=/mnt/host-gitconfig,type=bind,readonly",
+    "source=${localEnv:HOME}/.ssh,target=/mnt/host-ssh,type=bind,readonly"
   ],
   "postCreateCommand": "/usr/local/share/devcontainer/bootstrap-workspace.sh",
   "customizations": {

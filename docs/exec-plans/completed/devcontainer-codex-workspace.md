@@ -115,7 +115,8 @@ Exit criteria:
 2. Installed Codex, uv, ripgrep, neovim, git-lfs, and Zellij in the devcontainer image, with `codex` defaulting to full-access mode.
 3. Kept host write access constrained to `~/.codex`, while copying host `~/.gitconfig` and `~/.ssh` into container-local config during bootstrap for git push support.
 4. Preserved the existing `./scripts/dev-local-zellij.sh` and helper-script workflow without adding a second container-only entrypoint.
-5. Updated repository docs to explain the devcontainer shape, safety boundary, and local workflow behavior.
+5. Added host-side helper scripts for bringing up the devcontainer, opening a shell, and resyncing from the host checkout.
+6. Updated repository docs to explain the devcontainer shape, safety boundary, and local workflow behavior.
 
 ## Acceptance Evidence
 

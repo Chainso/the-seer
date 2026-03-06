@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SOURCE_DIR="/tmp/host-workspace"
+SOURCE_DIR="/mnt/host-workspace"
 TARGET_DIR="/workspaces/seer-python"
 DELETE_MODE=1
 DRY_RUN=0
@@ -11,7 +11,7 @@ usage() {
   cat <<'EOF'
 Usage: sync-from-host.sh [options]
 
-Syncs files from /tmp/host-workspace into /workspaces/seer-python.
+Syncs files from /mnt/host-workspace into /workspaces/seer-python.
 
 Options:
   --exclude <path>   Exclude a path pattern from sync (can be used multiple times)
