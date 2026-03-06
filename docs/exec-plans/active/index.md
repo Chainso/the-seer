@@ -78,6 +78,7 @@ None.
 - [x] Ontology-driven field display centralization complete
 - [x] Global assistant shell layer + generic AI assistant endpoint complete
 - [x] Action orchestration backend service complete
+- [x] Devcontainer Codex workspace complete
 
 Current post-MVP execution state:
 
@@ -85,6 +86,7 @@ Current post-MVP execution state:
 - `blocked`: none
 - `completed`: `docs/exec-plans/completed/action-orchestration-backend-service.md` (all phases complete; docs ratified and archived on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/assistant-turn-logging-and-zellij-debug-panel.md` (all phases complete; validation/docs/archive ratified on 2026-03-05)
+- `completed`: `docs/exec-plans/completed/devcontainer-codex-workspace.md` (container build/docs/archive ratified on 2026-03-06)
 - `completed`: `docs/exec-plans/completed/ocdfg-ui-layout-engine-upgrade.md` (all phases complete; validation/docs/archive ratified on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/ocdfg-multi-object-depth-scope.md` (all phases complete; ratified and archived on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/ocdfg-pm4py-backend-ui-first-diagram.md` (Phases A-C complete; validation/docs/archive ratified on 2026-03-01)

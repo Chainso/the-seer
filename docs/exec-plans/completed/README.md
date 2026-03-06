@@ -31,3 +31,4 @@ Each completed plan should preserve:
 19. `ocdfg-ui-layout-engine-upgrade.md` - completed (2026-03-01)
 20. `action-orchestration-backend-service.md` - completed (2026-03-01)
 21. `assistant-turn-logging-and-zellij-debug-panel.md` - completed (2026-03-05)
+22. `devcontainer-codex-workspace.md` - completed (2026-03-06)

@@ -1,0 +1,67 @@
+{
+  "name": "seer-python-isolated-volume",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "workspaceFolder": "/workspaces/seer-python",
+  "workspaceMount": "source=seer-python-workspace,target=/workspaces/seer-python,type=volume",
+  "runArgs": [
+    "-p",
+    "3000:3000",
+    "-p",
+    "8000:8000",
+    "-p",
+    "1455:1455"
+  ],
+  "forwardPorts": [
+    3000,
+    8000,
+    1455
+  ],
+  "portsAttributes": {
+    "3000": {
+      "label": "Seer UI",
+      "onAutoForward": "notify"
+    },
+    "8000": {
+      "label": "Seer Backend",
+      "onAutoForward": "notify"
+    },
+    "1455": {
+      "label": "Codex Login Callback",
+      "onAutoForward": "notify"
+    }
+  },
+  "remoteUser": "root",
+  "remoteEnv": {
+    "SEER_DEVCONTAINER": "1",
+    "SHELL": "/bin/zsh"
+  },
+  "updateRemoteUserUID": false,
+  "overrideCommand": true,
+  "init": true,
+  "mounts": [
+    "source=${localWorkspaceFolder},target=/tmp/host-workspace,type=bind,readonly",
+    "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind",
+    "source=${localEnv:HOME}/.gitconfig,target=/tmp/host-gitconfig,type=bind,readonly",
+    "source=${localEnv:HOME}/.ssh,target=/tmp/host-ssh,type=bind,readonly"
+  ],
+  "postCreateCommand": "/usr/local/share/devcontainer/bootstrap-workspace.sh",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh"
+      },
+      "extensions": [
+        "ms-python.python",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  }
+}

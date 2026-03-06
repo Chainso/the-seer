@@ -17,6 +17,35 @@ For agent-driven delivery, use the `plan-and-execute` skill from `.agent/skills/
 
 Execution plans remain canonical in `docs/exec-plans/active/` and must be updated during implementation.
 
+## Devcontainer
+
+`.devcontainer/` provides an isolated in-container development workspace for this monorepo.
+
+What it sets up:
+
+1. A named Docker volume mounted at `/workspaces/seer-python` for the container-side repo copy.
+2. Your host checkout mounted read-only at `/tmp/host-workspace`, used only to seed the isolated workspace on first create.
+3. Codex installed in the container, with `codex` defaulting to full access (`--dangerously-bypass-approvals-and-sandbox`).
+4. Host `~/.codex` mounted read-write so Codex auth and sessions persist.
+5. Host `~/.gitconfig` and `~/.ssh` mounted read-only and copied into container-local config during bootstrap so git push works without giving the container host write access there.
+6. A Docker daemon running inside the devcontainer, so `docker compose` stays container-local rather than controlling the host Docker daemon.
+
+That means the container can persist changes back to host only through `~/.codex`. The host checkout, git config, and SSH directory remain read-only mounts.
+
+First bootstrap happens automatically through the devcontainer post-create hook:
+
+```bash
+/usr/local/share/devcontainer/bootstrap-workspace.sh
+```
+
+Once the devcontainer is open, the normal inner-loop command is still:
+
+```bash
+./scripts/dev-local-zellij.sh
+```
+
+That keeps the current zellij layout, starts DB services through `docker-compose.db.yml` inside the devcontainer Docker daemon, runs backend + UI inside the devcontainer workspace volume, and leaves the existing ingest/load helper scripts usable against `http://localhost:8000`.
+
 ## Startup
 
 Optional runtime overrides:
@@ -79,6 +108,10 @@ All scripts accept `--api-base-url` and `--api-prefix` when your backend is not 
 
 Use the DB-only compose file when you want to run `seer-backend` and `seer-ui` on
 your host machine, while keeping only data services in Docker.
+
+Inside the devcontainer, the same workflow stays supported without a second script.
+Because Docker also runs inside the devcontainer, the existing `localhost` defaults
+continue to work for backend-to-DB connections.
 
 Single-command launch with zellij multiplexing:
 
