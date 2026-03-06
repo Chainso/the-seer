@@ -5,6 +5,15 @@ SOURCE_DIR="/mnt/host-workspace"
 TARGET_DIR="/workspaces/seer-python"
 SEED_MARKER="${TARGET_DIR}/.devcontainer-seeded"
 SYNC_SCRIPT="/usr/local/share/devcontainer/sync-from-host.sh"
+TMP_CLONE_ROOT=""
+
+cleanup() {
+  if [ -n "${TMP_CLONE_ROOT}" ] && [ -d "${TMP_CLONE_ROOT}" ]; then
+    rm -rf "${TMP_CLONE_ROOT}"
+  fi
+}
+
+trap cleanup EXIT
 
 if [ ! -d "${SOURCE_DIR}" ]; then
   echo "Missing source directory: ${SOURCE_DIR}" >&2
@@ -16,23 +25,24 @@ if [ ! -x "${SYNC_SCRIPT}" ]; then
   exit 1
 fi
 
-if [ ! -e "${SEED_MARKER}" ]; then
-  echo "Seeding isolated workspace volume from host copy..."
-  "${SYNC_SCRIPT}" \
-    --no-delete \
-    --exclude ".next" \
-    --exclude "node_modules" \
-    --exclude ".ruff_cache" \
-    --exclude ".pytest_cache" \
-    --exclude ".uv-cache" \
-    --exclude "__pycache__" \
-    --exclude "seer-backend/.venv" \
-    --exclude "seer-backend/dist"
-  touch "${SEED_MARKER}"
-fi
+mkdir -p "${TARGET_DIR}"
 
 if [ -f /mnt/host-gitconfig ]; then
   cp /mnt/host-gitconfig /root/.gitconfig
+fi
+
+git config --global --add safe.directory "${SOURCE_DIR}" || true
+git config --global --add safe.directory "${SOURCE_DIR}/.git" || true
+
+if [ ! -d "${TARGET_DIR}/.git" ]; then
+  echo "Seeding isolated workspace volume with a local git clone..."
+  TMP_CLONE_ROOT="$(mktemp -d /tmp/seer-python-clone.XXXXXX)"
+  git clone --no-hardlinks "${SOURCE_DIR}" "${TMP_CLONE_ROOT}/repo"
+  find "${TARGET_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  shopt -s dotglob nullglob
+  mv "${TMP_CLONE_ROOT}/repo"/* "${TARGET_DIR}/"
+  shopt -u dotglob nullglob
+  touch "${SEED_MARKER}"
 fi
 
 if [ -d /mnt/host-ssh ]; then
