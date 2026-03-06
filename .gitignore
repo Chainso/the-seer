@@ -13,5 +13,6 @@ node_modules/
 
 # Environment and local artifacts
 .env
+.local/
 *.log
 fake-data.json
