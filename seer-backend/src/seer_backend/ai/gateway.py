@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -33,6 +35,7 @@ from seer_backend.analytics.service import ProcessMiningService, UnavailableProc
 from seer_backend.ontology.models import CopilotChatResponse, CopilotConversationMessage
 
 _TOOL_CALL_ID_MAX_LENGTH = 120
+_ASSISTANT_TURN_LOGGER = logging.getLogger("seer_backend.ai.assistant_turn")
 
 
 class AiEvidenceItem(BaseModel):
@@ -253,6 +256,7 @@ class AiGatewayService:
         self,
         payload: AiAssistantChatRequest,
     ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        turn_started_at = perf_counter()
         (
             question,
             completion_conversation,
@@ -262,65 +266,191 @@ class AiGatewayService:
             payload.context,
         )
         thread_id = payload.thread_id or str(uuid4())
+        turn_id = str(uuid4())
+        prompt_text = _last_user_completion_message_text(payload.completion_messages)
+        delta_chars = 0
+        tool_event_count = 0
+        first_delta_logged = False
+        failure_logged = False
 
-        copilot_stream = self._ontology_copilot_service.answer_stream(
-            question,
-            conversation=[],
-            completion_conversation=completion_conversation,
-        )
-        stream_event: object
-        try:
-            stream_event = await anext(copilot_stream)
-        except StopAsyncIteration as exc:
-            raise ValueError("assistant chat stream ended without final response") from exc
-
-        yield (
-            "meta",
-            {
-                "thread_id": thread_id,
-                "module": "assistant",
-                "task": "chat",
-                "response_policy": "informational",
-                "tool_permissions": _assistant_tool_permissions(),
+        _ASSISTANT_TURN_LOGGER.info(
+            "assistant_turn_started",
+            extra={
+                **_assistant_turn_context_extra(
+                    turn_id=turn_id,
+                    thread_id=thread_id,
+                    payload=payload,
+                ),
+                "completion_history_count": len(completion_conversation or []),
+                "request_completion_message_count": len(completion_messages),
+                "prompt_chars": len(prompt_text),
+                "prompt_preview": _preview_text(prompt_text),
             },
         )
 
-        while True:
-            if isinstance(stream_event, CopilotAssistantDeltaEvent):
-                for chunk in _iter_answer_chunks(stream_event.text):
-                    yield ("assistant_delta", {"text": chunk})
-            elif isinstance(stream_event, CopilotToolStatusEvent):
-                yield (
-                    "tool_status",
-                    {
-                        "status": stream_event.status,
-                        "tool": stream_event.tool,
-                        "call_id": stream_event.call_id,
-                        "summary": stream_event.summary,
-                        "query_preview": stream_event.query_preview,
-                        "query_type": stream_event.query_type,
-                        "row_count": stream_event.row_count,
-                        "truncated": stream_event.truncated,
-                        "error": stream_event.error,
-                    },
-                )
-            elif isinstance(stream_event, CopilotAnswerFinalEvent):
-                response = _build_assistant_chat_response(
-                    payload=payload,
-                    thread_id=thread_id,
-                    copilot=stream_event.response,
-                    completion_messages=completion_messages,
-                )
-                yield ("final", response.model_dump(mode="json"))
-                yield ("done", {"status": "ok"})
-                return
-
+        try:
+            copilot_stream = self._ontology_copilot_service.answer_stream(
+                question,
+                conversation=[],
+                completion_conversation=completion_conversation,
+            )
+            stream_event: object
             try:
                 stream_event = await anext(copilot_stream)
-            except StopAsyncIteration:
-                break
+            except StopAsyncIteration as exc:
+                failure_logged = True
+                _ASSISTANT_TURN_LOGGER.warning(
+                    "assistant_turn_failed",
+                    extra={
+                        **_assistant_turn_context_extra(
+                            turn_id=turn_id,
+                            thread_id=thread_id,
+                            payload=payload,
+                        ),
+                        "duration_ms": _duration_ms(turn_started_at),
+                        "delta_chars": delta_chars,
+                        "tool_event_count": tool_event_count,
+                        "error_type": "ValueError",
+                        "error_message": "assistant chat stream ended without final response",
+                    },
+                )
+                raise ValueError("assistant chat stream ended without final response") from exc
 
-        raise ValueError("assistant chat stream ended without final response")
+            yield (
+                "meta",
+                {
+                    "thread_id": thread_id,
+                    "module": "assistant",
+                    "task": "chat",
+                    "response_policy": "informational",
+                    "tool_permissions": _assistant_tool_permissions(),
+                },
+            )
+
+            while True:
+                if isinstance(stream_event, CopilotAssistantDeltaEvent):
+                    for chunk in _iter_answer_chunks(stream_event.text):
+                        delta_chars += len(chunk)
+                        if not first_delta_logged and chunk:
+                            first_delta_logged = True
+                            _ASSISTANT_TURN_LOGGER.info(
+                                "assistant_turn_response_started",
+                                extra={
+                                    **_assistant_turn_context_extra(
+                                        turn_id=turn_id,
+                                        thread_id=thread_id,
+                                        payload=payload,
+                                    ),
+                                    "time_to_first_delta_ms": _duration_ms(turn_started_at),
+                                    "delta_chars": delta_chars,
+                                },
+                            )
+                        yield ("assistant_delta", {"text": chunk})
+                elif isinstance(stream_event, CopilotToolStatusEvent):
+                    tool_event_count += 1
+                    _ASSISTANT_TURN_LOGGER.info(
+                        "assistant_turn_tool_status",
+                        extra={
+                            **_assistant_turn_context_extra(
+                                turn_id=turn_id,
+                                thread_id=thread_id,
+                                payload=payload,
+                            ),
+                            "tool_event_count": tool_event_count,
+                            "tool": stream_event.tool,
+                            "status": stream_event.status,
+                            "call_id": stream_event.call_id,
+                            "summary": _preview_text(stream_event.summary),
+                            "query_type": stream_event.query_type,
+                            "query_preview": _preview_text(stream_event.query_preview),
+                            "row_count": stream_event.row_count,
+                            "truncated": stream_event.truncated,
+                            "error": _preview_text(stream_event.error),
+                        },
+                    )
+                    yield (
+                        "tool_status",
+                        {
+                            "status": stream_event.status,
+                            "tool": stream_event.tool,
+                            "call_id": stream_event.call_id,
+                            "summary": stream_event.summary,
+                            "query_preview": stream_event.query_preview,
+                            "query_type": stream_event.query_type,
+                            "row_count": stream_event.row_count,
+                            "truncated": stream_event.truncated,
+                            "error": stream_event.error,
+                        },
+                    )
+                elif isinstance(stream_event, CopilotAnswerFinalEvent):
+                    response = _build_assistant_chat_response(
+                        payload=payload,
+                        thread_id=thread_id,
+                        copilot=stream_event.response,
+                        completion_messages=completion_messages,
+                    )
+                    _ASSISTANT_TURN_LOGGER.info(
+                        "assistant_turn_completed",
+                        extra={
+                            **_assistant_turn_context_extra(
+                                turn_id=turn_id,
+                                thread_id=thread_id,
+                                payload=payload,
+                            ),
+                            "duration_ms": _duration_ms(turn_started_at),
+                            "delta_chars": delta_chars,
+                            "tool_event_count": tool_event_count,
+                            "answer_chars": len(response.answer),
+                            "answer_preview": _preview_text(response.answer),
+                            "evidence_count": len(response.evidence),
+                            "caveat_count": len(response.caveats),
+                            "completion_message_count": len(response.completion_messages),
+                        },
+                    )
+                    yield ("final", response.model_dump(mode="json"))
+                    yield ("done", {"status": "ok"})
+                    return
+
+                try:
+                    stream_event = await anext(copilot_stream)
+                except StopAsyncIteration:
+                    break
+
+            failure_logged = True
+            _ASSISTANT_TURN_LOGGER.warning(
+                "assistant_turn_failed",
+                extra={
+                    **_assistant_turn_context_extra(
+                        turn_id=turn_id,
+                        thread_id=thread_id,
+                        payload=payload,
+                    ),
+                    "duration_ms": _duration_ms(turn_started_at),
+                    "delta_chars": delta_chars,
+                    "tool_event_count": tool_event_count,
+                    "error_type": "ValueError",
+                    "error_message": "assistant chat stream ended without final response",
+                },
+            )
+            raise ValueError("assistant chat stream ended without final response")
+        except Exception as exc:
+            if not failure_logged:
+                _ASSISTANT_TURN_LOGGER.warning(
+                    "assistant_turn_failed",
+                    extra={
+                        **_assistant_turn_context_extra(
+                            turn_id=turn_id,
+                            thread_id=thread_id,
+                            payload=payload,
+                        ),
+                        "duration_ms": _duration_ms(turn_started_at),
+                        "delta_chars": delta_chars,
+                        "tool_event_count": tool_event_count,
+                        "error_type": type(exc).__name__,
+                        "error_message": _preview_text(str(exc)),
+                    },
+                )
+            raise
 
     async def process_interpret(
         self,
@@ -813,6 +943,49 @@ def _truncate_completion_messages(
     if len(messages) <= max_messages:
         return messages
     return messages[-max_messages:]
+
+
+def _assistant_turn_context_extra(
+    *,
+    turn_id: str,
+    thread_id: str,
+    payload: AiAssistantChatRequest,
+) -> dict[str, Any]:
+    context = payload.context
+    return {
+        "turn_id": turn_id,
+        "thread_id": thread_id,
+        "route": context.route if context else None,
+        "module_context": context.module if context else None,
+        "anchor_object_type": context.anchor_object_type if context else None,
+        "concept_uri_count": len(context.concept_uris) if context else 0,
+        "context_summary": _format_context_details(context) if context else "",
+    }
+
+
+def _last_user_completion_message_text(
+    completion_messages: list[AiAssistantCompletionMessage],
+) -> str:
+    for message in reversed(completion_messages):
+        if message.role != "user":
+            continue
+        text = _message_content_to_text(message.content)
+        if text:
+            return text
+    return ""
+
+
+def _preview_text(value: Any, limit: int = 160) -> str:
+    if not isinstance(value, str):
+        return ""
+    normalized = " ".join(value.split()).strip()
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 3]}..."
+
+
+def _duration_ms(started_at: float) -> int:
+    return int((perf_counter() - started_at) * 1000)
 
 
 def _context_lines(context: AiAssistantContext) -> list[str]:

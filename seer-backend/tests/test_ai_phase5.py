@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -406,6 +407,104 @@ def test_ai_assistant_chat_returns_generic_envelope_and_thread_id() -> None:
     assert len(final["completion_messages"]) >= 2
     assert final["completion_messages"][-1]["role"] == "assistant"
     assert "error" not in event_types
+
+
+def test_ai_assistant_chat_logs_turn_lifecycle(caplog) -> None:
+    client = build_client()
+
+    with caplog.at_level(logging.INFO, logger="seer_backend.ai.assistant_turn"):
+        response = client.post(
+            "/api/v1/ai/assistant/chat",
+            json={
+                "completion_messages": [
+                    {"role": "user", "content": "Summarize what this module does."},
+                ],
+                "context": {
+                    "route": "/assistant",
+                    "module": "assistant",
+                    "anchor_object_type": _ORDER_URI,
+                },
+                "thread_id": "thread-logs-1",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    records = [
+        record
+        for record in caplog.records
+        if record.name == "seer_backend.ai.assistant_turn"
+    ]
+    messages = [record.message for record in records]
+    assert "assistant_turn_started" in messages
+    assert "assistant_turn_response_started" in messages
+    assert "assistant_turn_completed" in messages
+
+    started = next(record for record in records if record.message == "assistant_turn_started")
+    completed = next(record for record in records if record.message == "assistant_turn_completed")
+
+    assert started.thread_id == "thread-logs-1"
+    assert started.route == "/assistant"
+    assert started.module_context == "assistant"
+    assert started.prompt_preview == "Summarize what this module does."
+    assert isinstance(started.turn_id, str) and started.turn_id
+
+    assert completed.thread_id == "thread-logs-1"
+    assert completed.turn_id == started.turn_id
+    assert completed.answer_chars > 0
+    assert completed.completion_message_count >= 2
+
+
+def test_ai_assistant_chat_logs_tool_status_events(caplog) -> None:
+    client = build_client_with_copilot(StubOntologyCopilotWithPolicyBlock())
+
+    with caplog.at_level(logging.INFO, logger="seer_backend.ai.assistant_turn"):
+        response = client.post(
+            "/api/v1/ai/assistant/chat",
+            json={
+                "completion_messages": [
+                    {"role": "user", "content": "Please run an ontology mutation query."},
+                ],
+                "thread_id": "thread-tools-1",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    tool_records = [
+        record
+        for record in caplog.records
+        if record.name == "seer_backend.ai.assistant_turn"
+        and record.message == "assistant_turn_tool_status"
+    ]
+    assert [record.status for record in tool_records] == ["started", "failed"]
+    assert all(record.thread_id == "thread-tools-1" for record in tool_records)
+    assert tool_records[0].tool == "sparql_read_only_query"
+    assert tool_records[0].call_id == "call_1"
+
+
+def test_ai_assistant_chat_logs_failure(caplog) -> None:
+    client = build_client_with_copilot(StubOntologyCopilotNotReady())
+
+    with caplog.at_level(logging.INFO, logger="seer_backend.ai.assistant_turn"):
+        response = client.post(
+            "/api/v1/ai/assistant/chat",
+            json={
+                "completion_messages": [
+                    {"role": "user", "content": "What is the latest ontology release?"},
+                ],
+                "thread_id": "thread-failure-1",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    failed = next(
+        record
+        for record in caplog.records
+        if record.name == "seer_backend.ai.assistant_turn"
+        and record.message == "assistant_turn_failed"
+    )
+    assert failed.thread_id == "thread-failure-1"
+    assert failed.error_type == "OntologyNotReadyError"
+    assert "initializing" in failed.error_message.lower()
 
 
 def test_ai_assistant_chat_rejects_legacy_messages_only_payload() -> None:

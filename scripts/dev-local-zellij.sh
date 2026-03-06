@@ -59,7 +59,11 @@ export SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS="${SEER_ACTIONS_SWEEPER_INTERVAL_SE
 export SEER_ACTIONS_SWEEPER_BATCH_SIZE="${SEER_ACTIONS_SWEEPER_BATCH_SIZE:-100}"
 export SEER_ACTIONS_SWEEPER_ADVISORY_LOCK_ID="${SEER_ACTIONS_SWEEPER_ADVISORY_LOCK_ID:-104729}"
 export SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS="${SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS:-2}"
+export SEER_ASSISTANT_TURN_LOG_PATH="${SEER_ASSISTANT_TURN_LOG_PATH:-${ROOT_DIR}/.local/logs/assistant-turns.jsonl}"
 export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}"
+
+mkdir -p "$(dirname "${SEER_ASSISTANT_TURN_LOG_PATH}")"
+touch "${SEER_ASSISTANT_TURN_LOG_PATH}"
 
 docker compose -f docker-compose.db.yml up -d
 
@@ -103,8 +107,13 @@ layout {
         }
       }
       pane split_direction="Horizontal" {
-        pane name="fuseki-logs" command="bash" cwd="${ROOT_DIR}" {
-          args "-lc" "docker compose -f docker-compose.db.yml logs -f fuseki"
+        pane split_direction="Vertical" {
+          pane name="fuseki-logs" command="bash" cwd="${ROOT_DIR}" {
+            args "-lc" "docker compose -f docker-compose.db.yml logs -f fuseki"
+          }
+          pane name="assistant-logs" command="bash" cwd="${ROOT_DIR}" {
+            args "-lc" "tail -n 200 -F \"${SEER_ASSISTANT_TURN_LOG_PATH}\" | python3 scripts/render_assistant_turn_logs.py"
+          }
         }
         pane split_direction="Vertical" {
           pane name="clickhouse-logs" command="bash" cwd="${ROOT_DIR}" {

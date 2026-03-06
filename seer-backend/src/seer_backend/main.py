@@ -31,7 +31,10 @@ from seer_backend.logging import configure_logging
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
-    configure_logging(settings.log_level)
+    configure_logging(
+        settings.log_level,
+        assistant_turn_log_path=settings.assistant_turn_log_path,
+    )
     logger = logging.getLogger(__name__)
 
     @asynccontextmanager

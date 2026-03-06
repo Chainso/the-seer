@@ -87,7 +87,16 @@ Single-command launch with zellij multiplexing:
 ```
 
 This starts Fuseki + ClickHouse in Docker, then opens a `zellij` session with panes
-for backend, UI, and DB logs.
+for backend, UI, DB logs, and a dedicated assistant turn log stream.
+
+The assistant pane tails:
+
+```bash
+.local/logs/assistant-turns.jsonl
+```
+
+The backend writes that file when `SEER_ASSISTANT_TURN_LOG_PATH` is set. The
+zellij helper sets it automatically by default for local development.
 
 By default, when that zellij session is fully quit (not just detached), the script
 automatically runs:
@@ -106,6 +115,12 @@ Disable auto DB shutdown on zellij exit:
 
 ```bash
 SEER_AUTO_DB_DOWN_ON_EXIT=0 ./scripts/dev-local-zellij.sh
+```
+
+Override the assistant turn log file path:
+
+```bash
+SEER_ASSISTANT_TURN_LOG_PATH=/tmp/seer-assistant-turns.jsonl ./scripts/dev-local-zellij.sh
 ```
 
 When finished:
@@ -155,7 +170,7 @@ cd seer-ui && npm ci && npm run dev
 Defaults:
 
 1. `SEER_OPENAI_BASE_URL=http://host.docker.internal:8787/v1`
-2. `SEER_OPENAI_MODEL=gemini-3-flash-preview`
+2. `SEER_OPENAI_MODEL=gemini-2.5-flash`
 3. `SEER_OPENAI_API_KEY=` (empty is acceptable for local endpoints that ignore API keys)
 
 If your endpoint differs, override these values in `.env`.

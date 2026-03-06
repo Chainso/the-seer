@@ -169,6 +169,8 @@ def test_openai_runtime_supports_native_tool_call_response() -> None:
                             "content": "",
                             "tool_calls": [
                                 {
+                                    "id": "call_1",
+                                    "thought_signature": "sig_123",
                                     "function": {
                                         "name": "sparql_read_only_query",
                                         "arguments": json.dumps(
@@ -199,6 +201,9 @@ def test_openai_runtime_supports_native_tool_call_response() -> None:
     assert output.tool_call is not None
     assert output.tool_call.tool == "sparql_read_only_query"
     assert output.tool_call.query == "SELECT ?s WHERE { ?s ?p ?o }"
+    assert output.tool_call.call_id == "call_1"
+    assert output.tool_call.raw_tool_call is not None
+    assert output.tool_call.raw_tool_call["thought_signature"] == "sig_123"
 
 
 def test_openai_runtime_collects_multiple_tool_calls() -> None:
@@ -380,6 +385,79 @@ def test_openai_runtime_raises_after_transient_retry_exhausted() -> None:
         asyncio.run(runtime.run_messages([{"role": "user", "content": "Explain Ticket"}]))
 
     assert completions.calls == 2
+
+
+def test_copilot_preserves_provider_tool_call_fields_in_completion_messages_delta() -> None:
+    class ToolThenAnswerRuntime(CopilotModelRuntime):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
+            del messages
+            self.calls += 1
+            if self.calls == 1:
+                return CopilotStructuredOutput(
+                    mode="tool_call",
+                    answer="Checking ontology evidence.",
+                    evidence=[],
+                    tool_call=CopilotToolCall(
+                        tool="sparql_read_only_query",
+                        query="ASK WHERE { ?s ?p ?o }",
+                        call_id="call_1",
+                        raw_tool_call={
+                            "id": "call_1",
+                            "type": "function",
+                            "thought_signature": "sig_abc123",
+                            "function": {
+                                "name": "sparql_read_only_query",
+                                "arguments": json.dumps(
+                                    {"query": "ASK WHERE { ?s ?p ?o }"},
+                                    ensure_ascii=True,
+                                ),
+                            },
+                        },
+                    ),
+                    tool_calls=[
+                        CopilotToolCall(
+                            tool="sparql_read_only_query",
+                            query="ASK WHERE { ?s ?p ?o }",
+                            call_id="call_1",
+                            raw_tool_call={
+                                "id": "call_1",
+                                "type": "function",
+                                "thought_signature": "sig_abc123",
+                                "function": {
+                                    "name": "sparql_read_only_query",
+                                    "arguments": json.dumps(
+                                        {"query": "ASK WHERE { ?s ?p ?o }"},
+                                        ensure_ascii=True,
+                                    ),
+                                },
+                            },
+                        )
+                    ],
+                )
+            return CopilotStructuredOutput(
+                mode="direct_answer",
+                answer="Ticket exists in the ontology.",
+                evidence=[],
+                tool_call=None,
+            )
+
+    client = _build_client_with_runtime(ToolThenAnswerRuntime())
+    _ingest_success(client, release_id="phase1-preserve-provider-tool-fields")
+
+    response = client.post(
+        "/api/v1/ontology/copilot",
+        json={"question": "What is Ticket?", "conversation": []},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["answer"] == "Ticket exists in the ontology."
+    assistant_tool_call = body["completion_messages_delta"][0]["tool_calls"][0]
+    assert assistant_tool_call["thought_signature"] == "sig_abc123"
+    assert assistant_tool_call["function"]["name"] == "sparql_read_only_query"
 
 
 def test_build_services_keeps_ontology_available_when_openai_unconfigured() -> None:

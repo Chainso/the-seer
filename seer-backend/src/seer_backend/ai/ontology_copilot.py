@@ -709,15 +709,67 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
         else:
             call_id = None
 
+        raw_tool_call = _tool_call_to_raw_dict(tool, function_payload)
+        if call_id is not None:
+            raw_tool_call["id"] = call_id
+
         parsed_calls.append(
             CopilotToolCall(
                 tool="sparql_read_only_query",
                 query=query,
                 call_id=call_id,
+                raw_tool_call=raw_tool_call,
             )
         )
 
     return parsed_calls
+
+
+def _tool_call_to_raw_dict(tool: Any, function_payload: Any) -> dict[str, Any]:
+    raw_tool_call = _model_to_dict(tool)
+    raw_function = _model_to_dict(function_payload)
+
+    if not raw_tool_call:
+        raw_tool_call = {}
+    if not raw_function:
+        raw_function = {}
+
+    call_id = getattr(tool, "id", None)
+    if call_id is None and isinstance(tool, dict):
+        call_id = tool.get("id")
+    if call_id is not None:
+        raw_tool_call["id"] = call_id
+
+    call_type = getattr(tool, "type", None)
+    if call_type is None and isinstance(tool, dict):
+        call_type = tool.get("type")
+    raw_tool_call["type"] = call_type or "function"
+
+    function_name = getattr(function_payload, "name", None)
+    if function_name is None and isinstance(function_payload, dict):
+        function_name = function_payload.get("name")
+    if function_name is not None:
+        raw_function["name"] = function_name
+
+    arguments = getattr(function_payload, "arguments", None)
+    if arguments is None and isinstance(function_payload, dict):
+        arguments = function_payload.get("arguments")
+    if arguments is not None:
+        raw_function["arguments"] = arguments
+
+    raw_tool_call["function"] = raw_function
+    return raw_tool_call
+
+
+def _model_to_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump(exclude_none=True)
+        if isinstance(dumped, dict):
+            return dumped
+    return {}
 
 
 def _extract_tool_query_from_arguments(arguments: Any) -> str | None:
@@ -1090,19 +1142,18 @@ def _build_tool_result_messages(
     if not tool_call.call_id:
         raise ValueError("tool_call.call_id is required when building tool result messages")
 
+    raw_tool_call = dict(tool_call.raw_tool_call or {})
+    raw_function = dict(raw_tool_call.get("function", {}))
+    raw_tool_call["id"] = tool_call.call_id
+    raw_tool_call["type"] = raw_tool_call.get("type") or "function"
+    raw_function["name"] = tool_call.tool
+    raw_function["arguments"] = json.dumps({"query": tool_call.query}, ensure_ascii=True)
+    raw_tool_call["function"] = raw_function
+
     assistant_message: dict[str, Any] = {
         "role": "assistant",
         "content": assistant_content,
-        "tool_calls": [
-            {
-                "id": tool_call.call_id,
-                "type": "function",
-                "function": {
-                    "name": tool_call.tool,
-                    "arguments": json.dumps({"query": tool_call.query}, ensure_ascii=True),
-                },
-            }
-        ],
+        "tool_calls": [raw_tool_call],
     }
     tool_message: dict[str, Any] = {
         "role": "tool",

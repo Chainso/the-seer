@@ -131,6 +131,7 @@ class CopilotToolCall(BaseModel):
     tool: Literal["sparql_read_only_query"]
     query: str = Field(min_length=3, max_length=20000)
     call_id: str | None = None
+    raw_tool_call: dict[str, Any] | None = Field(default=None, exclude=True)
 
 
 class CopilotToolResult(BaseModel):

@@ -11,6 +11,9 @@ FastAPI scaffold for Seer MVP.
 
 Copy `.env.example` to `.env` and adjust values as needed.
 
+Set `SEER_ASSISTANT_TURN_LOG_PATH` when you want assistant turn lifecycle logs
+written to a dedicated JSONL file for local debugging.
+
 ## ClickHouse Client Approach
 
 1. Runtime ClickHouse repositories use SQLAlchemy Core with the `clickhousedb` dialect as the canonical query/execution path.
