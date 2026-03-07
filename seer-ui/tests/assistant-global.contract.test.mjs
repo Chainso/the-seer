@@ -89,6 +89,14 @@ test("assistant workspace consumes canvas state in the page shell", () => {
   assert.doesNotMatch(workspace, /Primary Investigation Surface/);
 });
 
+test("assistant canvas panel renders real OC-DFG graphs for ocdfg artifacts", () => {
+  const canvasPanel = read("app/components/assistant/assistant-canvas-panel.tsx");
+  assert.match(canvasPanel, /OcdfgGraphView/);
+  assert.match(canvasPanel, /toOcdfgGraphFromContract/);
+  assert.match(canvasPanel, /data-assistant-ocdfg-canvas/);
+  assert.match(canvasPanel, /artifact\.artifact_type !== 'ocdfg'/);
+});
+
 test("assistant canvas state derives from persisted completion messages", () => {
   const helper = read("app/lib/assistant-canvas-state.ts");
   assert.match(helper, /deriveCanvasStateFromCompletionMessages/);

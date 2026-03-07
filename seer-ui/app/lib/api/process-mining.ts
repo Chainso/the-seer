@@ -361,9 +361,11 @@ function buildOcdfgStartEdges(
   return startEdges;
 }
 
-export async function getOcdfgGraph(payload: ProcessMiningRequest): Promise<OcdfgGraph> {
-  const run = await mineOcdfg(payload);
-  const filteredEdges = filterOcdfgEdges(run.edges, payload.minShare);
+export function toOcdfgGraphFromContract(
+  run: OcdfgMiningResponseContract,
+  minShare?: number
+): OcdfgGraph {
+  const filteredEdges = filterOcdfgEdges(run.edges, minShare);
   const startActivities = run.start_activities.map(toOcdfgBoundaryActivity);
   const endActivities = run.end_activities.map(toOcdfgBoundaryActivity);
   const activityNodes = run.nodes.map(toOcdfgNode);
@@ -382,6 +384,11 @@ export async function getOcdfgGraph(payload: ProcessMiningRequest): Promise<Ocdf
     objectTypes: run.object_types,
     warnings: run.warnings,
   };
+}
+
+export async function getOcdfgGraph(payload: ProcessMiningRequest): Promise<OcdfgGraph> {
+  const run = await mineOcdfg(payload);
+  return toOcdfgGraphFromContract(run, payload.minShare);
 }
 
 export function toOcpnGraphFromOcdfg(graph: OcdfgGraph): OcpnGraph {
