@@ -30,7 +30,12 @@ const navigation = [
   },
 ];
 
-export function NavSidebar() {
+interface NavSidebarProps {
+  variant?: 'desktop' | 'drawer';
+  onNavigate?: () => void;
+}
+
+export function NavSidebar({ variant = 'desktop', onNavigate }: NavSidebarProps) {
   const pathname = usePathname();
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === 'undefined') {
@@ -54,8 +59,13 @@ export function NavSidebar() {
     });
   };
 
+  const containerClassName =
+    variant === 'drawer'
+      ? 'flex h-full w-[min(20rem,calc(100vw-1.5rem))] max-w-full flex-col rounded-r-[28px] border-r border-sidebar-border bg-sidebar pb-[env(safe-area-inset-bottom)] text-sidebar-foreground shadow-[0_18px_60px_-28px_black]'
+      : 'flex h-full w-72 flex-col border-r bg-sidebar text-sidebar-foreground';
+
   return (
-    <div className="flex h-full w-72 flex-col border-r bg-sidebar text-sidebar-foreground">
+    <div className={containerClassName}>
       <div className="flex h-16 items-center border-b border-sidebar-border px-5">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground">
@@ -74,6 +84,7 @@ export function NavSidebar() {
             <Link
               key={item.name}
               href={item.href}
+              onClick={onNavigate}
               className={cn(
                 'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors',
                 isActive
@@ -93,9 +104,9 @@ export function NavSidebar() {
             variant="ghost"
             className="w-full justify-between"
             onClick={toggleTheme}
-            aria-label="Toggle dark mode"
+            aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            <span className="text-sm font-medium">Dark mode</span>
+            <span className="text-sm font-medium">{isDark ? 'Light mode' : 'Dark mode'}</span>
             <span className="relative inline-flex h-4 w-4 items-center justify-center">
               <Moon className="hidden h-4 w-4 dark:block" aria-hidden="true" />
               <Sun className="block h-4 w-4 dark:hidden" aria-hidden="true" />

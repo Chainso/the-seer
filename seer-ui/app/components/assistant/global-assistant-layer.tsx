@@ -54,7 +54,7 @@ function GlobalAssistantLayerSurface({
           type="button"
           size="icon-lg"
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-[60] rounded-full border border-primary/35 bg-primary text-primary-foreground shadow-[0_18px_50px_-18px_var(--primary)]"
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-[calc(env(safe-area-inset-right)+1rem)] z-[60] rounded-full border border-primary/35 bg-primary text-primary-foreground shadow-[0_18px_50px_-18px_var(--primary)] sm:bottom-6 sm:right-6"
           aria-label="Open assistant"
         >
           <Bot className="h-5 w-5" />
@@ -62,9 +62,20 @@ function GlobalAssistantLayerSurface({
       )}
 
       {isOpen && (
-        <div className="pointer-events-none fixed inset-0 z-50">
-          <section className="absolute right-0 top-0 h-full w-full sm:w-[min(56rem,100vw)]">
-            <div className="pointer-events-auto h-full">
+        <div className="fixed inset-0 z-[65]">
+          <button
+            type="button"
+            className="absolute inset-0 bg-background/72 backdrop-blur-sm"
+            aria-label="Close assistant"
+            onClick={() => setIsOpen(false)}
+          />
+          <section
+            className="absolute right-0 top-0 h-full w-full sm:w-[min(56rem,100vw)]"
+            aria-label="Global assistant"
+            aria-modal="true"
+            role="dialog"
+          >
+            <div className="relative h-full">
               <AssistantWorkspace
                 variant="panel"
                 route={pathname}
