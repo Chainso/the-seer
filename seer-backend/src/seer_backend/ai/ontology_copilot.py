@@ -310,7 +310,7 @@ class OpenAiChatCompletionsRuntime:
         self._model = model
         self._timeout_seconds = timeout_seconds
         self._client = client or AsyncOpenAI(
-            base_url=base_url.rstrip("/"),
+            base_url=_normalize_openai_base_url(base_url),
             api_key=api_key or "not-needed",
             timeout=timeout_seconds,
         )
@@ -349,6 +349,13 @@ class OpenAiChatCompletionsRuntime:
                 raise OntologyError(f"OpenAI chat completion failed: {exc}") from exc
 
         return _to_structured_output(response)
+
+
+def _normalize_openai_base_url(base_url: str) -> str:
+    normalized = base_url.strip().rstrip("/")
+    if normalized.endswith("/chat/completions"):
+        return normalized[: -len("/chat/completions")]
+    return normalized
 
 
 class OntologyCopilotService:

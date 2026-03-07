@@ -8,6 +8,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 from openai import APIError
+import seer_backend.ai.ontology_copilot as ontology_copilot
 
 pytest.importorskip("rdflib")
 pytest.importorskip("pyshacl")
@@ -156,6 +157,34 @@ def test_openai_runtime_uses_chat_completions_json_contract() -> None:
     assert kwargs["parallel_tool_calls"] is True
     assert isinstance(kwargs["tools"], list)
     assert kwargs["messages"] == [{"role": "user", "content": "Explain Ticket"}]
+
+
+def test_openai_runtime_accepts_full_chat_completions_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeAsyncOpenAI:
+        def __init__(self, *, base_url: str, api_key: str, timeout: float) -> None:
+            captured["base_url"] = base_url
+            captured["api_key"] = api_key
+            captured["timeout"] = timeout
+            self.chat = type("FakeChat", (), {"completions": object()})()
+
+    monkeypatch.setattr(ontology_copilot, "AsyncOpenAI", FakeAsyncOpenAI)
+
+    OpenAiChatCompletionsRuntime(
+        base_url="https://opencode.ai/zen/v1/chat/completions",
+        model="local-model",
+        api_key="test-key",
+        timeout_seconds=12.0,
+    )
+
+    assert captured == {
+        "base_url": "https://opencode.ai/zen/v1",
+        "api_key": "test-key",
+        "timeout": 12.0,
+    }
 
 
 def test_openai_runtime_supports_native_tool_call_response() -> None:

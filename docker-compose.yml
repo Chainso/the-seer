@@ -25,8 +25,8 @@ services:
       SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS: ${SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS:-20}
       SEER_ACTIONS_SCHEMA_BOOTSTRAP_ON_STARTUP: "true"
       SEER_PROPHET_METAMODEL_PATH: /prophet/prophet.ttl
-      SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-http://host.docker.internal:8787/v1}
-      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gemini-2.5-flash}
+      SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-https://opencode.ai/zen/v1/chat/completions}
+      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-big-pickle}
       SEER_OPENAI_API_KEY: ${SEER_OPENAI_API_KEY:-}
     volumes:
       - ./prophet:/prophet:ro
