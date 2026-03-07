@@ -369,7 +369,7 @@ Validation:
 
 ## Phase 3: Domain Skill Conversion
 
-**Status:** pending
+**Status:** in_progress
 
 **Goal:** convert Seer’s specialized analysis capabilities into assistant-loadable skill-backed tool bundles.
 
@@ -559,6 +559,7 @@ Validation:
 6. 2026-03-07: `docs/product-specs/ai-investigation-workbench.md` remains the delivered workbench snapshot, but it is no longer the forward `/assistant` product target; this active plan now owns the superseding execution direction until a new ratified spec is written.
 7. 2026-03-07: Phase 1 keeps the dedicated workbench transport as a temporary secondary path, but `/assistant` itself now routes through the canonical assistant chat contract so skill loading and canvas phases can extend one conversation runtime instead of two.
 8. 2026-03-07: Skill activation should persist through ordinary assistant/tool messages in `completion_messages`; Phase 2 therefore avoids a parallel active-skill store and reconstructs enabled tool permissions from saved conversation history.
+9. 2026-03-07: Product assistant skills should load from the dedicated repo catalog at `assistant-skills/` rather than the developer `.agent/skills` or `.agents/skills` roots so the runtime skill corpus stays product-owned and reviewable.
 
 ## Progress Log
 
@@ -569,6 +570,7 @@ Validation:
 5. 2026-03-07: Phase 0 completed by locking the redesign direction in the active plan, aligning the spec/index pointers to treat the workbench as delivered-but-superseded behavior, and setting Phase 1 contract unification as the next controller action.
 6. 2026-03-07: Completed Phase 1 by rerouting `/assistant` back to the canonical assistant stream, restoring assistant-turn logging on the real product page path, and updating UI contract tests to treat the workbench transport as secondary.
 7. 2026-03-07: Completed Phase 2 by adding backend skill discovery (`.agent/skills` / `.agents/skills`), parsing `allowed-tools` metadata, introducing `load_skill` into the assistant tool loop, persisting loaded skill instructions in tool messages, and deriving assistant tool permissions from conversation history. Validation passed for `test_ontology_phase1.py`, `test_ai_phase5.py`, and targeted backend Ruff checks.
+8. 2026-03-07: Started Phase 3A by moving default product assistant skill discovery to the dedicated repo catalog at `assistant-skills/`, seeding `process-mining`, `root-cause`, `deep-ontology`, `object-history`, and `object-store` SKILL specs, and adding assertions that the default assistant catalog no longer matches the developer `.agents/skills` corpus.
 
 ## Progress Tracking
 
@@ -587,4 +589,5 @@ Current execution state:
 2. Controller baseline validation is recorded above and accepted as the track starting ledger.
 3. Phase 1 completed on `2026-03-07`.
 4. Phase 2 completed on `2026-03-07`.
-5. Next action: execute Phase 3 domain skill conversion.
+5. Phase 3 is in progress; Phase 3A landed the dedicated assistant skill catalog and path correction on `2026-03-07`.
+6. Next action: execute the remaining Phase 3 domain tool-conversion work without marking the phase complete until tool adapters and activation flows are validated.

@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_DEFAULT_ASSISTANT_SKILL_DIRS = (str(_REPO_ROOT / "assistant-skills"),)
 
 
 class Settings(BaseSettings):
@@ -16,7 +21,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     assistant_turn_log_path: str | None = None
     assistant_skill_dirs: list[str] = Field(
-        default_factory=lambda: [".agent/skills", ".agents/skills"]
+        default_factory=lambda: list(_DEFAULT_ASSISTANT_SKILL_DIRS)
     )
 
     host: str = "0.0.0.0"

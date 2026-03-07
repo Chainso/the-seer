@@ -43,6 +43,7 @@ VALID_FIXTURE = (
 )
 INVALID_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "ontology_invalid_missing_name.ttl"
 PROPHET_METAMODEL = REPO_ROOT / "prophet" / "prophet.ttl"
+ASSISTANT_SKILLS_ROOT = REPO_ROOT / "assistant-skills"
 
 
 class FakeModelRuntime(CopilotModelRuntime):
@@ -398,6 +399,61 @@ def test_skill_registry_discovers_allowed_tools_and_detects_collisions(
 
     with pytest.raises(AssistantSkillCollisionError):
         AssistantSkillRegistry([str(skill_root_a), str(skill_root_b)]).discover()
+
+
+def test_settings_default_assistant_skill_dirs_use_dedicated_catalog() -> None:
+    settings = Settings()
+
+    assert settings.assistant_skill_dirs == [str(ASSISTANT_SKILLS_ROOT)]
+    assert ".agent/skills" not in settings.assistant_skill_dirs
+    assert ".agents/skills" not in settings.assistant_skill_dirs
+
+
+def test_default_assistant_skill_catalog_is_separate_from_developer_skills() -> None:
+    registry = AssistantSkillRegistry(Settings().assistant_skill_dirs)
+    discovered = registry.discover()
+
+    expected_tools = {
+        "deep-ontology": (
+            "ontology.current",
+            "ontology.concepts",
+            "ontology.concept_detail",
+            "ontology.graph",
+            "ontology.query(read_only)",
+        ),
+        "object-history": (
+            "history.object_events",
+            "history.relations",
+            "history.object_timeline",
+        ),
+        "object-store": (
+            "history.latest_objects",
+            "history.object_events",
+        ),
+        "process-mining": (
+            "process.mine",
+            "process.traces",
+        ),
+        "root-cause": (
+            "root_cause.run",
+            "root_cause.evidence",
+            "root_cause.assist.setup",
+            "root_cause.assist.interpret",
+        ),
+    }
+
+    assert registry.configured_roots() == (ASSISTANT_SKILLS_ROOT.resolve(),)
+    assert set(discovered) == set(expected_tools)
+    assert {
+        skill_name: skill.allowed_tools for skill_name, skill in discovered.items()
+    } == expected_tools
+
+    developer_registry = AssistantSkillRegistry([str(REPO_ROOT / ".agents" / "skills")])
+    developer_skills = developer_registry.discover()
+
+    assert "execute-phase" in developer_skills
+    assert "execute-phase" not in discovered
+    assert set(discovered).isdisjoint(developer_skills)
 
 
 def test_openai_runtime_normalizes_long_provider_tool_call_ids() -> None:
