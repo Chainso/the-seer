@@ -275,6 +275,8 @@ Worker handoff requirements:
 
 ## Phase 3: Frontend Workbench API Adapter + Semantic Renderer Foundation
 
+**Status:** completed
+
 **Goal:** build the frontend data and rendering foundation for workbench-specific streaming and semantic markdown blocks.
 
 Primary files:
@@ -539,6 +541,7 @@ Milestone validation:
 7. 2026-03-07: Frontend phases may use Playwright-driven QA against `http://localhost:3000`.
 8. 2026-03-07: Phase 1 workbench streaming reuses the existing SSE framing (`meta`, `assistant_delta`, `final`, `done`) and adds workbench-specific `investigation_status` plus `linked_surface_hint` events instead of inventing a separate transport model.
 9. 2026-03-07: Backend semantic markdown stays narrative-first; typed linked-surface metadata remains in the response contract alongside rendered `:::linked-surface` blocks.
+10. 2026-03-07: Phase 3 routes the dedicated `/assistant` page through workbench stream mode while intentionally deferring the full copy/layout rewrite to Phase 4.
 
 ## Progress Log
 
@@ -560,13 +563,21 @@ Milestone validation:
    - clarifying turns now emit semantic `:::follow-up` and `:::caveat` blocks
    - linked-surface metadata remains typed in the response while rendered blocks mirror the same drill-down targets
    - validation passed: `seer-backend/.venv/bin/pytest seer-backend/tests/test_ai_phase5.py -q` (`15 passed`) and `seer-backend/.venv/bin/ruff check seer-backend/src/seer_backend/ai seer-backend/tests/test_ai_phase5.py`
+8. 2026-03-07: Completed Phase 3 frontend stream and semantic renderer foundation:
+   - added shared SSE helpers plus a dedicated frontend workbench stream client
+   - extended shared assistant state with workbench thread experience, investigation IDs, and per-message workbench metadata
+   - added a local semantic markdown parser for `:::evidence`, `:::caveat`, `:::next-action`, `:::follow-up`, and `:::linked-surface`
+   - rendered semantic blocks inside assistant messages with plain markdown fallback and workbench-specific linked-surface affordances
+   - routed the dedicated `/assistant` page workspace into workbench stream mode without doing the full page UX rewrite yet
+   - added frontend contract coverage for the workbench client, semantic parser, and page-mode wiring
+   - validation passed: `cd seer-ui && npm run lint`, `cd seer-ui && npm run build`, and `cd seer-ui && npm run test:contracts` with only the pre-existing `tests/insights.contract.test.mjs` failure remaining
 
 ## Progress Tracking
 
 - [x] Phase 0 complete
 - [x] Phase 1 complete
 - [x] Phase 2 complete
-- [ ] Phase 3 complete
+- [x] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
 - [ ] Phase 6 complete
@@ -574,8 +585,8 @@ Milestone validation:
 Current execution state:
 
 1. Plan opened and in progress.
-2. Baseline, backend contract, and backend semantic-markdown phases complete.
-3. Next controller action: spawn Phase 3 frontend foundation worker using `execute-phase`.
+2. Baseline, backend contract, backend semantic-markdown, and frontend renderer-foundation phases complete.
+3. Next controller action: spawn Phase 4 dedicated `/assistant` workbench surface worker using `execute-phase`.
 
 ## Controller Handoff Packet: Phase 1
 

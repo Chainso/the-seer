@@ -13,30 +13,53 @@ import {
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown';
 import { ArrowUpRight, Plus, SendHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 
+import { parseWorkbenchSemanticBlock } from '@/app/lib/workbench-semantic-markdown';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
-import { formatModuleName } from '@/app/components/assistant/shared-assistant-state';
+import {
+  type AssistantExperience,
+  formatModuleName,
+  type StoredWorkbenchMessage,
+} from '@/app/components/assistant/shared-assistant-state';
 import { useSharedAssistantRuntime } from '@/app/components/assistant/use-shared-assistant-runtime';
 
-const QUICK_PROMPTS = [
-  'Summarize the current process risk signals in this module.',
-  'What should I investigate first based on this context?',
-  'Explain this area in business language with concrete examples.',
-];
+const QUICK_PROMPTS: Record<AssistantExperience, string[]> = {
+  assistant: [
+    'Summarize the current process risk signals in this module.',
+    'What should I investigate first based on this context?',
+    'Explain this area in business language with concrete examples.',
+  ],
+  workbench: [
+    'Investigate the main operational risks in this area.',
+    'What changed recently that deserves investigation first?',
+    'Summarize the strongest evidence and the biggest caveats.',
+  ],
+};
 
-function QuickPrompts({ moduleName }: { moduleName: string }) {
+function QuickPrompts({
+  moduleName,
+  experience,
+}: {
+  moduleName: string;
+  experience: AssistantExperience;
+}) {
   const aui = useAui();
 
   return (
     <div className="mt-4 grid gap-2">
-      {QUICK_PROMPTS.map((prompt) => (
+      {QUICK_PROMPTS[experience].map((prompt) => (
         <button
           key={prompt}
           type="button"
           onClick={() =>
             aui.thread().append({
               role: 'user',
-              content: [{ type: 'text', text: `[${moduleName}] ${prompt}` }],
+              content: [
+                {
+                  type: 'text',
+                  text: experience === 'workbench' ? prompt : `[${moduleName}] ${prompt}`,
+                },
+              ],
             })
           }
           className="group rounded-xl border border-border/70 bg-card/80 px-3 py-2 text-left text-sm transition-colors hover:border-primary/40 hover:bg-primary/8"
@@ -47,6 +70,64 @@ function QuickPrompts({ moduleName }: { moduleName: string }) {
           </span>
         </button>
       ))}
+    </div>
+  );
+}
+
+function SemanticBlockLabel({ label }: { label: string }) {
+  return (
+    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+      {label}
+    </p>
+  );
+}
+
+function WorkbenchTextPart({ text }: { text: string }) {
+  const block = parseWorkbenchSemanticBlock(text);
+  if (!block) {
+    return (
+      <MarkdownTextPrimitive className="space-y-3 [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-muted/70 [&_code]:px-1 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-border/80 [&_pre]:bg-muted/50 [&_pre]:p-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold" />
+    );
+  }
+
+  const toneClass =
+    block.kind === 'evidence'
+      ? 'border-emerald-500/25 bg-emerald-500/8'
+      : block.kind === 'caveat'
+        ? 'border-amber-500/30 bg-amber-500/10'
+        : block.kind === 'next-action'
+          ? 'border-sky-500/25 bg-sky-500/8'
+          : block.kind === 'follow-up'
+            ? 'border-violet-500/25 bg-violet-500/8'
+            : 'border-primary/25 bg-primary/8';
+
+  const label =
+    block.kind === 'next-action'
+      ? 'Next Action'
+      : block.kind === 'follow-up'
+        ? 'Follow-up'
+        : block.kind === 'linked-surface'
+          ? 'Linked Surface'
+          : `${block.kind.charAt(0).toUpperCase()}${block.kind.slice(1)}`;
+
+  return (
+    <div className={`rounded-2xl border px-3 py-3 ${toneClass}`}>
+      <SemanticBlockLabel label={label} />
+      <MarkdownTextPrimitive
+        className="space-y-2 text-[13px] [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+        preprocess={() => block.body}
+      />
+      {block.kind === 'linked-surface' && block.attributes.href && (
+        <div className="mt-3">
+          <a
+            href={block.attributes.href}
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary underline"
+          >
+            Open surface
+            <ArrowUpRight className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      )}
     </div>
   );
 }
@@ -69,6 +150,10 @@ function AssistantMessageBubble() {
   const hasRenderableText = useMessage((state) =>
     state.content.some((part) => part.type === 'text' && part.text.trim().length > 0)
   );
+  const workbench = useMessage((state) => {
+    const custom = state.metadata?.custom as { workbench?: StoredWorkbenchMessage | null } | undefined;
+    return custom?.workbench ?? null;
+  });
   if (!hasRenderableText) {
     return null;
   }
@@ -76,10 +161,22 @@ function AssistantMessageBubble() {
   return (
     <MessagePrimitive.Root className="mb-3 flex justify-start">
       <div className="max-w-[90%] rounded-2xl rounded-tl-sm border border-border/85 bg-card/95 px-3 py-2 text-sm leading-relaxed shadow-[0_8px_22px_-14px_color-mix(in_oklch,var(--foreground)_18%,transparent)]">
+        {workbench && (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
+              {workbench.turnKind === 'clarifying_question' ? 'Clarifying Turn' : 'Investigation'}
+            </span>
+            {workbench.whyItMatters && (
+              <p className="text-xs text-muted-foreground">{workbench.whyItMatters}</p>
+            )}
+          </div>
+        )}
         <MessagePrimitive.Content
           components={{
-            Text: () => (
-              <MarkdownTextPrimitive className="space-y-3 [&_a]:text-primary [&_a]:underline [&_code]:rounded [&_code]:bg-muted/70 [&_code]:px-1 [&_pre]:overflow-x-auto [&_pre]:rounded-xl [&_pre]:border [&_pre]:border-border/80 [&_pre]:bg-muted/50 [&_pre]:p-3 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_h1]:text-base [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold" />
+            Text: (part) => (
+              <div className="mb-3 last:mb-0">
+                <WorkbenchTextPart text={part.text} />
+              </div>
             ),
           }}
         />
@@ -101,6 +198,7 @@ function LoadingBubble() {
 }
 
 interface AssistantWorkspaceProps {
+  experience?: AssistantExperience;
   variant: 'panel' | 'page';
   route: string;
   moduleName: string;
@@ -109,6 +207,7 @@ interface AssistantWorkspaceProps {
 }
 
 export function AssistantWorkspace({
+  experience = 'assistant',
   variant,
   route,
   moduleName,
@@ -118,8 +217,9 @@ export function AssistantWorkspace({
   const { runtime, threads, activeThreadId, hydrated } = useSharedAssistantRuntime({
     context: {
       route,
-      module: moduleName,
+      module: experience === 'workbench' ? 'workbench' : moduleName,
     },
+    experience,
   });
   const seedPromptRef = useRef('');
   const normalizedSeedPrompt = (seedPrompt || '').trim();
@@ -235,7 +335,7 @@ export function AssistantWorkspace({
                         </p>
                       </div>
                     </div>
-                    <QuickPrompts moduleName={moduleName} />
+                    <QuickPrompts moduleName={moduleName} experience={experience} />
                   </div>
                 </div>
               </AuiIf>

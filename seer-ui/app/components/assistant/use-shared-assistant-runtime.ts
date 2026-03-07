@@ -5,6 +5,7 @@ import { useExternalStoreRuntime } from '@assistant-ui/react';
 
 import type { AssistantChatContext } from '@/app/lib/api/assistant-chat';
 import {
+  type AssistantExperience,
   DEFAULT_THREAD_TITLE,
   getTextFromAppendMessage,
   toThreadMessage,
@@ -13,6 +14,7 @@ import {
 
 interface UseSharedAssistantRuntimeOptions {
   context?: AssistantChatContext;
+  experience?: AssistantExperience;
 }
 
 export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOptions) {
@@ -32,7 +34,7 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
     onNew: async (appendMessage) => {
       const userText = getTextFromAppendMessage(appendMessage);
       if (!userText) return;
-      await state.sendMessage(userText, options?.context);
+      await state.sendMessage(userText, options?.context, options?.experience);
     },
     onCancel: async () => {
       state.cancelThread(state.activeThreadId);

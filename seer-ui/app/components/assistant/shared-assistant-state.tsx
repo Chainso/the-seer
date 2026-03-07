@@ -9,6 +9,13 @@ import {
   type AssistantChatContext,
   type AssistantChatResponse,
 } from '@/app/lib/api/assistant-chat';
+import {
+  postWorkbenchChatStream,
+  type WorkbenchChatResponse,
+  type WorkbenchClarifyingQuestion,
+  type WorkbenchLinkedSurface,
+} from '@/app/lib/api/workbench';
+import { parseWorkbenchMarkdownParts } from '@/app/lib/workbench-semantic-markdown';
 
 const CANONICAL_STORAGE_KEY = 'seer_assistant_threads_v3';
 const STORAGE_SYNC_CHANNEL = 'seer_assistant_threads_sync_v1';
@@ -18,18 +25,32 @@ const MAX_THREAD_MESSAGES = 120;
 const MAX_COMPLETION_MESSAGES = 400;
 
 type StoredRole = 'user' | 'assistant';
+export type AssistantExperience = 'assistant' | 'workbench';
+
+export interface StoredWorkbenchMessage {
+  answerMarkdown: string;
+  turnKind: 'investigation_answer' | 'clarifying_question';
+  whyItMatters: string;
+  followUpQuestions: string[];
+  linkedSurfaces: WorkbenchLinkedSurface[];
+  clarifyingQuestions: WorkbenchClarifyingQuestion[];
+  investigationId: string;
+}
 
 export interface StoredMessage {
   id: string;
   role: StoredRole;
   text: string;
   at: string;
+  workbench?: StoredWorkbenchMessage | null;
 }
 
 export interface StoredThread {
   id: string;
   title: string;
   updatedAt: number;
+  experience: AssistantExperience;
+  investigationId?: string | null;
   messages: StoredMessage[];
   completionMessages: AssistantCompletionMessage[];
 }
@@ -45,10 +66,14 @@ interface SharedAssistantStateContextValue {
   threads: StoredThread[];
   activeThreadId: string;
   setActiveThreadId: (threadId: string) => void;
-  createNewThread: (seedText?: string) => string;
+  createNewThread: (seedText?: string, experience?: AssistantExperience) => string;
   deleteThread: (threadId: string) => void;
   renameThread: (threadId: string, title: string) => void;
-  sendMessage: (userText: string, context?: AssistantChatContext) => Promise<void>;
+  sendMessage: (
+    userText: string,
+    context?: AssistantChatContext,
+    experience?: AssistantExperience
+  ) => Promise<void>;
   cancelThread: (threadId: string) => void;
   isThreadRunning: (threadId: string) => boolean;
 }
@@ -66,7 +91,7 @@ function sortThreads(threads: StoredThread[]): StoredThread[] {
   return [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-function createThread(seedText?: string): StoredThread {
+function createThread(seedText?: string, experience: AssistantExperience = 'assistant'): StoredThread {
   const now = Date.now();
   const trimmed = (seedText || '').trim();
   const title =
@@ -79,6 +104,8 @@ function createThread(seedText?: string): StoredThread {
     id: makeId('thread'),
     title,
     updatedAt: now,
+    experience,
+    investigationId: null,
     messages: [],
     completionMessages: [],
   };
@@ -102,6 +129,61 @@ function normalizeMessage(input: unknown): StoredMessage | null {
     role,
     text,
     at,
+    workbench: normalizeWorkbenchMessage((maybe as { workbench?: unknown }).workbench),
+  };
+}
+
+function normalizeWorkbenchMessage(input: unknown): StoredWorkbenchMessage | null {
+  if (!input || typeof input !== 'object') return null;
+  const maybe = input as Partial<StoredWorkbenchMessage>;
+  if (typeof maybe.answerMarkdown !== 'string' || !maybe.answerMarkdown.trim()) return null;
+  if (
+    maybe.turnKind !== 'investigation_answer' &&
+    maybe.turnKind !== 'clarifying_question'
+  ) {
+    return null;
+  }
+
+  return {
+    answerMarkdown: maybe.answerMarkdown,
+    turnKind: maybe.turnKind,
+    whyItMatters: typeof maybe.whyItMatters === 'string' ? maybe.whyItMatters : '',
+    followUpQuestions: Array.isArray(maybe.followUpQuestions)
+      ? maybe.followUpQuestions.filter((item): item is string => typeof item === 'string')
+      : [],
+    linkedSurfaces: Array.isArray(maybe.linkedSurfaces)
+      ? maybe.linkedSurfaces.filter(
+          (item): item is WorkbenchLinkedSurface =>
+            !!item &&
+            typeof item === 'object' &&
+            typeof (item as WorkbenchLinkedSurface).kind === 'string' &&
+            typeof (item as WorkbenchLinkedSurface).label === 'string' &&
+            typeof (item as WorkbenchLinkedSurface).href === 'string' &&
+            typeof (item as WorkbenchLinkedSurface).reason === 'string'
+        )
+      : [],
+    clarifyingQuestions: Array.isArray(maybe.clarifyingQuestions)
+      ? maybe.clarifyingQuestions.filter(
+          (item): item is WorkbenchClarifyingQuestion =>
+            !!item &&
+            typeof item === 'object' &&
+            typeof (item as WorkbenchClarifyingQuestion).field === 'string' &&
+            typeof (item as WorkbenchClarifyingQuestion).prompt === 'string'
+        )
+      : [],
+    investigationId: typeof maybe.investigationId === 'string' ? maybe.investigationId : '',
+  };
+}
+
+function toStoredWorkbenchMessage(payload: WorkbenchChatResponse): StoredWorkbenchMessage {
+  return {
+    answerMarkdown: payload.answer_markdown,
+    turnKind: payload.turn_kind,
+    whyItMatters: payload.why_it_matters,
+    followUpQuestions: payload.follow_up_questions || [],
+    linkedSurfaces: payload.linked_surfaces || [],
+    clarifyingQuestions: payload.clarifying_questions || [],
+    investigationId: payload.investigation_id,
   };
 }
 
@@ -140,6 +222,9 @@ function normalizeThreads(rawThreads: unknown): StoredThread[] {
           id: maybe.id,
           title,
           updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now(),
+          experience: maybe.experience === 'workbench' ? 'workbench' : 'assistant',
+          investigationId:
+            typeof maybe.investigationId === 'string' ? maybe.investigationId : null,
           messages,
           completionMessages,
         };
@@ -232,12 +317,15 @@ function upsertAssistantMessage(
   messages: StoredMessage[],
   messageId: string,
   at: string,
-  text: string
+  text: string,
+  workbench?: StoredWorkbenchMessage | null
 ): StoredMessage[] {
   const existingIndex = messages.findIndex((message) => message.id === messageId);
   if (existingIndex >= 0) {
     return messages.map((message, index) =>
-      index === existingIndex ? { ...message, text, at: message.at || at } : message
+      index === existingIndex
+        ? { ...message, text, at: message.at || at, workbench: workbench ?? message.workbench ?? null }
+        : message
     );
   }
   return [
@@ -247,6 +335,7 @@ function upsertAssistantMessage(
       role: 'assistant',
       text,
       at,
+      workbench: workbench ?? null,
     } satisfies StoredMessage,
   ].slice(-MAX_THREAD_MESSAGES);
 }
@@ -275,18 +364,27 @@ export function toThreadMessage(message: StoredMessage): ThreadMessage {
       metadata: { custom: {} },
     };
   }
+  const content =
+    message.workbench?.answerMarkdown
+      ? parseWorkbenchMarkdownParts(message.workbench.answerMarkdown).map((part) => ({
+          type: 'text' as const,
+          text: part.text,
+        }))
+      : [{ type: 'text' as const, text: message.text }];
   return {
     id: message.id,
     role: 'assistant',
     createdAt,
-    content: [{ type: 'text', text: message.text }],
+    content,
     status: { type: 'complete', reason: 'stop' },
     metadata: {
       unstable_state: null,
       unstable_annotations: [],
       unstable_data: [],
       steps: [],
-      custom: {},
+      custom: {
+        workbench: message.workbench ?? null,
+      },
     },
   };
 }
@@ -396,12 +494,15 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
     );
   }, []);
 
-  const createNewThread = useCallback((seedText?: string): string => {
-    const nextThread = createThread(seedText);
-    setThreads((previous) => sortThreads([nextThread, ...previous]));
-    setActiveThreadIdState(nextThread.id);
-    return nextThread.id;
-  }, []);
+  const createNewThread = useCallback(
+    (seedText?: string, experience: AssistantExperience = 'assistant'): string => {
+      const nextThread = createThread(seedText, experience);
+      setThreads((previous) => sortThreads([nextThread, ...previous]));
+      setActiveThreadIdState(nextThread.id);
+      return nextThread.id;
+    },
+    []
+  );
 
   const setActiveThreadId = useCallback((threadId: string) => {
     if (!threadId) return;
@@ -458,11 +559,16 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
   );
 
   const sendMessage = useCallback(
-    async (userText: string, context?: AssistantChatContext) => {
+    async (
+      userText: string,
+      context?: AssistantChatContext,
+      requestedExperience: AssistantExperience = 'assistant'
+    ) => {
       const trimmed = userText.trim();
       if (!trimmed) return;
 
-      const currentActiveId = activeThreadIdRef.current || createNewThread(trimmed);
+      const currentActiveId =
+        activeThreadIdRef.current || createNewThread(trimmed, requestedExperience);
       const now = new Date().toISOString();
       const userMessage: StoredMessage = {
         id: makeId('msg-user'),
@@ -475,7 +581,11 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
 
       const snapshot = threadsRef.current;
       const existingThread = snapshot.find((thread) => thread.id === currentActiveId);
-      const baseThread = existingThread || createThread(trimmed);
+      const threadExperience =
+        existingThread?.experience ||
+        requestedExperience ||
+        (context?.module === 'workbench' ? 'workbench' : 'assistant');
+      const baseThread = existingThread || createThread(trimmed, threadExperience);
       const nextMessages = [...baseThread.messages, userMessage].slice(-MAX_THREAD_MESSAGES);
       const nextMessagesWithPlaceholder = upsertAssistantMessage(
         nextMessages,
@@ -498,6 +608,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
               id: currentActiveId,
               title: nextTitle || DEFAULT_THREAD_TITLE,
               updatedAt: Date.now(),
+              experience: threadExperience,
               messages: nextMessagesWithPlaceholder,
               completionMessages: nextCompletionMessages,
             },
@@ -509,6 +620,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           ...thread,
           title: nextTitle || DEFAULT_THREAD_TITLE,
           updatedAt: Date.now(),
+          experience: threadExperience,
           messages: nextMessagesWithPlaceholder,
           completionMessages: nextCompletionMessages,
         }));
@@ -523,8 +635,9 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
 
       let streamedAssistantText = '';
       let finalEvent: AssistantChatResponse | null = null;
+      let finalWorkbenchEvent: WorkbenchChatResponse | null = null;
 
-      const setAssistantText = (nextText: string) => {
+      const setAssistantText = (nextText: string, workbench?: StoredWorkbenchMessage | null) => {
         updateThread(currentActiveId, (thread) => ({
           ...thread,
           updatedAt: Date.now(),
@@ -532,38 +645,73 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
             thread.messages,
             assistantMessageId,
             assistantMessageAt,
-            nextText
+            nextText,
+            workbench
           ).slice(-MAX_THREAD_MESSAGES),
         }));
       };
 
       try {
-        const streamResult = await postAssistantChatStream(
-          {
-            thread_id: currentActiveId,
-            completion_messages: nextCompletionMessages,
-            context,
-          },
-          {
-            onAssistantDelta: ({ text }) => {
-              if (!text) return;
-              streamedAssistantText += text;
-              setAssistantText(streamedAssistantText);
+        if (threadExperience === 'workbench') {
+          const streamResult = await postWorkbenchChatStream(
+            {
+              question: trimmed,
+              context: {
+                ...context,
+                module: 'workbench',
+              },
+              thread_id: currentActiveId,
+              investigation_id: baseThread.investigationId || undefined,
             },
-            onFinal: (payload) => {
-              finalEvent = payload;
+            {
+              onAssistantDelta: ({ text }) => {
+                if (!text) return;
+                streamedAssistantText += text;
+                setAssistantText(streamedAssistantText);
+              },
+              onFinal: (payload) => {
+                finalWorkbenchEvent = payload;
+              },
             },
-          },
-          abortController.signal
-        );
+            abortController.signal
+          );
 
-        if (!finalEvent) {
-          finalEvent = streamResult.final;
+          if (!finalWorkbenchEvent) {
+            finalWorkbenchEvent = streamResult.final;
+          }
+        } else {
+          const streamResult = await postAssistantChatStream(
+            {
+              thread_id: currentActiveId,
+              completion_messages: nextCompletionMessages,
+              context,
+            },
+            {
+              onAssistantDelta: ({ text }) => {
+                if (!text) return;
+                streamedAssistantText += text;
+                setAssistantText(streamedAssistantText);
+              },
+              onFinal: (payload) => {
+                finalEvent = payload;
+              },
+            },
+            abortController.signal
+          );
+
+          if (!finalEvent) {
+            finalEvent = streamResult.final;
+          }
         }
 
+        const workbenchMetadata = finalWorkbenchEvent
+          ? toStoredWorkbenchMessage(finalWorkbenchEvent)
+          : null;
         const finalAnswer =
           streamedAssistantText.trim() ||
-          (typeof finalEvent?.answer === 'string' ? finalEvent.answer.trim() : '');
+          (typeof finalEvent?.answer === 'string'
+            ? finalEvent.answer.trim()
+            : workbenchMetadata?.answerMarkdown.trim() || '');
 
         updateThread(currentActiveId, (thread) => {
           const finalizedMessages =
@@ -572,7 +720,8 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
                   thread.messages,
                   assistantMessageId,
                   assistantMessageAt,
-                  finalAnswer
+                  finalAnswer,
+                  workbenchMetadata
                 ).slice(-MAX_THREAD_MESSAGES)
               : thread.messages.filter((message) => message.id !== assistantMessageId);
 
@@ -595,6 +744,8 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           return {
             ...thread,
             updatedAt: Date.now(),
+            experience: threadExperience,
+            investigationId: workbenchMetadata?.investigationId || thread.investigationId || null,
             messages: finalizedMessages,
             completionMessages,
           };
@@ -608,11 +759,11 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
             messages:
               partialAnswer.length > 0
                 ? upsertAssistantMessage(
-                    thread.messages,
-                    assistantMessageId,
-                    assistantMessageAt,
-                    partialAnswer
-                  ).slice(-MAX_THREAD_MESSAGES)
+                  thread.messages,
+                  assistantMessageId,
+                  assistantMessageAt,
+                  partialAnswer
+                ).slice(-MAX_THREAD_MESSAGES)
                 : thread.messages.filter((message) => message.id !== assistantMessageId),
           }));
           return;

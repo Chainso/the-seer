@@ -1,3 +1,5 @@
+import { asObject, getApiUrl, parseSseEvent, readErrorDetail } from '@/app/lib/api/ai-sse';
+
 export type AssistantCompletionRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface AssistantCompletionMessage {
@@ -97,132 +99,45 @@ export interface AssistantChatStreamResult {
   sawDone: boolean;
 }
 
-interface ParsedSseEvent {
-  event: string;
-  payload: unknown;
-}
-
-function normalizeApiBase(rawBase: string): string {
-  const trimmed = rawBase.trim().replace(/\/+$/, '');
-  if (!trimmed) {
-    return 'http://localhost:8000/api/v1';
-  }
-
-  try {
-    const parsed = new URL(trimmed);
-    const normalizedPath = parsed.pathname.replace(/\/+$/, '');
-    if (!normalizedPath || normalizedPath === '/') {
-      parsed.pathname = '/api/v1';
-    } else if (normalizedPath === '/api') {
-      parsed.pathname = '/api/v1';
-    } else if (normalizedPath === '/api/v1') {
-      parsed.pathname = '/api/v1';
-    } else {
-      parsed.pathname = normalizedPath;
-    }
-    return `${parsed.origin}${parsed.pathname}`;
-  } catch {
-    if (trimmed.endsWith('/api')) {
-      return `${trimmed}/v1`;
-    }
-    return trimmed;
-  }
-}
-
-const API_BASE = normalizeApiBase(
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:8000/api/v1'
-);
-
-function getApiUrl(endpoint: string): string {
-  return `${API_BASE}${endpoint}`;
-}
-
-function asObject(payload: unknown): Record<string, unknown> {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return {};
-  }
-  return payload as Record<string, unknown>;
-}
-
-function readErrorDetail(payload: unknown): string {
-  const data = asObject(payload);
-  if (typeof data.detail === 'string' && data.detail.trim().length > 0) {
-    return data.detail;
-  }
-  return '';
-}
-
-function parseSseEvent(rawEvent: string): ParsedSseEvent | null {
-  let eventName = '';
-  const dataLines: string[] = [];
-
-  for (const line of rawEvent.split('\n')) {
-    if (!line || line.startsWith(':')) continue;
-    if (line.startsWith('event:')) {
-      eventName = line.slice(6).trim();
-      continue;
-    }
-    if (line.startsWith('data:')) {
-      const data = line.slice(5);
-      dataLines.push(data.startsWith(' ') ? data.slice(1) : data);
-    }
-  }
-
-  if (!eventName) return null;
-
-  const payloadText = dataLines.join('\n');
-  let payload: unknown = {};
-  if (payloadText.trim().length > 0) {
-    try {
-      payload = JSON.parse(payloadText);
-    } catch {
-      throw new Error(`Assistant stream event "${eventName}" had invalid JSON payload`);
-    }
-  }
-
-  return { event: eventName, payload };
-}
-
 function handleSseEvent(
-  parsed: ParsedSseEvent,
+  event: string,
+  payload: unknown,
   handlers: AssistantChatStreamHandlers,
   result: AssistantChatStreamResult
 ): void {
-  const payload = asObject(parsed.payload);
-  switch (parsed.event) {
+  const data = asObject(payload);
+  switch (event) {
     case 'meta': {
-      const eventPayload = payload as unknown as AssistantChatMetaEvent;
+      const eventPayload = data as unknown as AssistantChatMetaEvent;
       result.meta = eventPayload;
       handlers.onMeta?.(eventPayload);
       return;
     }
     case 'assistant_delta': {
-      const text = typeof payload.text === 'string' ? payload.text : '';
+      const text = typeof data.text === 'string' ? data.text : '';
       const eventPayload: AssistantChatDeltaEvent = { text };
       result.deltaText += text;
       handlers.onAssistantDelta?.(eventPayload);
       return;
     }
     case 'tool_status': {
-      handlers.onToolStatus?.(payload as unknown as AssistantChatToolStatusEvent);
+      handlers.onToolStatus?.(data as unknown as AssistantChatToolStatusEvent);
       return;
     }
     case 'final': {
-      const eventPayload = payload as unknown as AssistantChatResponse;
+      const eventPayload = data as unknown as AssistantChatResponse;
       result.final = eventPayload;
       handlers.onFinal?.(eventPayload);
       return;
     }
     case 'done': {
-      const eventPayload = payload as unknown as AssistantChatDoneEvent;
+      const eventPayload = data as unknown as AssistantChatDoneEvent;
       result.sawDone = true;
       handlers.onDone?.(eventPayload);
       return;
     }
     case 'error': {
-      const eventPayload = payload as unknown as AssistantChatErrorEvent;
+      const eventPayload = data as unknown as AssistantChatErrorEvent;
       handlers.onError?.(eventPayload);
       const detail =
         typeof eventPayload.message === 'string' && eventPayload.message.trim().length > 0
@@ -288,7 +203,7 @@ export async function postAssistantChatStream(
       buffer = buffer.slice(separatorIndex + 2);
       const parsed = parseSseEvent(rawEvent);
       if (parsed) {
-        handleSseEvent(parsed, handlers, result);
+        handleSseEvent(parsed.event, parsed.payload, handlers, result);
       }
       separatorIndex = buffer.indexOf('\n\n');
     }
@@ -299,7 +214,7 @@ export async function postAssistantChatStream(
   if (buffer.trim().length > 0) {
     const parsed = parseSseEvent(buffer);
     if (parsed) {
-      handleSseEvent(parsed, handlers, result);
+      handleSseEvent(parsed.event, parsed.payload, handlers, result);
     }
   }
 

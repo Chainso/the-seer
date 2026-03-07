@@ -9,11 +9,15 @@ import { inferModuleFromPath } from '@/app/components/assistant/shared-assistant
 export function AssistantPageWorkspace() {
   const pathname = usePathname() || '/assistant';
   const searchParams = useSearchParams();
-  const moduleName = useMemo(() => inferModuleFromPath(pathname), [pathname]);
+  const moduleName = useMemo(
+    () => (pathname === '/assistant' ? 'workbench' : inferModuleFromPath(pathname)),
+    [pathname]
+  );
   const seedPrompt = searchParams.get('q');
 
   return (
     <AssistantWorkspace
+      experience="workbench"
       variant="page"
       route={pathname}
       moduleName={moduleName}

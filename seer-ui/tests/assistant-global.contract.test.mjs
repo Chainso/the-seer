@@ -31,6 +31,16 @@ test("assistant clients target canonical ai assistant endpoint", () => {
   assert.match(adapter, /case 'final'/);
 });
 
+test("workbench client targets dedicated ai workbench endpoint", () => {
+  const adapter = read("app/lib/api/workbench.ts");
+  assert.match(adapter, /\/ai\/workbench\/chat/);
+  assert.match(adapter, /text\/event-stream/);
+  assert.match(adapter, /postWorkbenchChatStream/);
+  assert.match(adapter, /investigation_status/);
+  assert.match(adapter, /linked_surface_hint/);
+  assert.match(adapter, /answer_markdown/);
+});
+
 test("assistant route uses the shared assistant workspace", () => {
   const assistantPage = read("app/assistant/page.tsx");
   assert.match(assistantPage, /AssistantPageWorkspace/);
@@ -41,8 +51,11 @@ test("shared assistant state uses a single canonical storage model", () => {
   const sharedState = read("app/components/assistant/shared-assistant-state.tsx");
   assert.match(sharedState, /seer_assistant_threads_v3/);
   assert.match(sharedState, /postAssistantChatStream/);
+  assert.match(sharedState, /postWorkbenchChatStream/);
   assert.match(sharedState, /onAssistantDelta/);
   assert.match(sharedState, /completion_messages/);
+  assert.match(sharedState, /investigation_id/);
+  assert.match(sharedState, /experience:/);
   assert.doesNotMatch(sharedState, /toAssistantChatMessages/);
   assert.match(sharedState, /cancelThread/);
   assert.doesNotMatch(sharedState, /postAssistantChat\(/);
