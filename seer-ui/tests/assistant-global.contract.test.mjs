@@ -45,6 +45,14 @@ test("assistant route uses the shared assistant workspace", () => {
   const assistantPage = read("app/assistant/page.tsx");
   assert.match(assistantPage, /AssistantPageWorkspace/);
   assert.doesNotMatch(assistantPage, /MissionControlPanel/);
+  assert.doesNotMatch(assistantPage, /Loading workbench/);
+});
+
+test("assistant page workspace uses the canonical assistant experience", () => {
+  const workspace = read("app/components/assistant/assistant-page-workspace.tsx");
+  assert.match(workspace, /experience="assistant"/);
+  assert.match(workspace, /moduleName="assistant"/);
+  assert.doesNotMatch(workspace, /experience="workbench"/);
 });
 
 test("shared assistant state uses a single canonical storage model", () => {

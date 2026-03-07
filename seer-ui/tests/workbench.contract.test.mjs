@@ -24,11 +24,11 @@ test("workbench semantic markdown parser supports the shipped block set", () => 
   assert.match(parser, /stripSemanticBlockWrapper/);
 });
 
-test("assistant page opts into workbench mode", () => {
-  const workspace = read("app/components/assistant/assistant-page-workspace.tsx");
-  assert.match(workspace, /experience=\"workbench\"/);
-  assert.match(workspace, /moduleName = useMemo/);
-  assert.match(workspace, /'workbench'/);
+test("assistant workspace still carries the dedicated workbench page affordances", () => {
+  const workspace = read("app/components/assistant/assistant-workspace.tsx");
+  assert.match(workspace, /isWorkbenchPage/);
+  assert.match(workspace, /WorkbenchClarificationPanel/);
+  assert.match(workspace, /module: 'workbench'/);
 });
 
 test("assistant workspace renders semantic workbench blocks", () => {

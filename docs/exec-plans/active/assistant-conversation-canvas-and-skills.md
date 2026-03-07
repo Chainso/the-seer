@@ -303,7 +303,7 @@ Validation:
 
 ## Phase 1: Canonical Assistant Contract Unification
 
-**Status:** pending
+**Status:** completed
 
 **Goal:** make `/assistant` run on the canonical assistant chat-completions-style contract again.
 
@@ -557,6 +557,7 @@ Validation:
 4. 2026-03-07: Existing Seer OC-DFG components should be reused for the first canvas artifact implementation rather than building a new graph renderer.
 5. 2026-03-07: The Gemini local split-canvas pattern is the visual interaction reference: conversation left, artifact canvas right, smooth expansion rather than route changes.
 6. 2026-03-07: `docs/product-specs/ai-investigation-workbench.md` remains the delivered workbench snapshot, but it is no longer the forward `/assistant` product target; this active plan now owns the superseding execution direction until a new ratified spec is written.
+7. 2026-03-07: Phase 1 keeps the dedicated workbench transport as a temporary secondary path, but `/assistant` itself now routes through the canonical assistant chat contract so skill loading and canvas phases can extend one conversation runtime instead of two.
 
 ## Progress Log
 
@@ -565,11 +566,12 @@ Validation:
 3. 2026-03-07: Superseded the narrower conversational-recovery framing with this broader `/assistant` redesign plan.
 4. 2026-03-07: Recorded the controller baseline ledger in this plan without rerunning the full suite: `seer-ui` lint passed, `seer-ui` build passed, `seer-ui` contract tests failed only in pre-existing `tests/insights.contract.test.mjs`, `test_ai_phase5.py` passed (`15 passed`), and targeted backend Ruff checks passed.
 5. 2026-03-07: Phase 0 completed by locking the redesign direction in the active plan, aligning the spec/index pointers to treat the workbench as delivered-but-superseded behavior, and setting Phase 1 contract unification as the next controller action.
+6. 2026-03-07: Completed Phase 1 by rerouting `/assistant` back to the canonical assistant stream, restoring assistant-turn logging on the real product page path, and updating UI contract tests to treat the workbench transport as secondary.
 
 ## Progress Tracking
 
 - [x] Phase 0 complete
-- [ ] Phase 1 complete
+- [x] Phase 1 complete
 - [ ] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
@@ -581,4 +583,5 @@ Current execution state:
 
 1. Phase 0 completed on `2026-03-07`.
 2. Controller baseline validation is recorded above and accepted as the track starting ledger.
-3. Next action: execute Phase 1 contract unification.
+3. Phase 1 completed on `2026-03-07`.
+4. Next action: execute Phase 2 skill runtime.

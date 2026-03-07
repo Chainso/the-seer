@@ -91,6 +91,10 @@ function QuickPrompts({
   experience: AssistantExperience;
 }) {
   const aui = useAui();
+  const promptPrefix =
+    experience === 'assistant' && moduleName !== 'assistant' && moduleName !== 'general'
+      ? `[${moduleName}] `
+      : '';
 
   return (
     <div className="mt-4 grid gap-2">
@@ -104,7 +108,7 @@ function QuickPrompts({
               content: [
                 {
                   type: 'text',
-                  text: experience === 'workbench' ? prompt : `[${moduleName}] ${prompt}`,
+                  text: `${promptPrefix}${prompt}`,
                 },
               ],
             })
@@ -493,7 +497,7 @@ export function AssistantWorkspace({
   const emptyStateCopy = isWorkbenchPage
     ? 'Start from the question. Seer will investigate, surface evidence, and make uncertainty visible.'
     : 'Grounded responses with evidence and caveats.';
-  const baseWorkbenchContext =
+  const baseContext =
     experience === 'workbench'
       ? {
           route,
@@ -661,7 +665,7 @@ export function AssistantWorkspace({
                       setThreadWorkbenchContext(activeThread.id, contextUpdate);
                     }}
                     onRun={(question) => {
-                      void sendMessage(question, baseWorkbenchContext, 'workbench');
+                      void sendMessage(question, baseContext, 'workbench');
                     }}
                   />
                 ) : null}
