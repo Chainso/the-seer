@@ -32,3 +32,6 @@ Each completed plan should preserve:
 20. `action-orchestration-backend-service.md` - completed (2026-03-01)
 21. `assistant-turn-logging-and-zellij-debug-panel.md` - completed (2026-03-05)
 22. `devcontainer-codex-workspace.md` - completed (2026-03-06)
+23. `responsive-shell-and-mobile-navigation.md` - completed (2026-03-07)
+24. `analytics-run-results-discoverability.md` - completed (2026-03-07)
+25. `url-backed-analysis-state.md` - completed (2026-03-07)

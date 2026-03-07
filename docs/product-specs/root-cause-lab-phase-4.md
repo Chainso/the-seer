@@ -21,9 +21,11 @@ Define user-facing behavior for MVP Root-Cause Lab configuration, ranked insight
    - run-scoped `outcome` definition,
    - optional cohort `filters`.
 3. User runs RCA request.
-4. UI renders ranked insights with WRAcc/lift/coverage and evidence drill-down controls.
-5. User opens evidence drill-down for a selected insight and inspects supporting traces.
-6. User can invoke AI assist to:
+4. UI immediately surfaces a visible completed-state summary or jump target into ranked insights and evidence.
+5. UI renders ranked insights with WRAcc/lift/coverage and evidence drill-down controls.
+6. Refreshing or sharing a URL with encoded RCA state restores the visible RCA context and reruns when required inputs are present.
+7. User opens evidence drill-down for a selected insight and inspects supporting traces.
+8. User can invoke AI assist to:
    - draft setup suggestions,
    - summarize top findings and caveats.
 
@@ -41,6 +43,9 @@ Define user-facing behavior for MVP Root-Cause Lab configuration, ranked insight
 3. Evidence drill-down returns supporting traces for selected insight handles.
 4. Re-running unchanged snapshot preserves ranked ordering deterministically.
 5. AI assist output supports setup/interpretation and repeats non-causal caveats.
+6. A successful RCA run creates an obvious visible completion state at the current viewport.
+7. Ranked-insight and evidence entry points remain visible and understandable after completion, including warning or low-signal outcomes.
+8. URL-backed RCA state restores core scope, filters, and completed run context safely across refresh and direct links.
 
 ## Out of Scope (Phase 4)
 

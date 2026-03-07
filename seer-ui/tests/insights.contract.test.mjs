@@ -16,7 +16,9 @@ test("inspector page exposes insights route and analytics redirect", () => {
   const insightsRoute = read("app/inspector/insights/page.tsx");
   const analyticsRoute = read("app/inspector/analytics/page.tsx");
 
-  assert.match(insightsRoute, /return <InsightsPanel defaultTab="process-insights" \/>/);
+  assert.match(insightsRoute, /connection\(\)/);
+  assert.match(insightsRoute, /<Suspense fallback=\{<InsightsPageFallback \/>}/);
+  assert.match(insightsRoute, /<InsightsPanel defaultTab="process-insights" \/>/);
   assert.match(analyticsRoute, /redirect\('\/inspector\/insights'\)/);
 });
 
@@ -29,8 +31,10 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
 
   assert.match(insightsPanel, /TabsTrigger value="process-insights">Process Insights<\/TabsTrigger>/);
   assert.match(insightsPanel, /TabsTrigger value="process-mining">Process Mining<\/TabsTrigger>/);
-  assert.match(insightsPanel, /<ProcessInsightsPanel \/>/);
-  assert.match(insightsPanel, /<ProcessMiningPanel \/>/);
+  assert.match(insightsPanel, /<ProcessInsightsPanel isActive=\{activeTab === "process-insights"\} \/>/);
+  assert.match(insightsPanel, /<ProcessMiningPanel isActive=\{activeTab === "process-mining"\} \/>/);
+  assert.match(insightsPanel, /useSearchParams/);
+  assert.match(insightsPanel, /mergeSearchParams/);
   assert.match(rootCausePanel, /runRootCause/);
   assert.match(rootCausePanel, /getRootCauseEvidence/);
   assert.match(rootCausePanel, /assistRootCauseSetup/);

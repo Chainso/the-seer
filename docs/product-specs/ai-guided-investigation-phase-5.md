@@ -24,6 +24,7 @@ Define user-facing behavior for unified AI interactions and the guided ontology 
    - RCA interpretation.
 5. UI renders unified evidence/caveat cards for ontology, process, and RCA outputs.
 6. User follows recommended next actions and drills into process/RCA module routes as needed.
+7. Guided handoff links into `/inspector/insights` preserve the relevant investigation mode and URL-backed analysis context so shared follow-up work opens in the same visible state.
 
 ## Backend Contracts Consumed by UI
 
@@ -51,6 +52,7 @@ Define user-facing behavior for unified AI interactions and the guided ontology 
    - terminal `final` then `done` on success.
 8. On assistant failure, stream emits terminal `error` and closes without `done`.
 9. Assistant request/replay model uses canonical `completion_messages[]` (OpenAI-style) as persisted thread history.
+10. Guided-investigation handoff URLs are shareable and restorable for downstream process/RCA follow-up.
 
 ## Out of Scope (Phase 5)
 

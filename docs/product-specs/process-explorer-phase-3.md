@@ -24,23 +24,26 @@ Define user-facing behavior for OC-DFG-first process mining and trace drill-down
    - `depth>=3`: recursive expansion by shared event references.
 4. UI shows resolved included object models before mining runs.
 5. User runs mining request.
-6. UI requests `POST /api/v1/process/ocdfg/mine` and renders OC-DFG first:
+6. UI immediately surfaces a visible completed-state summary or jump target when mining succeeds.
+7. UI requests `POST /api/v1/process/ocdfg/mine` and renders OC-DFG first:
    - `nodes`,
    - `edges`,
    - `start_activities`,
    - `end_activities`,
    - `object_types`,
    - optional edge performance percentiles (`p50_seconds`, `p95_seconds`).
-7. OC-DFG visualization behavior:
+8. The completed-state summary exposes direct navigation into OC-DFG, OCPN, and BPMN result sections when available.
+9. OC-DFG visualization behavior:
    - object nodes are displayed per included object type,
    - start edges render from object nodes to their start activities,
    - activity and object nodes render ontology display names (no raw URI text in visible labels),
    - event nodes related to exactly one object type use a lighter variant of that object-type color.
-8. UI keeps secondary diagrams available:
+10. UI keeps secondary diagrams available:
    - `POST /api/v1/process/mine` for OCPN,
    - derived BPMN path from collapsed OCPN.
-9. User clicks a node, edge, start activity, or end activity entry.
-10. UI requests trace drill-down with the backend handle and renders matching traces.
+11. Shared links and refreshes restore the visible mining mode, core scope controls, and completed-state result context when encoded in the URL.
+12. User clicks a node, edge, start activity, or end activity entry.
+13. UI requests trace drill-down with the backend handle and renders matching traces.
 
 ## Backend Contracts Consumed by UI
 
@@ -67,6 +70,10 @@ Mining request scope semantics:
 8. OC-DFG and OCPN mining calls use the same resolved multi-object scope per run.
 9. OC-DFG UI includes object nodes and object-to-start-activity edges in the rendered node/edge model.
 10. OC-DFG object and activity node labels are ontology-display driven for user-facing names.
+11. A successful mining run creates an obvious visible completion state at the current viewport.
+12. Completed-state summaries and warning/empty-result states remain visible and understandable after the run finishes.
+13. URL-backed mining state restores tab, scope, and run-completed context across refresh and direct links.
+14. Invalid or partial mining query params normalize safely instead of breaking the view.
 
 ## Out of Scope (Phase 3)
 

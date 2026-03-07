@@ -26,6 +26,9 @@ Capture design-level decisions that sit between product vision and concrete arch
 9. User-visible field/state display in inspector flows is centralized in a shared ontology display layer (ontology-first, consistent fallbacks).
 10. Interactive agent conversations in Seer UI are implemented with `assistant-ui` as the standard frontend conversation/runtime framework across assistant surfaces.
 11. Seer UI components are built on Radix UI primitives as the standard accessibility and interaction foundation for reusable frontend components.
+12. The shared Seer shell is responsive by default: desktop uses a persistent navigation rail, while narrow/mobile widths use a dismissible drawer pattern that preserves full-width content readability and keeps navigation overlays above secondary shell affordances.
+13. Successful analytics runs must create an obvious completion state at the current viewport and provide a direct path into the primary result surface rather than relying on users to discover off-screen output.
+14. URL-backed analysis state uses a strict allowlist of shareable query params; included state is normalized to safe defaults and treated as the source of truth for the visible investigation context.
 
 ## Design Docs Index
 

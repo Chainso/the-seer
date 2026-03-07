@@ -1,7 +1,7 @@
 # MVP Phase Execution Index
 
 **Status:** Canonical per-phase execution map  
-**Date:** 2026-03-01  
+**Date:** 2026-03-07  
 **Parent roadmap:** `docs/exec-plans/completed/mvp-roadmap-2026.md`
 
 ---
@@ -84,6 +84,9 @@ Current post-MVP execution state:
 
 - `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/responsive-shell-and-mobile-navigation.md` (responsive shell, drawer lifecycle hardening, and mobile shell validation ratified on 2026-03-07)
+- `completed`: `docs/exec-plans/completed/analytics-run-results-discoverability.md` (analytics completion summaries and result-reveal behavior ratified on 2026-03-07)
+- `completed`: `docs/exec-plans/completed/url-backed-analysis-state.md` (deep-linkable insights state, restore flows, and query normalization ratified on 2026-03-07)
 - `completed`: `docs/exec-plans/completed/action-orchestration-backend-service.md` (all phases complete; docs ratified and archived on 2026-03-01)
 - `completed`: `docs/exec-plans/completed/assistant-turn-logging-and-zellij-debug-panel.md` (all phases complete; validation/docs/archive ratified on 2026-03-05)
 - `completed`: `docs/exec-plans/completed/devcontainer-codex-workspace.md` (container build/docs/archive ratified on 2026-03-06)

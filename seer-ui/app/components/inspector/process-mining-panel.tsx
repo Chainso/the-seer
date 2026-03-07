@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Activity, Filter, Layers } from "lucide-react";
 
 import { Badge } from "../ui/badge";
@@ -20,6 +21,7 @@ import type { OcdfgGraph, OcpnGraph } from "@/app/types/process-mining";
 import { OcpnGraph as OcpnGraphView } from "./ocpn-graph";
 import { OcdfgGraph as OcdfgGraphView } from "./ocdfg-graph";
 import { BpmnGraph as BpmnGraphView } from "./bpmn-graph";
+import { mergeSearchParams, parseBooleanSearchParam } from "@/app/lib/url-state";
 
 type ProcessTreeNode = {
   id: string;
@@ -175,6 +177,8 @@ interface FilterPair {
   value: string;
 }
 
+type ReadableSearchParams = Pick<URLSearchParams, "get" | "getAll">;
+
 const toDatetimeLocalValue = (date: Date): string => {
   const withOffset = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
   return withOffset.toISOString().slice(0, 16);
@@ -183,6 +187,84 @@ const toDatetimeLocalValue = (date: Date): string => {
 const EVENT_NODE_LABELS = new Set(["Event", "Signal", "Transition"]);
 const ACTION_NODE_LABELS = new Set(["Action", "Process", "Workflow"]);
 const DEPTH_OPTIONS = ["1", "2", "3", "4", "5"];
+const PM_FILTER_PARAM = "pm_filter";
+
+function defaultWindowRange(): { from: string; to: string } {
+  const now = new Date();
+  return {
+    from: toDatetimeLocalValue(new Date(now.getTime() - 24 * 60 * 60 * 1000)),
+    to: toDatetimeLocalValue(now),
+  };
+}
+
+function decodeSearchToken(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return "";
+  }
+}
+
+function normalizeDateTimeLocalValue(value: string | null | undefined, fallback: string): string {
+  if (!value) {
+    return fallback;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) {
+    return fallback;
+  }
+  return toDatetimeLocalValue(parsed);
+}
+
+function toIsoDateTime(value: string): string | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.valueOf())) {
+    return null;
+  }
+  return parsed.toISOString();
+}
+
+function serializeMiningFilters(filters: FilterPair[]): string[] {
+  return filters
+    .filter((filter) => filter.key.trim() || filter.value.trim())
+    .map((filter) => [filter.key.trim(), filter.value.trim()].map(encodeURIComponent).join("~"));
+}
+
+function parseMiningFilters(searchParams: ReadableSearchParams): FilterPair[] {
+  const filters = searchParams
+    .getAll(PM_FILTER_PARAM)
+    .map((entry, index) => {
+      const [rawKey = "", rawValue = ""] = entry.split("~", 2);
+      return {
+        id: `filter-${index}`,
+        key: decodeSearchToken(rawKey),
+        value: decodeSearchToken(rawValue),
+      };
+    })
+    .filter((filter) => filter.key || filter.value);
+
+  return filters.length > 0 ? filters : [{ id: "filter-0", key: "", value: "" }];
+}
+
+function areMiningFiltersEqual(left: FilterPair[], right: FilterPair[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((filter, index) => {
+    const candidate = right[index];
+    return candidate && filter.key === candidate.key && filter.value === candidate.value;
+  });
+}
+
+function areSerializedFiltersEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
+}
 
 function resolveDepthScopedModels(options: {
   anchorModelUri: string;
@@ -314,22 +396,35 @@ function resolveDepthScopedModels(options: {
   return [anchorModelUri, ...extras];
 }
 
-export function ProcessMiningPanel() {
+interface ProcessMiningPanelProps {
+  isActive: boolean;
+}
+
+export function ProcessMiningPanel({ isActive }: ProcessMiningPanelProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const ontologyDisplay = useOntologyDisplay();
   const { graph: ontologyGraph } = useOntologyGraphContext();
-  const [modelUri, setModelUri] = useState("");
-  const [depth, setDepth] = useState("1");
-  const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>("24h");
-  const [from, setFrom] = useState(() => {
-    const now = new Date();
-    return toDatetimeLocalValue(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  const [modelUri, setModelUri] = useState(() => searchParams.get("pm_model") ?? "");
+  const [depth, setDepth] = useState(() => searchParams.get("pm_depth") ?? "1");
+  const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>(() => {
+    const preset = searchParams.get("pm_preset");
+    return preset === "7d" || preset === "30d" || preset === "custom" ? preset : "24h";
   });
-  const [to, setTo] = useState(() => toDatetimeLocalValue(new Date()));
-  const [traceId, setTraceId] = useState("");
-  const [workflowId, setWorkflowId] = useState("");
-  const [minShare, setMinShare] = useState("0");
-  const [collapseObjects, setCollapseObjects] = useState(true);
-  const [filters, setFilters] = useState<FilterPair[]>([{ id: "filter-0", key: "", value: "" }]);
+  const [from, setFrom] = useState(() =>
+    normalizeDateTimeLocalValue(searchParams.get("pm_from"), defaultWindowRange().from)
+  );
+  const [to, setTo] = useState(() =>
+    normalizeDateTimeLocalValue(searchParams.get("pm_to"), defaultWindowRange().to)
+  );
+  const [traceId, setTraceId] = useState(() => searchParams.get("pm_trace") ?? "");
+  const [workflowId, setWorkflowId] = useState(() => searchParams.get("pm_workflow") ?? "");
+  const [minShare, setMinShare] = useState(() => searchParams.get("pm_min_share") ?? "0");
+  const [collapseObjects, setCollapseObjects] = useState(() =>
+    parseBooleanSearchParam(searchParams.get("pm_collapse"), true)
+  );
+  const [filters, setFilters] = useState<FilterPair[]>(() => parseMiningFilters(searchParams));
 
   const [ocdfgGraph, setOcdfgGraph] = useState<OcdfgGraph | null>(null);
   const [ocpnGraph, setOcpnGraph] = useState<OcpnGraph | null>(null);
@@ -337,9 +432,37 @@ export function ProcessMiningPanel() {
   const [loading, setLoading] = useState(false);
   const [mining, setMining] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(() => searchParams.get("pm_node"));
   const [bpmnGraph, setBpmnGraph] = useState<BpmnGraph | null>(null);
   const [bpmnError, setBpmnError] = useState<string | null>(null);
+  const resultsSummaryRef = useRef<HTMLDivElement | null>(null);
+  const ocdfgSectionRef = useRef<HTMLDivElement | null>(null);
+  const ocpnSectionRef = useRef<HTMLDivElement | null>(null);
+  const bpmnSectionRef = useRef<HTMLDivElement | null>(null);
+  const autoRunSignatureRef = useRef("");
+  const completionSignatureRef = useRef("");
+  const filterSyncSourceRef = useRef<"local" | "url">("local");
+
+  const replaceQuery = useCallback((updates: Record<string, string | string[] | null | undefined>) => {
+    const nextQuery = mergeSearchParams(searchParams, updates);
+    const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
+    if (typeof window !== "undefined") {
+      window.history.replaceState(null, "", nextUrl);
+    }
+    startTransition(() => {
+      router.replace(nextUrl, { scroll: false });
+    });
+  }, [pathname, router, searchParams]);
+
+  const clearMiningResults = useCallback(() => {
+    setOcdfgGraph(null);
+    setOcpnGraph(null);
+    setOcpnGraphCollapsed(false);
+    setSelectedNodeId(null);
+    setBpmnGraph(null);
+    setBpmnError(null);
+    completionSignatureRef.current = "";
+  }, []);
 
   const modelOptions = useMemo(() => {
     return [...ontologyDisplay.catalog.objectModels]
@@ -355,6 +478,69 @@ export function ProcessMiningPanel() {
       setModelUri(modelOptions[0].uri);
     }
   }, [modelOptions, modelUri]);
+
+  useEffect(() => {
+    const fallbackWindow = defaultWindowRange();
+    const nextModelUri = searchParams.get("pm_model") ?? modelOptions[0]?.uri ?? "";
+    const nextDepth = DEPTH_OPTIONS.includes(searchParams.get("pm_depth") ?? "")
+      ? (searchParams.get("pm_depth") as string)
+      : "1";
+    const nextPreset = searchParams.get("pm_preset");
+    const nextWindowPreset =
+      nextPreset === "7d" || nextPreset === "30d" || nextPreset === "custom" ? nextPreset : "24h";
+    const nextTraceId = searchParams.get("pm_trace") ?? "";
+    const nextWorkflowId = searchParams.get("pm_workflow") ?? "";
+    const nextMinShare = searchParams.get("pm_min_share") ?? "0";
+    const nextCollapseObjects = parseBooleanSearchParam(searchParams.get("pm_collapse"), true);
+    const nextSelectedNodeId = searchParams.get("pm_node");
+    const nextFilters = parseMiningFilters(searchParams);
+    const nextRunRequested = searchParams.get("pm_run") === "1";
+
+    setModelUri((current) => (current === nextModelUri ? current : nextModelUri));
+    setDepth((current) => (current === nextDepth ? current : nextDepth));
+    setWindowPreset((current) => (current === nextWindowPreset ? current : nextWindowPreset));
+    setFrom((current) => {
+      const nextFrom = normalizeDateTimeLocalValue(searchParams.get("pm_from"), fallbackWindow.from);
+      return current === nextFrom ? current : nextFrom;
+    });
+    setTo((current) => {
+      const nextTo = normalizeDateTimeLocalValue(searchParams.get("pm_to"), fallbackWindow.to);
+      return current === nextTo ? current : nextTo;
+    });
+    setTraceId((current) => (current === nextTraceId ? current : nextTraceId));
+    setWorkflowId((current) => (current === nextWorkflowId ? current : nextWorkflowId));
+    setMinShare((current) => (current === nextMinShare ? current : nextMinShare));
+    setCollapseObjects((current) => (current === nextCollapseObjects ? current : nextCollapseObjects));
+    setSelectedNodeId((current) => (current === nextSelectedNodeId ? current : nextSelectedNodeId));
+    setFilters((current) => {
+      if (areMiningFiltersEqual(current, nextFilters)) {
+        return current;
+      }
+      filterSyncSourceRef.current = "url";
+      return nextFilters;
+    });
+    if (!nextRunRequested) {
+      clearMiningResults();
+      autoRunSignatureRef.current = "";
+    }
+  }, [clearMiningResults, modelOptions, searchParams]);
+
+  useEffect(() => {
+    if (filterSyncSourceRef.current === "url") {
+      filterSyncSourceRef.current = "local";
+      return;
+    }
+    const serializedFilters = serializeMiningFilters(filters);
+    const currentFilters = searchParams.getAll(PM_FILTER_PARAM);
+    if (areSerializedFiltersEqual(serializedFilters, currentFilters)) {
+      return;
+    }
+    replaceQuery({
+      pm_filter: serializedFilters,
+      pm_run: null,
+      pm_node: null,
+    });
+  }, [filters, replaceQuery, searchParams]);
 
   const modelLabels = useMemo(() => {
     return modelOptions.reduce<Record<string, string>>((acc, option) => {
@@ -426,8 +612,8 @@ export function ProcessMiningPanel() {
     }, {});
   }, [ocpnGraph, ontologyDisplay]);
 
-  const resolvedFrom = from ? new Date(from).toISOString() : undefined;
-  const resolvedTo = to ? new Date(to).toISOString() : undefined;
+  const resolvedFrom = useMemo(() => toIsoDateTime(from), [from]);
+  const resolvedTo = useMemo(() => toIsoDateTime(to), [to]);
 
   const filterPayload = useMemo(() => {
     const active = filters.filter(item => item.key.trim() && item.value.trim());
@@ -447,15 +633,50 @@ export function ProcessMiningPanel() {
       "30d": 30 * 24 * 60 * 60 * 1000,
     };
     const start = new Date(now.getTime() - durationMsByPreset[preset]);
-    setFrom(toDatetimeLocalValue(start));
-    setTo(toDatetimeLocalValue(now));
+    const nextFrom = toDatetimeLocalValue(start);
+    const nextTo = toDatetimeLocalValue(now);
+    setFrom(nextFrom);
+    setTo(nextTo);
+    replaceQuery({
+      pm_preset: preset,
+      pm_from: nextFrom,
+      pm_to: nextTo,
+      pm_run: null,
+      pm_node: null,
+    });
   };
 
-  const loadProcessMining = async () => {
+  const persistRunQuery = useCallback((nodeId?: string | null) => {
+    replaceQuery({
+      pm_model: modelUri,
+      pm_depth: depth,
+      pm_preset: windowPreset,
+      pm_from: from,
+      pm_to: to,
+      pm_trace: traceId || null,
+      pm_workflow: workflowId || null,
+      pm_min_share: minShare,
+      pm_collapse: collapseObjects ? "1" : "0",
+      pm_filter: serializeMiningFilters(filters),
+      pm_run: "1",
+      pm_node: nodeId || null,
+    });
+  }, [collapseObjects, depth, filters, from, minShare, modelUri, replaceQuery, to, traceId, windowPreset, workflowId]);
+
+  const loadProcessMining = useCallback(async () => {
     if (!modelUri) return;
+    if (!resolvedFrom || !resolvedTo) {
+      setError("Select a valid time window before running mining.");
+      return;
+    }
+    if (resolvedFrom > resolvedTo) {
+      setError("The start time must be earlier than the end time.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
+      const requestedNodeId = searchParams.get("pm_node");
       const requestPayload = {
         modelUri,
         modelUris: resolvedModelUris,
@@ -471,18 +692,41 @@ export function ProcessMiningPanel() {
         getOcdfgGraph(requestPayload),
         getOcpnGraph(requestPayload),
       ]);
+      const nextSelectedNodeId =
+        requestedNodeId &&
+        ocdfgData.nodes.some((node) => node.id === requestedNodeId && node.kind === "activity")
+          ? requestedNodeId
+          : null;
       setOcdfgGraph(ocdfgData);
       setOcpnGraph(ocpnData);
       setOcpnGraphCollapsed(collapseObjects);
-      setSelectedNodeId(null);
+      setSelectedNodeId(nextSelectedNodeId);
       setBpmnGraph(null);
       setBpmnError(null);
+      persistRunQuery(nextSelectedNodeId);
     } catch (err) {
+      replaceQuery({
+        pm_run: null,
+        pm_node: null,
+      });
       setError(err instanceof Error ? err.message : "Failed to load OC-DFG process mining data");
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    collapseObjects,
+    filterPayload,
+    minShare,
+    modelUri,
+    persistRunQuery,
+    replaceQuery,
+    resolvedFrom,
+    resolvedModelUris,
+    resolvedTo,
+    searchParams,
+    traceId,
+    workflowId,
+  ]);
 
   useEffect(() => {
     let active = true;
@@ -516,6 +760,91 @@ export function ProcessMiningPanel() {
       active = false;
     };
   }, [ocpnGraph, ocpnGraphCollapsed]);
+
+  useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+    if (searchParams.get("pm_run") !== "1") {
+      autoRunSignatureRef.current = "";
+      return;
+    }
+    if (!modelUri || !resolvedFrom || !resolvedTo || loading || (resolvedDepth > 1 && !ontologyGraph)) {
+      return;
+    }
+    const signature = [
+      modelUri,
+      depth,
+      from,
+      to,
+      traceId,
+      workflowId,
+      minShare,
+      collapseObjects,
+      serializeMiningFilters(filters).join("|"),
+    ].join("|");
+    if (autoRunSignatureRef.current === signature) {
+      return;
+    }
+    autoRunSignatureRef.current = signature;
+    void loadProcessMining();
+  }, [
+    collapseObjects,
+    depth,
+    from,
+    isActive,
+    loadProcessMining,
+    loading,
+    minShare,
+    modelUri,
+    ontologyGraph,
+    resolvedDepth,
+    resolvedFrom,
+    resolvedTo,
+    searchParams,
+    to,
+    traceId,
+    workflowId,
+    filters,
+  ]);
+
+  useEffect(() => {
+    if (!ocdfgGraph || !selectedNodeId) {
+      return;
+    }
+    const matches = ocdfgGraph.nodes.some((node) => node.id === selectedNodeId);
+    if (matches) {
+      return;
+    }
+    setSelectedNodeId(null);
+    replaceQuery({ pm_node: null });
+  }, [ocdfgGraph, replaceQuery, selectedNodeId]);
+
+  useEffect(() => {
+    if (!isActive || loading || !ocdfgGraph) {
+      return;
+    }
+    const signature = [
+      modelUri,
+      from,
+      to,
+      depth,
+      traceId,
+      workflowId,
+      minShare,
+      collapseObjects,
+      serializeMiningFilters(filters).join("|"),
+      ocdfgGraph.nodes.length,
+      ocdfgGraph.edges.length,
+    ].join("|");
+    if (completionSignatureRef.current === signature) {
+      return;
+    }
+    completionSignatureRef.current = signature;
+    window.requestAnimationFrame(() => {
+      resultsSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [collapseObjects, depth, filters, from, isActive, loading, minShare, modelUri, ocdfgGraph, to, traceId, workflowId]);
 
   const selectedNode = useMemo(() => {
     if (!ocdfgGraph || !selectedNodeId) return null;
@@ -595,15 +924,99 @@ export function ProcessMiningPanel() {
   }, [ocdfgGraph]);
 
   const updateFilter = (id: string, updates: Partial<FilterPair>) => {
-    setFilters(prev => prev.map(item => (item.id === id ? { ...item, ...updates } : item)));
+    setFilters((current) => current.map((item) => (item.id === id ? { ...item, ...updates } : item)));
   };
 
   const addFilter = () => {
-    setFilters(prev => [...prev, { id: `filter-${prev.length + 1}`, key: "", value: "" }]);
+    setFilters((current) => [...current, { id: `filter-${current.length}`, key: "", value: "" }]);
   };
 
   const removeFilter = (id: string) => {
-    setFilters(prev => prev.filter(item => item.id !== id));
+    setFilters((current) => {
+      const next = current.filter((item) => item.id !== id);
+      return next.length > 0 ? next : [{ id: "filter-0", key: "", value: "" }];
+    });
+  };
+
+  const handleModelChange = (value: string) => {
+    setModelUri(value);
+    replaceQuery({
+      pm_model: value,
+      pm_run: null,
+      pm_node: null,
+    });
+  };
+
+  const handleFromChange = (value: string) => {
+    setFrom(value);
+    setWindowPreset("custom");
+    replaceQuery({
+      pm_from: value,
+      pm_preset: "custom",
+      pm_run: null,
+      pm_node: null,
+    });
+  };
+
+  const handleToChange = (value: string) => {
+    setTo(value);
+    setWindowPreset("custom");
+    replaceQuery({
+      pm_to: value,
+      pm_preset: "custom",
+      pm_run: null,
+      pm_node: null,
+    });
+  };
+
+  const handleDepthChange = (value: string) => {
+    setDepth(value);
+    replaceQuery({
+      pm_depth: value,
+      pm_run: null,
+      pm_node: null,
+    });
+  };
+
+  const handleTraceIdChange = (value: string) => {
+    setTraceId(value);
+    replaceQuery({
+      pm_trace: value,
+      pm_run: null,
+      pm_node: null,
+    });
+  };
+
+  const handleWorkflowIdChange = (value: string) => {
+    setWorkflowId(value);
+    replaceQuery({
+      pm_workflow: value,
+      pm_run: null,
+      pm_node: null,
+    });
+  };
+
+  const handleMinShareChange = (value: string) => {
+    setMinShare(value);
+    replaceQuery({
+      pm_min_share: value,
+      pm_run: null,
+      pm_node: null,
+    });
+  };
+
+  const handleCollapseObjectsChange = (checked: boolean) => {
+    setCollapseObjects(checked);
+    replaceQuery({
+      pm_collapse: checked ? "1" : "0",
+      pm_run: null,
+      pm_node: null,
+    });
+  };
+
+  const handleSelectedNodeChange = (nodeId: string | null) => {
+    setSelectedNodeId(nodeId);
+    persistRunQuery(nodeId);
   };
 
   return (
@@ -639,22 +1052,22 @@ export function ProcessMiningPanel() {
             modelLabel="Object model"
             modelValue={modelUri}
             modelOptions={modelOptions.map((option) => ({ value: option.uri, label: option.name }))}
-            onModelChange={setModelUri}
+            onModelChange={handleModelChange}
             fromId="mining-from"
             fromValue={from}
-            onFromChange={setFrom}
+            onFromChange={handleFromChange}
             toId="mining-to"
             toValue={to}
-            onToChange={setTo}
+            onToChange={handleToChange}
             runLabel="Run mining"
-            runningLabel="Loading..."
+            runningLabel="Loading…"
             isRunning={loading}
             runDisabled={!modelUri || loading}
             onRun={loadProcessMining}
             extraControl={
               <div className="space-y-2">
                 <Label htmlFor="mining-depth">Depth</Label>
-                <Select value={depth} onValueChange={setDepth}>
+                <Select value={depth} onValueChange={handleDepthChange}>
                   <SelectTrigger id="mining-depth">
                     <SelectValue placeholder="Select depth" />
                   </SelectTrigger>
@@ -698,11 +1111,11 @@ export function ProcessMiningPanel() {
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="trace">Trace ID (optional)</Label>
-            <Input id="trace" placeholder="UUID" value={traceId} onChange={e => setTraceId(e.target.value)} />
+            <Input id="trace" placeholder="UUID" value={traceId} onChange={e => handleTraceIdChange(e.target.value)} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="workflow">Workflow ID (optional)</Label>
-            <Input id="workflow" placeholder="UUID" value={workflowId} onChange={e => setWorkflowId(e.target.value)} />
+            <Input id="workflow" placeholder="UUID" value={workflowId} onChange={e => handleWorkflowIdChange(e.target.value)} />
           </div>
         </div>
 
@@ -716,7 +1129,7 @@ export function ProcessMiningPanel() {
               max="100"
               step="1"
               value={minShare}
-              onChange={e => setMinShare(e.target.value)}
+              onChange={e => handleMinShareChange(e.target.value)}
             />
           </div>
           <div className="space-y-2">
@@ -726,7 +1139,7 @@ export function ProcessMiningPanel() {
                 id="collapseObjects"
                 type="checkbox"
                 checked={collapseObjects}
-                onChange={e => setCollapseObjects(e.target.checked)}
+                onChange={e => handleCollapseObjectsChange(e.target.checked)}
               />
               <span>Collapse object places for OCPN and enable BPMN conversion</span>
             </div>
@@ -775,6 +1188,52 @@ export function ProcessMiningPanel() {
         )}
       </Card>
 
+      {ocdfgGraph && (
+        <div ref={resultsSummaryRef}>
+          <Card className="rounded-2xl border border-primary/25 bg-card p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Results Ready</p>
+                <h2 className="mt-2 font-display text-2xl">Mining completed for {modelLabels[modelUri] ?? "selected model"}</h2>
+                <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+                  Review the OC-DFG first, then inspect the secondary OCPN and BPMN views if needed.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => ocdfgSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                  Jump to OC-DFG
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => ocpnSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                  Jump to OCPN
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => bpmnSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                  Jump to BPMN
+                </Button>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl border border-border bg-background px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Included models</p>
+                <p className="mt-2 text-sm font-medium">{includedModels.length}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-background px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">OC-DFG nodes</p>
+                <p className="mt-2 text-sm font-medium">{ocdfgGraph.nodes.length}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-background px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">OC-DFG edges</p>
+                <p className="mt-2 text-sm font-medium">{ocdfgGraph.edges.length}</p>
+              </div>
+              <div className="rounded-xl border border-border bg-background px-4 py-3">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Warnings</p>
+                <p className="mt-2 text-sm font-medium">{ocdfgGraph.warnings.length}</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      <div ref={ocdfgSectionRef}>
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           <Layers className="h-4 w-4" />
@@ -788,7 +1247,7 @@ export function ProcessMiningPanel() {
                 modelLabels={modelLabels}
                 eventLabels={ocdfgEventLabels}
                 selectedNodeId={selectedNodeId}
-                onNodeSelect={setSelectedNodeId}
+                onNodeSelect={handleSelectedNodeChange}
               />
             ) : (
               <div className="flex h-[680px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
@@ -917,7 +1376,9 @@ export function ProcessMiningPanel() {
           </div>
         )}
       </Card>
+      </div>
 
+      <div ref={ocpnSectionRef}>
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           <Layers className="h-4 w-4" />
@@ -945,7 +1406,9 @@ export function ProcessMiningPanel() {
           </div>
         )}
       </Card>
+      </div>
 
+      <div ref={bpmnSectionRef}>
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           <Layers className="h-4 w-4" />
@@ -1001,6 +1464,7 @@ export function ProcessMiningPanel() {
           </div>
         </div>
       </Card>
+      </div>
     </div>
   );
 }
