@@ -542,6 +542,7 @@ Milestone validation:
 8. 2026-03-07: Phase 1 workbench streaming reuses the existing SSE framing (`meta`, `assistant_delta`, `final`, `done`) and adds workbench-specific `investigation_status` plus `linked_surface_hint` events instead of inventing a separate transport model.
 9. 2026-03-07: Backend semantic markdown stays narrative-first; typed linked-surface metadata remains in the response contract alongside rendered `:::linked-surface` blocks.
 10. 2026-03-07: Phase 3 routes the dedicated `/assistant` page through workbench stream mode while intentionally deferring the full copy/layout rewrite to Phase 4.
+11. 2026-03-07: Phase 4 keeps the shared assistant surface component but allows the dedicated `/assistant` page variant to diverge aggressively in copy, layout, and investigation-status treatment.
 
 ## Progress Log
 
@@ -571,6 +572,12 @@ Milestone validation:
    - routed the dedicated `/assistant` page workspace into workbench stream mode without doing the full page UX rewrite yet
    - added frontend contract coverage for the workbench client, semantic parser, and page-mode wiring
    - validation passed: `cd seer-ui && npm run lint`, `cd seer-ui && npm run build`, and `cd seer-ui && npm run test:contracts` with only the pre-existing `tests/insights.contract.test.mjs` failure remaining
+9. 2026-03-07: Completed Phase 4 dedicated `/assistant` workbench surface:
+   - replaced generic assistant framing on the dedicated page with AI-workbench-first copy, empty-state guidance, and page-specific layout treatment
+   - added page-visible investigation status treatment driven by streamed `investigation_status` events
+   - widened workbench answer cards so semantic markdown sections read like investigation artifacts rather than chat bubbles
+   - preserved `?q=` seed behavior and validated the live clarifying-turn flow against `http://127.0.0.1:3000/assistant?q=Investigate%20order%20delay%20risk`
+   - validation passed: `cd seer-ui && npm run lint`, `cd seer-ui && npm run build`, and `cd seer-ui && npm run test:contracts` with only the pre-existing `tests/insights.contract.test.mjs` failure remaining
 
 ## Progress Tracking
 
@@ -578,15 +585,15 @@ Milestone validation:
 - [x] Phase 1 complete
 - [x] Phase 2 complete
 - [x] Phase 3 complete
-- [ ] Phase 4 complete
+- [x] Phase 4 complete
 - [ ] Phase 5 complete
 - [ ] Phase 6 complete
 
 Current execution state:
 
 1. Plan opened and in progress.
-2. Baseline, backend contract, backend semantic-markdown, and frontend renderer-foundation phases complete.
-3. Next controller action: spawn Phase 4 dedicated `/assistant` workbench surface worker using `execute-phase`.
+2. Baseline, backend contract, backend semantic-markdown, frontend renderer foundation, and dedicated `/assistant` workbench surface phases complete.
+3. Next controller action: execute Phase 5 expert handoffs + clarifying-question UX.
 
 ## Controller Handoff Packet: Phase 1
 

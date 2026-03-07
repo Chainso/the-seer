@@ -37,6 +37,9 @@ test("assistant workspace renders semantic workbench blocks", () => {
   assert.match(workspace, /WorkbenchTextPart/);
   assert.match(workspace, /SemanticBlockLabel/);
   assert.match(workspace, /Open surface/);
+  assert.match(workspace, /AI Investigation Workbench/);
+  assert.match(workspace, /Ask an operational question in business language/);
+  assert.match(workspace, /Investigating/);
 });
 
 test("shared assistant runtime scopes threads by experience", () => {

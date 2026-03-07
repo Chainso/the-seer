@@ -51,6 +51,7 @@ export interface StoredThread {
   updatedAt: number;
   experience: AssistantExperience;
   investigationId?: string | null;
+  pendingStatus?: string | null;
   messages: StoredMessage[];
   completionMessages: AssistantCompletionMessage[];
 }
@@ -106,6 +107,7 @@ function createThread(seedText?: string, experience: AssistantExperience = 'assi
     updatedAt: now,
     experience,
     investigationId: null,
+    pendingStatus: null,
     messages: [],
     completionMessages: [],
   };
@@ -225,6 +227,8 @@ function normalizeThreads(rawThreads: unknown): StoredThread[] {
           experience: maybe.experience === 'workbench' ? 'workbench' : 'assistant',
           investigationId:
             typeof maybe.investigationId === 'string' ? maybe.investigationId : null,
+          pendingStatus:
+            typeof maybe.pendingStatus === 'string' ? maybe.pendingStatus : null,
           messages,
           completionMessages,
         };
@@ -617,6 +621,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
               title: nextTitle || DEFAULT_THREAD_TITLE,
               updatedAt: Date.now(),
               experience: threadExperience,
+              pendingStatus: null,
               messages: nextMessagesWithPlaceholder,
               completionMessages: nextCompletionMessages,
             },
@@ -629,6 +634,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           title: nextTitle || DEFAULT_THREAD_TITLE,
           updatedAt: Date.now(),
           experience: threadExperience,
+          pendingStatus: null,
           messages: nextMessagesWithPlaceholder,
           completionMessages: nextCompletionMessages,
         }));
@@ -676,6 +682,13 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
                 if (!text) return;
                 streamedAssistantText += text;
                 setAssistantText(streamedAssistantText);
+              },
+              onInvestigationStatus: ({ message }) => {
+                updateThread(currentActiveId, (thread) => ({
+                  ...thread,
+                  updatedAt: Date.now(),
+                  pendingStatus: message,
+                }));
               },
               onFinal: (payload) => {
                 finalWorkbenchEvent = payload;
@@ -754,6 +767,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
             updatedAt: Date.now(),
             experience: threadExperience,
             investigationId: workbenchMetadata?.investigationId || thread.investigationId || null,
+            pendingStatus: null,
             messages: finalizedMessages,
             completionMessages,
           };
@@ -764,6 +778,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           updateThread(currentActiveId, (thread) => ({
             ...thread,
             updatedAt: Date.now(),
+            pendingStatus: null,
             messages:
               partialAnswer.length > 0
                 ? upsertAssistantMessage(
@@ -783,6 +798,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
         updateThread(currentActiveId, (thread) => ({
           ...thread,
           updatedAt: Date.now(),
+          pendingStatus: null,
           messages: upsertAssistantMessage(
             thread.messages,
             assistantMessageId,

@@ -3,7 +3,7 @@ import { AssistantPageWorkspace } from '@/app/components/assistant/assistant-pag
 
 export default function AssistantPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading assistant...</div>}>
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading workbench...</div>}>
       <AssistantPageWorkspace />
     </Suspense>
   );

@@ -73,7 +73,7 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
     },
     adapters: {
       threadList: {
-        threadId: state.activeThreadId,
+        threadId: activeThread?.id ?? state.activeThreadId,
         isLoading: !state.hydrated,
         threads: scopedThreads.map((thread) => ({
           status: 'regular',
@@ -98,10 +98,10 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
   });
 
   return {
+    ...state,
+    threads: scopedThreads,
     runtime,
     activeThread,
     activeThreadMessages,
-    scopedThreads,
-    ...state,
   };
 }
