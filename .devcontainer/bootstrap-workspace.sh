@@ -48,6 +48,7 @@ fi
 if [ -d /mnt/host-ssh ]; then
   mkdir -p /root/.ssh
   rsync -a /mnt/host-ssh/ /root/.ssh/
+  chown -R root:root /root/.ssh
   chmod 700 /root/.ssh
   find /root/.ssh -type f -name "*.pub" -exec chmod 644 {} +
   find /root/.ssh -type f ! -name "*.pub" -exec chmod 600 {} +
