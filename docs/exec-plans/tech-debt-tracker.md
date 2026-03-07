@@ -37,3 +37,13 @@ Track known debt explicitly and prioritize cleanup without losing product moment
 7. Proposed Fix: Extend submit-time validation with explicit enum/domain/date-format semantics derived from ontology contract metadata and canonical validators.
 8. Target Window: `Future reliability + contract-hardening cycle`
 9. Status: `open`
+
+1. ID: `TD-2026-03-07-003`
+2. Date Added: `2026-03-07`
+3. Area: `Assistant canvas`
+4. Description: Compact/mobile assistant canvas states still use the generic artifact fallback, and non-OCDFG artifact families do not yet have specialized renderers.
+5. Impact: Desktop `/assistant` now renders real OC-DFG visuals, but compact/mobile graph inspection and richer artifact-specific canvas treatments remain less informative.
+6. Owner: `AI-ASSISTANT-1`
+7. Proposed Fix: Add compact/mobile OC-DFG treatment and dedicated assistant canvas renderers for remaining artifact families when the `/assistant` experience is next hardened.
+8. Target Window: `Next /assistant experience hardening cycle`
+9. Status: `open`

@@ -65,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `docs/exec-plans/active/assistant-conversation-canvas-and-skills.md` (`agent_slot: AI-ASSISTANT-1`, `in_progress`)
+1. none
 
 ## Post-MVP Status Tracking
 
@@ -82,8 +82,9 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: `docs/exec-plans/active/assistant-conversation-canvas-and-skills.md` (opened on 2026-03-07 to redesign `/assistant` around one conversational assistant contract, dynamic skill loading, and a right-side artifact canvas; Phase 0 completed the same day, and Phase 1 contract unification is next)
+- `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md` (archived on 2026-03-07 after ratifying `/assistant` as the canonical conversational assistant surface with dynamic skill loading, artifact-backed canvas presentation, and OC-DFG canvas rendering)
 - `completed`: `docs/exec-plans/completed/ai-investigation-workbench-execution.md` (first workbench delivery archived on 2026-03-07; product/spec ratification completed, and a broader `/assistant` redesign track opened the same day after confirming contract and UI regressions)
 - `completed`: `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md` (product reframing and draft-spec phase closed on 2026-03-07; follow-on execution/runtime planning intentionally deferred)
 - `completed`: `docs/exec-plans/completed/responsive-shell-and-mobile-navigation.md` (responsive shell, drawer lifecycle hardening, and mobile shell validation ratified on 2026-03-07)

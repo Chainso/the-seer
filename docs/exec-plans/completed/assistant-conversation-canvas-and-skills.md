@@ -1,10 +1,10 @@
 # Post-MVP Exec Plan: Assistant Conversation, Canvas, And Skill Loading
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 13  
 **Agent slot:** AI-ASSISTANT-1  
 **Predecessor:** `docs/exec-plans/completed/ai-investigation-workbench-execution.md`  
-**Successor:** `Phase 1: Canonical Assistant Contract Unification`  
+**Successor:** none (`archived on 2026-03-07`)  
 **Last updated:** 2026-03-07
 
 ---
@@ -499,7 +499,7 @@ Validation:
 
 ## Phase 7: Ratification, Docs, And Archive
 
-**Status:** pending
+**Status:** completed
 
 **Goal:** ratify the new `/assistant` model in docs and archive the execution plan when complete.
 
@@ -545,7 +545,7 @@ Validation:
 1. `docs/product-specs/ai-investigation-workbench.md`
 2. `docs/product-specs/index.md`
 3. `docs/exec-plans/active/index.md`
-4. `docs/exec-plans/active/assistant-conversation-canvas-and-skills.md`
+4. `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md`
 5. `ARCHITECTURE.md`
 6. `DESIGN.md` or `docs/design-docs/*` if the skill/canvas/artifact model becomes canonical across Seer
 
@@ -564,6 +564,7 @@ Validation:
 11. 2026-03-07: Phase 4 keeps canvas state inside the existing assistant tool/message loop by storing typed `artifact` payloads on domain-tool results and typed `canvas_action` payloads on canvas-tool results; the frontend derives visible canvas state by replaying persisted `completion_messages` instead of relying on a second canvas state store or custom SSE events.
 12. 2026-03-07: Phase 5 keeps the global floating assistant panel as a compact conversation-only surface, while the dedicated `/assistant` page alone consumes `activeCanvasState` and opens the attached split-right canvas. This preserves a lighter global panel without reintroducing a second conversation runtime.
 13. 2026-03-07: Phase 6 reuses the existing process-mining OC-DFG contract mapper and graph renderer inside the assistant canvas instead of minting a second artifact shape. The dedicated `/assistant` desktop canvas renders real OC-DFGs, while compact/mobile canvas states intentionally stay on the generic artifact fallback until a smaller graph treatment is designed.
+14. 2026-03-07: The rollout ratifies `docs/product-specs/assistant-primary-surface.md` as the canonical `/assistant` spec. `docs/product-specs/ai-investigation-workbench.md` remains a delivered historical snapshot, and the finished execution plan archives under `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md`.
 
 ## Progress Log
 
@@ -579,6 +580,7 @@ Validation:
 10. 2026-03-07: Completed Phase 4 by extending assistant tool results with typed artifact and canvas-action payloads, adding the built-in `present_canvas_artifact` / `update_canvas_artifact` / `close_canvas` tools, deriving canvas state from persisted `completion_messages` in the frontend runtime helpers, and covering the new contract with backend tests plus assistant UI contract checks. Validation passed for `test_ai_phase5.py`, backend Ruff, and `seer-ui` lint; `cd seer-ui && npm run test:contracts` still fails only on the pre-existing `tests/insights.contract.test.mjs`.
 11. 2026-03-07: Completed Phase 5 by rebuilding `/assistant` into a calmer split-canvas shell that consumes `activeCanvasState`, removing the page-specific workbench dashboard chrome and clarification UI, preserving the compact global panel variant, and replacing old workbench-page contract assertions with split-canvas shell checks. Validation passed for `seer-ui` lint and build, while `cd seer-ui && npm run test:contracts` still fails only on the pre-existing `tests/insights.contract.test.mjs`.
 12. 2026-03-07: Completed Phase 6 by reusing the shipped OC-DFG contract mapping path inside the assistant canvas, swapping the generic OC-DFG artifact placeholder for the real graph renderer on the desktop split canvas, and preserving the generic fallback panel for non-OCDFG artifacts and compact/mobile states. Validation passed for `seer-ui` lint and build plus `test_ai_phase5.py`; `cd seer-ui && npm run test:contracts` still fails only on the pre-existing `tests/insights.contract.test.mjs`. Browser QA confirmed the desktop OC-DFG graph renders in the right canvas, the composer stays usable, the viewport remains fit, and table artifacts still use the generic canvas fallback.
+13. 2026-03-07: Completed Phase 7 by ratifying the finished `/assistant` model in `VISION.md`, `DESIGN.md`, `ARCHITECTURE.md`, and product specs, recording the compact/mobile artifact-rendering follow-up in tech debt, and archiving this plan under `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md`. Final validation passed for `seer-ui` lint and build plus `test_ai_phase5.py`; `cd seer-ui && npm run test:contracts` still fails only on the pre-existing `tests/insights.contract.test.mjs`.
 
 ## Progress Tracking
 
@@ -589,7 +591,7 @@ Validation:
 - [x] Phase 4 complete
 - [x] Phase 5 complete
 - [x] Phase 6 complete
-- [ ] Phase 7 complete
+- [x] Phase 7 complete
 
 Current execution state:
 
@@ -601,4 +603,5 @@ Current execution state:
 6. Phase 4 completed on `2026-03-07`; typed artifacts, canvas tools, and frontend canvas-state derivation now flow through the canonical assistant conversation history.
 7. Phase 5 completed on `2026-03-07`; `/assistant` now presents the calmer split-canvas shell on top of the shared assistant runtime, while the global overlay remains compact.
 8. Phase 6 completed on `2026-03-07`; `/assistant` now renders real OC-DFG artifacts in the dedicated desktop canvas while keeping generic fallback rendering for the remaining artifact families.
-9. Next action: start Phase 7 ratification, docs, and archive.
+9. Phase 7 completed on `2026-03-07`; canonical docs now describe `/assistant` as the primary conversational assistant with dynamic skills and an optional artifact canvas, and the plan is ready for archive.
+10. Next action: none (archived on `2026-03-07`).

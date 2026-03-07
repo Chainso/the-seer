@@ -1,8 +1,9 @@
 # AI Investigation Workbench
 
-**Status:** completed (`delivered workbench snapshot; active `/assistant` supersession in progress`)
+**Status:** completed (`delivered workbench snapshot; superseded by current /assistant surface`)
 **Owner plan:** `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
-**Active supersession plan:** `docs/exec-plans/active/assistant-conversation-canvas-and-skills.md`
+**Superseded by:** `docs/product-specs/assistant-primary-surface.md`
+**Supersession execution:** `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md`
 **Last updated:** 2026-03-07
 
 ---
@@ -13,7 +14,7 @@ This spec captures the delivered AI investigation workbench behavior that shippe
 
 It is not the forward product target for `/assistant`.
 
-The active `/assistant` redesign now lives in `docs/exec-plans/active/assistant-conversation-canvas-and-skills.md`, which restores a canonical conversational assistant contract and adds dynamic skill loading plus an optional right-side artifact canvas.
+The current `/assistant` product model now lives in `docs/product-specs/assistant-primary-surface.md`, which restores a canonical conversational assistant contract and adds dynamic skill loading plus an optional right-side artifact canvas.
 
 ---
 

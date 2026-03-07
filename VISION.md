@@ -113,6 +113,8 @@ From the rest of the platform's point of view:
 
 This is the primary user-facing product surface.
 
+The canonical entry point is `/assistant`.
+
 The user starts with a business question, not a diagram configuration form.
 
 Seer should:
@@ -122,7 +124,9 @@ Seer should:
 3. choose the right analytical tools,
 4. explain findings in plain language,
 5. show evidence and caveats,
-6. and suggest or invoke next actions when allowed.
+6. load deeper skills only when the task calls for them,
+7. open an attached artifact canvas when a visual inspection surface materially helps,
+8. and suggest or invoke next actions when allowed.
 
 ## 4.2 Managed Agents
 

@@ -63,6 +63,7 @@ Primary responsibilities:
 2. Managed-agent registration, run visibility, trusted-mode controls, and operator surfaces.
 3. Expert drill-down over ontology, history, process, and RCA evidence.
 4. Unified assistant experience across shell and dedicated assistant surfaces.
+5. Dedicated `/assistant` conversation shell with an attached optional artifact canvas.
 
 Expected internal areas:
 
@@ -106,10 +107,12 @@ Expected internal service areas:
    - root-cause pipeline (neighborhood extraction + ranking)
 4. `ai` domain:
    - unified AI gateway for ontology, investigation, process, RCA, and managed-agent reasoning tools
+   - canonical `completion_messages` assistant runtime for `/assistant`
    - tool access and runtime-guardrail enforcement
    - evidence and caveat packaging
    - SSE-first assistant/investigation streaming orchestration
    - backend-owned assistant skill catalog under `seer-backend/src/seer_backend/ai/assistant_skills/`
+   - tool-driven artifact and canvas contracts for assistant-presented visuals
 5. `actions` domain:
    - ontology-backed submit validation and enqueue semantics
    - pull-based claim + lease assignment
