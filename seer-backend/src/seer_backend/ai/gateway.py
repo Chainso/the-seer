@@ -49,7 +49,7 @@ class AiEvidenceItem(BaseModel):
 class AiAssistEnvelope(BaseModel):
     """Common AI response envelope with policy and permission metadata."""
 
-    module: Literal["ontology", "process", "root_cause", "assistant"]
+    module: Literal["ontology", "process", "root_cause", "assistant", "workbench"]
     task: str
     response_policy: Literal["informational", "analytical"]
     tool_permissions: list[str] = Field(default_factory=list)
@@ -127,6 +127,53 @@ class AiAssistantChatResponse(AiAssistEnvelope):
     answer: str
     copilot: CopilotChatResponse
     completion_messages: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class AiWorkbenchLinkedSurface(BaseModel):
+    """Typed handoff target for expert drill-down surfaces."""
+
+    kind: Literal["ontology", "history", "process", "root_cause", "action_status"]
+    label: str
+    href: str
+    reason: str
+
+
+class AiWorkbenchClarifyingQuestion(BaseModel):
+    """Prompt for missing investigation context."""
+
+    field: Literal["anchor_object_type", "time_window"]
+    prompt: str
+
+
+class AiWorkbenchChatRequest(BaseModel):
+    """Dedicated workbench request contract."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    question: str = Field(min_length=3, max_length=1000)
+    context: AiAssistantContext | None = None
+    thread_id: str | None = Field(default=None, min_length=1, max_length=120)
+    investigation_id: str | None = Field(default=None, min_length=1, max_length=120)
+    depth: int = Field(default=1, ge=1, le=3)
+    outcome_event_type: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class AiWorkbenchChatResponse(AiAssistEnvelope):
+    """Final workbench response contract for the dedicated workbench surface."""
+
+    module: Literal["workbench"] = "workbench"
+    task: Literal["chat"] = "chat"
+    thread_id: str
+    investigation_id: str
+    turn_kind: Literal["investigation_answer", "clarifying_question"]
+    answer_markdown: str
+    why_it_matters: str
+    follow_up_questions: list[str] = Field(default_factory=list)
+    linked_surfaces: list[AiWorkbenchLinkedSurface] = Field(default_factory=list)
+    clarifying_questions: list[AiWorkbenchClarifyingQuestion] = Field(default_factory=list)
+    anchor_object_type: str | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
 
 
 class AiProcessInterpretRequest(BaseModel):
@@ -452,6 +499,120 @@ class AiGatewayService:
                 )
             raise
 
+    async def workbench_chat(
+        self,
+        payload: AiWorkbenchChatRequest,
+    ) -> AiWorkbenchChatResponse:
+        async for event_name, event_payload in self.workbench_chat_stream(payload):
+            if event_name == "final":
+                return AiWorkbenchChatResponse.model_validate(event_payload)
+        raise ValueError("workbench chat stream ended without final response")
+
+    async def workbench_chat_stream(
+        self,
+        payload: AiWorkbenchChatRequest,
+    ) -> AsyncIterator[tuple[str, dict[str, Any]]]:
+        thread_id = payload.thread_id or str(uuid4())
+        investigation_id = payload.investigation_id or str(uuid4())
+
+        anchor_object_type = payload.context.anchor_object_type if payload.context else None
+        start_at = payload.context.start_at if payload.context else None
+        end_at = payload.context.end_at if payload.context else None
+
+        clarifying_questions = _build_workbench_clarifying_questions(
+            anchor_object_type=anchor_object_type,
+            start_at=start_at,
+            end_at=end_at,
+        )
+
+        if clarifying_questions:
+            response = _build_workbench_clarification_response(
+                payload=payload,
+                thread_id=thread_id,
+                investigation_id=investigation_id,
+                clarifying_questions=clarifying_questions,
+            )
+            yield (
+                "meta",
+                {
+                    "thread_id": thread_id,
+                    "investigation_id": investigation_id,
+                    "module": "workbench",
+                    "task": "chat",
+                    "turn_kind": response.turn_kind,
+                    "response_policy": response.response_policy,
+                    "tool_permissions": response.tool_permissions,
+                },
+            )
+            yield (
+                "investigation_status",
+                {
+                    "status": "needs_clarification",
+                    "message": "Need missing investigation context before running analysis.",
+                },
+            )
+            for chunk in _iter_answer_chunks(response.answer_markdown):
+                yield ("assistant_delta", {"text": chunk})
+            yield ("final", response.model_dump(mode="json"))
+            yield ("done", {"status": "ok"})
+            return
+
+        yield (
+            "meta",
+            {
+                "thread_id": thread_id,
+                "investigation_id": investigation_id,
+                "module": "workbench",
+                "task": "chat",
+                "turn_kind": "investigation_answer",
+                "response_policy": "analytical",
+                "tool_permissions": _workbench_tool_permissions(),
+            },
+        )
+        yield (
+            "investigation_status",
+            {
+                "status": "resolving_context",
+                "message": "Resolving investigation scope from workbench context.",
+            },
+        )
+        yield (
+            "investigation_status",
+            {
+                "status": "running_investigation",
+                "message": "Running ontology, process, and root-cause investigation.",
+            },
+        )
+        guided_response = await self.guided_investigation(
+            GuidedInvestigationRequest(
+                question=payload.question,
+                anchor_object_type=anchor_object_type or "",
+                start_at=start_at or datetime.now(UTC),
+                end_at=end_at or datetime.now(UTC),
+                depth=payload.depth,
+                outcome_event_type=payload.outcome_event_type,
+            )
+        )
+        yield (
+            "investigation_status",
+            {
+                "status": "synthesizing_answer",
+                "message": "Synthesizing workbench response.",
+            },
+        )
+        response = _build_workbench_investigation_response(
+            payload=payload,
+            thread_id=thread_id,
+            investigation_id=investigation_id,
+            guided_response=guided_response,
+        )
+        for linked_surface in response.linked_surfaces:
+            yield ("linked_surface_hint", linked_surface.model_dump(mode="json"))
+        for chunk in _iter_answer_chunks(response.answer_markdown):
+            yield ("assistant_delta", {"text": chunk})
+        yield ("final", response.model_dump(mode="json"))
+        yield ("done", {"status": "ok"})
+
     async def process_interpret(
         self,
         payload: AiProcessInterpretRequest,
@@ -725,6 +886,22 @@ def _assistant_tool_permissions() -> list[str]:
     ]
 
 
+def _workbench_tool_permissions() -> list[str]:
+    return [
+        "workbench.context",
+        "ontology.current",
+        "ontology.concepts",
+        "ontology.concept_detail",
+        "ontology.query(read_only)",
+        "process.mine",
+        "process.traces",
+        "root_cause.run",
+        "root_cause.evidence",
+        "root_cause.assist.setup",
+        "root_cause.assist.interpret",
+    ]
+
+
 def _iter_answer_chunks(answer: str, chunk_size: int = 120) -> Iterator[str]:
     if not answer:
         yield ""
@@ -770,6 +947,169 @@ def _ensure_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
+
+
+def _build_workbench_clarifying_questions(
+    *,
+    anchor_object_type: str | None,
+    start_at: datetime | None,
+    end_at: datetime | None,
+) -> list[AiWorkbenchClarifyingQuestion]:
+    questions: list[AiWorkbenchClarifyingQuestion] = []
+    if not anchor_object_type:
+        questions.append(
+            AiWorkbenchClarifyingQuestion(
+                field="anchor_object_type",
+                prompt="Which business object should I anchor this investigation on?",
+            )
+        )
+    if start_at is None or end_at is None:
+        questions.append(
+            AiWorkbenchClarifyingQuestion(
+                field="time_window",
+                prompt="What time window should I investigate?",
+            )
+        )
+    return questions
+
+
+def _build_workbench_clarification_response(
+    *,
+    payload: AiWorkbenchChatRequest,
+    thread_id: str,
+    investigation_id: str,
+    clarifying_questions: list[AiWorkbenchClarifyingQuestion],
+) -> AiWorkbenchChatResponse:
+    question_list = "\n".join(
+        f"- {question.prompt}" for question in clarifying_questions
+    )
+    answer_markdown = (
+        f"{payload.question.strip()}\n\n"
+        "I can investigate this, but I need a bit more scope first:\n"
+        f"{question_list}"
+    )
+    next_actions = [question.prompt for question in clarifying_questions]
+
+    return AiWorkbenchChatResponse(
+        response_policy="informational",
+        tool_permissions=_workbench_tool_permissions(),
+        summary="Need more investigation context before running the workbench flow.",
+        evidence=[],
+        caveats=[
+            "Workbench investigation requires both an anchor object type and a time window.",
+        ],
+        next_actions=next_actions,
+        thread_id=thread_id,
+        investigation_id=investigation_id,
+        turn_kind="clarifying_question",
+        answer_markdown=answer_markdown,
+        why_it_matters=(
+            "Running the investigation without anchor or time scope would likely produce "
+            "misleading results."
+        ),
+        follow_up_questions=next_actions,
+        clarifying_questions=clarifying_questions,
+    )
+
+
+def _build_workbench_investigation_response(
+    *,
+    payload: AiWorkbenchChatRequest,
+    thread_id: str,
+    investigation_id: str,
+    guided_response: GuidedInvestigationResponse,
+) -> AiWorkbenchChatResponse:
+    answer_markdown = "\n\n".join(
+        [
+            guided_response.ontology.summary,
+            guided_response.process_ai.summary,
+            guided_response.root_cause_ai.summary,
+        ]
+    )
+    evidence = (
+        guided_response.ontology.evidence[:1]
+        + guided_response.process_ai.evidence[:2]
+        + guided_response.root_cause_ai.evidence[:2]
+    )
+    caveats = list(
+        dict.fromkeys(
+            guided_response.ontology.caveats
+            + guided_response.process_ai.caveats
+            + guided_response.root_cause_ai.caveats
+        )
+    )
+    next_actions = list(
+        dict.fromkeys(
+            guided_response.process_ai.next_actions[:1]
+            + guided_response.root_cause_ai.next_actions[:2]
+        )
+    )
+    linked_surfaces = _build_workbench_linked_surfaces(guided_response)
+    follow_up_questions = [
+        "Do you want me to narrow this investigation to one subgroup or path?",
+        "Should I compare this outcome against a different time window?",
+    ]
+    why_it_matters = (
+        "The workbench combined ontology context, process evidence, and root-cause "
+        "signals into one investigation result so you can decide whether to drill down "
+        "or act next."
+    )
+
+    return AiWorkbenchChatResponse(
+        response_policy="analytical",
+        tool_permissions=_workbench_tool_permissions(),
+        summary=guided_response.root_cause_ai.summary,
+        evidence=evidence,
+        caveats=caveats,
+        next_actions=next_actions,
+        thread_id=thread_id,
+        investigation_id=investigation_id,
+        turn_kind="investigation_answer",
+        answer_markdown=answer_markdown,
+        why_it_matters=why_it_matters,
+        follow_up_questions=follow_up_questions,
+        linked_surfaces=linked_surfaces,
+        anchor_object_type=guided_response.anchor_object_type,
+        start_at=guided_response.start_at,
+        end_at=guided_response.end_at,
+    )
+
+
+def _build_workbench_linked_surfaces(
+    guided_response: GuidedInvestigationResponse,
+) -> list[AiWorkbenchLinkedSurface]:
+    return [
+        AiWorkbenchLinkedSurface(
+            kind="ontology",
+            label="Open ontology exploration",
+            href="/ontology",
+            reason="Verify the ontology concepts involved in this investigation.",
+        ),
+        AiWorkbenchLinkedSurface(
+            kind="history",
+            label="Open history inspection",
+            href="/inspector/history",
+            reason="Inspect object timelines and event history for the anchor object.",
+        ),
+        AiWorkbenchLinkedSurface(
+            kind="process",
+            label="Open process analysis",
+            href="/inspector/analytics",
+            reason="Review process structure and dominant paths for this time window.",
+        ),
+        AiWorkbenchLinkedSurface(
+            kind="root_cause",
+            label="Open root-cause analysis",
+            href="/inspector/insights",
+            reason="Inspect the ranked RCA findings and evidence traces.",
+        ),
+        AiWorkbenchLinkedSurface(
+            kind="action_status",
+            label="Open action status",
+            href="/ontology?action_status=1",
+            reason="Check related action capabilities and current action state where available.",
+        ),
+    ]
 
 
 def _build_copilot_evidence_and_caveats(

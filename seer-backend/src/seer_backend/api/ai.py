@@ -20,6 +20,7 @@ from seer_backend.ai.gateway import (
     AiRootCauseInterpretResponse,
     AiRootCauseSetupRequest,
     AiRootCauseSetupResponse,
+    AiWorkbenchChatRequest,
     GuidedInvestigationRequest,
     GuidedInvestigationResponse,
 )
@@ -54,31 +55,21 @@ async def assistant_chat(
     request: Request,
 ) -> StreamingResponse:
     service = get_ai_gateway_service(request)
+    return _stream_with_error_mapping(
+        event_stream=service.assistant_chat_stream(payload),
+        error_mapper=_assistant_stream_error,
+    )
 
-    async def event_stream() -> AsyncIterator[str]:
-        try:
-            async for event_name, event_payload in service.assistant_chat_stream(payload):
-                yield _sse_event(event_name, event_payload)
-        except Exception as exc:  # pragma: no cover - fallback guardrail
-            status_code, error_code, detail = _assistant_stream_error(exc)
-            yield _sse_event(
-                "error",
-                {
-                    "status_code": status_code,
-                    "code": error_code,
-                    "message": detail,
-                },
-            )
-            return
 
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
+@router.post("/workbench/chat")
+async def workbench_chat(
+    payload: AiWorkbenchChatRequest,
+    request: Request,
+) -> StreamingResponse:
+    service = get_ai_gateway_service(request)
+    return _stream_with_error_mapping(
+        event_stream=service.workbench_chat_stream(payload),
+        error_mapper=_workbench_stream_error,
     )
 
 
@@ -199,6 +190,18 @@ def _http_error(status_code: int, detail: str) -> HTTPException:
 
 
 def _assistant_stream_error(exc: Exception) -> tuple[int, str, str]:
+    return _ai_stream_error(exc, fallback_message="assistant chat request failed")
+
+
+def _workbench_stream_error(exc: Exception) -> tuple[int, str, str]:
+    return _ai_stream_error(exc, fallback_message="workbench chat request failed")
+
+
+def _ai_stream_error(
+    exc: Exception,
+    *,
+    fallback_message: str,
+) -> tuple[int, str, str]:
     if isinstance(exc, ValueError):
         return status.HTTP_422_UNPROCESSABLE_ENTITY, "validation_error", str(exc)
     if isinstance(exc, OntologyDependencyUnavailableError):
@@ -210,7 +213,39 @@ def _assistant_stream_error(exc: Exception) -> tuple[int, str, str]:
     return (
         status.HTTP_500_INTERNAL_SERVER_ERROR,
         "internal_error",
-        "assistant chat request failed",
+        fallback_message,
+    )
+
+
+def _stream_with_error_mapping(
+    *,
+    event_stream: AsyncIterator[tuple[str, dict[str, Any]]],
+    error_mapper: callable,
+) -> StreamingResponse:
+    async def wrapped_stream() -> AsyncIterator[str]:
+        try:
+            async for event_name, event_payload in event_stream:
+                yield _sse_event(event_name, event_payload)
+        except Exception as exc:  # pragma: no cover - fallback guardrail
+            status_code, error_code, detail = error_mapper(exc)
+            yield _sse_event(
+                "error",
+                {
+                    "status_code": status_code,
+                    "code": error_code,
+                    "message": detail,
+                },
+            )
+            return
+
+    return StreamingResponse(
+        wrapped_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

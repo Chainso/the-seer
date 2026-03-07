@@ -409,6 +409,96 @@ def test_ai_assistant_chat_returns_generic_envelope_and_thread_id() -> None:
     assert "error" not in event_types
 
 
+def test_ai_workbench_chat_streams_investigation_answer_and_linked_surfaces() -> None:
+    client = build_client()
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/ai/workbench/chat",
+        json={
+            "question": "Investigate why Orders become delayed in this window.",
+            "context": {
+                "route": "/assistant",
+                "module": "workbench",
+                "anchor_object_type": _ORDER_URI,
+                "start_at": "2026-02-22T07:00:00Z",
+                "end_at": "2026-02-22T11:00:00Z",
+            },
+            "thread_id": "workbench-thread-1",
+            "investigation_id": "investigation-seeded-1",
+            "depth": 2,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse_events(response.text)
+    event_types = [event for event, _ in events]
+    assert event_types[0] == "meta"
+    assert "investigation_status" in event_types
+    assert event_types.count("linked_surface_hint") >= 4
+    assert "assistant_delta" in event_types
+    assert event_types[-2] == "final"
+    assert event_types[-1] == "done"
+
+    meta = events[0][1]
+    assert meta["module"] == "workbench"
+    assert meta["task"] == "chat"
+    assert meta["turn_kind"] == "investigation_answer"
+    assert meta["thread_id"] == "workbench-thread-1"
+    assert meta["investigation_id"] == "investigation-seeded-1"
+    assert "process.mine" in meta["tool_permissions"]
+
+    final = events[-2][1]
+    assert final["module"] == "workbench"
+    assert final["turn_kind"] == "investigation_answer"
+    assert final["thread_id"] == "workbench-thread-1"
+    assert final["investigation_id"] == "investigation-seeded-1"
+    assert final["answer_markdown"]
+    assert final["why_it_matters"]
+    assert final["linked_surfaces"]
+    assert final["follow_up_questions"]
+    assert final["anchor_object_type"] == _ORDER_URI
+
+
+def test_ai_workbench_chat_returns_clarifying_turn_without_scope() -> None:
+    client = build_client()
+
+    response = client.post(
+        "/api/v1/ai/workbench/chat",
+        json={
+            "question": "Investigate delayed fulfillment for me.",
+            "context": {
+                "route": "/assistant",
+                "module": "workbench",
+            },
+            "thread_id": "workbench-thread-clarify",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    events = _parse_sse_events(response.text)
+    event_types = [event for event, _ in events]
+    assert event_types[0] == "meta"
+    assert event_types[1] == "investigation_status"
+    assert event_types[-2] == "final"
+    assert event_types[-1] == "done"
+
+    meta = events[0][1]
+    assert meta["module"] == "workbench"
+    assert meta["turn_kind"] == "clarifying_question"
+    assert meta["thread_id"] == "workbench-thread-clarify"
+
+    final = events[-2][1]
+    assert final["turn_kind"] == "clarifying_question"
+    assert len(final["clarifying_questions"]) == 2
+    assert {item["field"] for item in final["clarifying_questions"]} == {
+        "anchor_object_type",
+        "time_window",
+    }
+    assert "need a bit more scope" in final["answer_markdown"].lower()
+
+
 def test_ai_assistant_chat_logs_turn_lifecycle(caplog) -> None:
     client = build_client()
 
