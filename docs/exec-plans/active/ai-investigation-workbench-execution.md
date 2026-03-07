@@ -231,6 +231,8 @@ Worker handoff requirements:
 
 ## Phase 2: Semantic Markdown Composer + Workbench Response Authoring
 
+**Status:** completed
+
 **Goal:** make backend investigation answers emit markdown with semantic primitives rather than raw nested analysis payloads.
 
 Primary files:
@@ -536,6 +538,7 @@ Milestone validation:
 6. 2026-03-07: Backward compatibility is explicitly not a delivery constraint for this plan.
 7. 2026-03-07: Frontend phases may use Playwright-driven QA against `http://localhost:3000`.
 8. 2026-03-07: Phase 1 workbench streaming reuses the existing SSE framing (`meta`, `assistant_delta`, `final`, `done`) and adds workbench-specific `investigation_status` plus `linked_surface_hint` events instead of inventing a separate transport model.
+9. 2026-03-07: Backend semantic markdown stays narrative-first; typed linked-surface metadata remains in the response contract alongside rendered `:::linked-surface` blocks.
 
 ## Progress Log
 
@@ -552,12 +555,17 @@ Milestone validation:
    - reused `guided_investigation()` as the first workbench investigation substrate
    - added streaming contract tests for investigation-answer and clarifying-question flows
    - validation passed: `seer-backend/.venv/bin/pytest seer-backend/tests/test_ai_phase5.py -q` (`15 passed`) and `seer-backend/.venv/bin/ruff check seer-backend/src/seer_backend/api/ai.py seer-backend/src/seer_backend/ai seer-backend/tests/test_ai_phase5.py`
+7. 2026-03-07: Completed Phase 2 backend semantic-markdown authoring:
+   - workbench investigation answers now compose `:::evidence`, `:::caveat`, `:::next-action`, `:::follow-up`, and `:::linked-surface` blocks
+   - clarifying turns now emit semantic `:::follow-up` and `:::caveat` blocks
+   - linked-surface metadata remains typed in the response while rendered blocks mirror the same drill-down targets
+   - validation passed: `seer-backend/.venv/bin/pytest seer-backend/tests/test_ai_phase5.py -q` (`15 passed`) and `seer-backend/.venv/bin/ruff check seer-backend/src/seer_backend/ai seer-backend/tests/test_ai_phase5.py`
 
 ## Progress Tracking
 
 - [x] Phase 0 complete
 - [x] Phase 1 complete
-- [ ] Phase 2 complete
+- [x] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
@@ -566,9 +574,8 @@ Milestone validation:
 Current execution state:
 
 1. Plan opened and in progress.
-2. Baseline and design-contract freeze complete.
-3. Phase 1 backend streaming skeleton complete.
-4. Next controller action: spawn Phase 2 backend worker using `execute-phase`.
+2. Baseline, backend contract, and backend semantic-markdown phases complete.
+3. Next controller action: spawn Phase 3 frontend foundation worker using `execute-phase`.
 
 ## Controller Handoff Packet: Phase 1
 

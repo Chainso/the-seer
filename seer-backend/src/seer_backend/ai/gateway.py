@@ -980,15 +980,26 @@ def _build_workbench_clarification_response(
     investigation_id: str,
     clarifying_questions: list[AiWorkbenchClarifyingQuestion],
 ) -> AiWorkbenchChatResponse:
-    question_list = "\n".join(
-        f"- {question.prompt}" for question in clarifying_questions
-    )
-    answer_markdown = (
-        f"{payload.question.strip()}\n\n"
-        "I can investigate this, but I need a bit more scope first:\n"
-        f"{question_list}"
-    )
     next_actions = [question.prompt for question in clarifying_questions]
+    answer_markdown = _join_markdown_sections(
+        [
+            payload.question.strip(),
+            "I can investigate this, but I need a bit more scope first.",
+            _render_semantic_block(
+                "follow-up",
+                _bullet_lines(next_actions),
+            ),
+            _render_semantic_block(
+                "caveat",
+                [
+                    (
+                        "Running the investigation without anchor or time scope "
+                        "would likely produce misleading results."
+                    )
+                ],
+            ),
+        ]
+    )
 
     return AiWorkbenchChatResponse(
         response_policy="informational",
@@ -1019,13 +1030,6 @@ def _build_workbench_investigation_response(
     investigation_id: str,
     guided_response: GuidedInvestigationResponse,
 ) -> AiWorkbenchChatResponse:
-    answer_markdown = "\n\n".join(
-        [
-            guided_response.ontology.summary,
-            guided_response.process_ai.summary,
-            guided_response.root_cause_ai.summary,
-        ]
-    )
     evidence = (
         guided_response.ontology.evidence[:1]
         + guided_response.process_ai.evidence[:2]
@@ -1053,6 +1057,17 @@ def _build_workbench_investigation_response(
         "The workbench combined ontology context, process evidence, and root-cause "
         "signals into one investigation result so you can decide whether to drill down "
         "or act next."
+    )
+    answer_markdown = _build_workbench_answer_markdown(
+        ontology_summary=guided_response.ontology.summary,
+        process_summary=guided_response.process_ai.summary,
+        root_cause_summary=guided_response.root_cause_ai.summary,
+        why_it_matters=why_it_matters,
+        evidence=evidence,
+        caveats=caveats,
+        next_actions=next_actions,
+        follow_up_questions=follow_up_questions,
+        linked_surfaces=linked_surfaces,
     )
 
     return AiWorkbenchChatResponse(
@@ -1110,6 +1125,110 @@ def _build_workbench_linked_surfaces(
             reason="Check related action capabilities and current action state where available.",
         ),
     ]
+
+
+def _build_workbench_answer_markdown(
+    *,
+    ontology_summary: str,
+    process_summary: str,
+    root_cause_summary: str,
+    why_it_matters: str,
+    evidence: list[AiEvidenceItem],
+    caveats: list[str],
+    next_actions: list[str],
+    follow_up_questions: list[str],
+    linked_surfaces: list[AiWorkbenchLinkedSurface],
+) -> str:
+    investigation_sections = [
+        root_cause_summary.strip(),
+        why_it_matters.strip(),
+        (
+            "Supporting investigation notes: "
+            f"{ontology_summary.strip()} {process_summary.strip()}"
+        ).strip(),
+    ]
+    linked_surface_sections = [
+        _render_semantic_block(
+            "linked-surface",
+            [
+                f"**{surface.label}**",
+                surface.reason,
+            ],
+            attributes={
+                "kind": surface.kind,
+                "href": surface.href,
+            },
+        )
+        for surface in linked_surfaces
+    ]
+
+    return _join_markdown_sections(
+        [
+            *investigation_sections,
+            _render_semantic_block(
+                "evidence",
+                [
+                    f"**{item.label}:** {item.detail}"
+                    for item in evidence
+                ],
+            ),
+            _render_semantic_block(
+                "caveat",
+                caveats,
+            ),
+            "Recommendations below are suggestions, not established facts.",
+            _render_semantic_block(
+                "next-action",
+                _bullet_lines(next_actions),
+            ),
+            _render_semantic_block(
+                "follow-up",
+                _bullet_lines(follow_up_questions),
+            ),
+            *linked_surface_sections,
+        ]
+    )
+
+
+def _render_semantic_block(
+    block_name: str,
+    lines: list[str],
+    *,
+    attributes: dict[str, str] | None = None,
+) -> str:
+    normalized_lines = [line.strip() for line in lines if line.strip()]
+    if not normalized_lines:
+        return ""
+
+    attribute_text = ""
+    if attributes:
+        parts = [
+            f'{key}="{_escape_semantic_block_attribute(value)}"'
+            for key, value in attributes.items()
+            if value.strip()
+        ]
+        if parts:
+            attribute_text = " " + " ".join(parts)
+
+    return "\n".join(
+        [
+            f":::{block_name}{attribute_text}",
+            *normalized_lines,
+            ":::",
+        ]
+    )
+
+
+def _bullet_lines(items: list[str]) -> list[str]:
+    return [f"- {item.strip()}" for item in items if item.strip()]
+
+
+def _join_markdown_sections(sections: list[str]) -> str:
+    return "\n\n".join(section for section in sections if section.strip())
+
+
+def _escape_semantic_block_attribute(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _build_copilot_evidence_and_caveats(

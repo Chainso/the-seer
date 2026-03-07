@@ -455,6 +455,12 @@ def test_ai_workbench_chat_streams_investigation_answer_and_linked_surfaces() ->
     assert final["thread_id"] == "workbench-thread-1"
     assert final["investigation_id"] == "investigation-seeded-1"
     assert final["answer_markdown"]
+    assert ":::evidence" in final["answer_markdown"]
+    assert ":::caveat" in final["answer_markdown"]
+    assert ":::next-action" in final["answer_markdown"]
+    assert ":::follow-up" in final["answer_markdown"]
+    assert ":::linked-surface" in final["answer_markdown"]
+    assert "suggestions, not established facts" in final["answer_markdown"]
     assert final["why_it_matters"]
     assert final["linked_surfaces"]
     assert final["follow_up_questions"]
@@ -497,6 +503,8 @@ def test_ai_workbench_chat_returns_clarifying_turn_without_scope() -> None:
         "time_window",
     }
     assert "need a bit more scope" in final["answer_markdown"].lower()
+    assert ":::follow-up" in final["answer_markdown"]
+    assert ":::caveat" in final["answer_markdown"]
 
 
 def test_ai_assistant_chat_logs_turn_lifecycle(caplog) -> None:
