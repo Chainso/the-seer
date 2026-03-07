@@ -98,8 +98,8 @@ export function AssistantCanvasPanel({
   state,
   compact = false,
 }: AssistantCanvasPanelProps) {
-  const artifact = state.artifact;
   const ontologyDisplay = useOntologyDisplay();
+  const artifact = state.artifact;
   const ocdfgContract = useMemo(
     () => (artifact ? parseOcdfgContract(artifact) : null),
     [artifact]
@@ -130,7 +130,9 @@ export function AssistantCanvasPanel({
     return null;
   }
 
-  const summaryItems = summarizeArtifact(artifact);
+  const visibleArtifact = state.artifact;
+
+  const summaryItems = summarizeArtifact(visibleArtifact);
   const surfacePadding = compact ? 'p-4' : 'p-5';
   const compactSummaryItems = summaryItems.slice(0, 2);
   const ocdfgWindowLabel = ocdfgGraph
@@ -142,7 +144,7 @@ export function AssistantCanvasPanel({
       <section
         data-assistant-canvas-panel
         data-assistant-ocdfg-canvas
-        data-artifact-type={artifact.artifact_type}
+        data-artifact-type={visibleArtifact.artifact_type}
         className={`flex h-full min-h-0 flex-col bg-background/96 ${surfacePadding}`}
       >
         <div className="rounded-3xl border border-border/70 bg-card/80 p-4 shadow-sm">
@@ -152,15 +154,15 @@ export function AssistantCanvasPanel({
                 Canvas
               </p>
               <h3 className="mt-2 text-lg font-semibold text-foreground">
-                {state.title || artifact.title}
+                {state.title || visibleArtifact.title}
               </h3>
               <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                {artifact.summary ||
+                {visibleArtifact.summary ||
                   'Inspect the object-centric graph while continuing the conversation.'}
               </p>
             </div>
             <div className="rounded-full border border-border/70 bg-background px-3 py-1 text-xs font-medium text-foreground">
-              {ARTIFACT_TYPE_LABELS[artifact.artifact_type]}
+              {ARTIFACT_TYPE_LABELS[visibleArtifact.artifact_type]}
             </div>
           </div>
         </div>
@@ -235,24 +237,24 @@ export function AssistantCanvasPanel({
   return (
     <section
       data-assistant-canvas-panel
-      data-artifact-type={artifact.artifact_type}
+      data-artifact-type={visibleArtifact.artifact_type}
       className={`flex ${compact ? 'h-auto' : 'h-full min-h-0'} flex-col bg-background/96 ${surfacePadding}`}
     >
       <div className="rounded-3xl border border-border/70 bg-card/80 p-4 shadow-sm">
         {compact ? (
           <div className="space-y-3">
             <div className="rounded-full border border-border/70 bg-background px-3 py-1 text-xs font-medium text-foreground w-fit">
-              {ARTIFACT_TYPE_LABELS[artifact.artifact_type]}
+              {ARTIFACT_TYPE_LABELS[visibleArtifact.artifact_type]}
             </div>
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
                 Canvas
               </p>
               <h3 className="mt-2 text-lg font-semibold text-foreground">
-                {state.title || artifact.title}
+                {state.title || visibleArtifact.title}
               </h3>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {artifact.summary ||
+                {visibleArtifact.summary ||
                   'The assistant can update or replace this panel as the conversation continues.'}
               </p>
             </div>
@@ -264,15 +266,15 @@ export function AssistantCanvasPanel({
                 Canvas
               </p>
               <h3 className="mt-2 text-lg font-semibold text-foreground">
-                {state.title || artifact.title}
+                {state.title || visibleArtifact.title}
               </h3>
               <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                {artifact.summary ||
+                {visibleArtifact.summary ||
                   'The assistant can update or replace this panel as the conversation continues.'}
               </p>
             </div>
             <div className="rounded-full border border-border/70 bg-background px-3 py-1 text-xs font-medium text-foreground">
-              {ARTIFACT_TYPE_LABELS[artifact.artifact_type]}
+              {ARTIFACT_TYPE_LABELS[visibleArtifact.artifact_type]}
             </div>
           </div>
         )}
@@ -298,7 +300,7 @@ export function AssistantCanvasPanel({
               Artifact payload
             </p>
             <pre className="mt-3 max-h-[28rem] overflow-auto rounded-2xl border border-border/60 bg-background/80 p-3 text-xs leading-6 text-muted-foreground">
-              {previewArtifactData(artifact.data)}
+              {previewArtifactData(visibleArtifact.data)}
             </pre>
           </div>
         ) : null}
