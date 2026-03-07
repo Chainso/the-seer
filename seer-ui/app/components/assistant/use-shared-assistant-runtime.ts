@@ -7,6 +7,7 @@ import type { AssistantChatContext } from '@/app/lib/api/assistant-chat';
 import {
   type AssistantExperience,
   DEFAULT_THREAD_TITLE,
+  getThreadCanvasState,
   getTextFromAppendMessage,
   toThreadMessage,
   useSharedAssistantState,
@@ -59,6 +60,10 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
     () => (activeThread?.messages || []).map(toThreadMessage),
     [activeThread]
   );
+  const activeCanvasState = useMemo(
+    () => getThreadCanvasState(activeThread),
+    [activeThread]
+  );
 
   const runtime = useExternalStoreRuntime({
     messages: activeThreadMessages,
@@ -103,5 +108,6 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
     runtime,
     activeThread,
     activeThreadMessages,
+    activeCanvasState,
   };
 }

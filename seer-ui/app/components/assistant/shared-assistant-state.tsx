@@ -15,6 +15,10 @@ import {
   type WorkbenchClarifyingQuestion,
   type WorkbenchLinkedSurface,
 } from '@/app/lib/api/workbench';
+import {
+  deriveCanvasStateFromCompletionMessages,
+  type AssistantCanvasState,
+} from '@/app/lib/assistant-canvas-state';
 import { parseWorkbenchMarkdownParts } from '@/app/lib/workbench-semantic-markdown';
 
 const CANONICAL_STORAGE_KEY = 'seer_assistant_threads_v3';
@@ -447,6 +451,10 @@ export function toThreadMessage(message: StoredMessage): ThreadMessage {
       },
     },
   };
+}
+
+export function getThreadCanvasState(thread: StoredThread | null): AssistantCanvasState {
+  return deriveCanvasStateFromCompletionMessages(thread?.completionMessages || []);
 }
 
 export function inferModuleFromPath(pathname: string): string {

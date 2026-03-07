@@ -26,6 +26,7 @@ from seer_backend.ontology.errors import (
     OntologyReadOnlyViolationError,
 )
 from seer_backend.ontology.models import (
+    CopilotCanvasAction,
     CopilotChatResponse,
     CopilotConversationMessage,
     CopilotStructuredOutput,
@@ -92,6 +93,8 @@ Workflow for each turn:
   expand your available instructions or tools.
 - Use the SPARQL tool when the user asks for exact relationships,
   counts, validation, or when context is ambiguous.
+- When a domain tool returns a useful artifact, use the canvas tools to present it
+  only if seeing it beside the conversation would materially help the user.
 4. If using a tool, produce one high-quality call first and keep it bounded.
 5. Return a concise answer that cites what you checked and any limits/uncertainty.
 
@@ -288,6 +291,86 @@ _LOAD_SKILL_TOOL_SCHEMA = {
                 }
             },
             "required": ["skill_name"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_PRESENT_CANVAS_ARTIFACT_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "present_canvas_artifact",
+        "description": (
+            "Present one previously created artifact in the assistant canvas on the "
+            "right side of the conversation."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Artifact id returned by a previous assistant tool result.",
+                },
+                "target": {
+                    "type": "string",
+                    "enum": ["split-right"],
+                    "description": "Canvas target slot.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional canvas title override.",
+                },
+            },
+            "required": ["artifact_id"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_UPDATE_CANVAS_ARTIFACT_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "update_canvas_artifact",
+        "description": (
+            "Replace or refresh the artifact currently shown in the assistant canvas."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "artifact_id": {
+                    "type": "string",
+                    "description": "Artifact id returned by a previous assistant tool result.",
+                },
+                "target": {
+                    "type": "string",
+                    "enum": ["split-right"],
+                    "description": "Canvas target slot.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional canvas title override.",
+                },
+            },
+            "required": ["artifact_id"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_CLOSE_CANVAS_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "close_canvas",
+        "description": "Close the assistant canvas and return to conversation-only mode.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "target": {
+                    "type": "string",
+                    "enum": ["split-right"],
+                    "description": "Canvas target slot.",
+                }
+            },
             "additionalProperties": False,
         },
     },
@@ -520,6 +603,7 @@ class OntologyCopilotService:
                     self._execute_tool_call(
                         resolved_call,
                         assistant_tool_adapter=assistant_tool_adapter,
+                        conversation_messages=messages,
                     )
                     for resolved_call in resolved_calls
                 )
@@ -644,9 +728,19 @@ class OntologyCopilotService:
         tool_call: CopilotToolCall,
         *,
         assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+        conversation_messages: list[dict[str, Any]] | None = None,
     ) -> CopilotToolResult:
         if tool_call.tool == "load_skill":
             return self._execute_load_skill_call(tool_call)
+        if tool_call.tool in {
+            "present_canvas_artifact",
+            "update_canvas_artifact",
+            "close_canvas",
+        }:
+            return _execute_canvas_tool_call(
+                tool_call,
+                conversation_messages=conversation_messages or [],
+            )
         if tool_call.tool != "sparql_read_only_query":
             if assistant_tool_adapter is None:
                 return CopilotToolResult(
@@ -1037,7 +1131,13 @@ def _tool_schemas(
     conversation_messages: list[dict[str, Any]],
     assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
 ) -> list[dict[str, Any]]:
-    schemas = [_SPARQL_READ_ONLY_TOOL_SCHEMA, _LOAD_SKILL_TOOL_SCHEMA]
+    schemas = [
+        _SPARQL_READ_ONLY_TOOL_SCHEMA,
+        _LOAD_SKILL_TOOL_SCHEMA,
+        _PRESENT_CANVAS_ARTIFACT_TOOL_SCHEMA,
+        _UPDATE_CANVAS_ARTIFACT_TOOL_SCHEMA,
+        _CLOSE_CANVAS_TOOL_SCHEMA,
+    ]
     if assistant_tool_adapter is None:
         return schemas
 
@@ -1089,6 +1189,93 @@ def _loaded_skill_tool_permissions(
             if isinstance(tool_name, str) and tool_name:
                 enabled.add(tool_name)
     return enabled
+
+
+def _execute_canvas_tool_call(
+    tool_call: CopilotToolCall,
+    *,
+    conversation_messages: list[dict[str, Any]],
+) -> CopilotToolResult:
+    arguments = dict(tool_call.arguments)
+    target = arguments.get("target") or "split-right"
+    if target != "split-right":
+        return CopilotToolResult(
+            tool=tool_call.tool,
+            error=f"tool validation failed: unsupported canvas target {target!r}",
+        )
+
+    if tool_call.tool == "close_canvas":
+        return CopilotToolResult(
+            tool=tool_call.tool,
+            tool_permission="assistant.canvas.close",
+            canvas_action=CopilotCanvasAction(action="close", target="split-right"),
+            summary="Closed the assistant canvas.",
+            row_count=1,
+            truncated=False,
+        )
+
+    artifact_id = arguments.get("artifact_id")
+    if not isinstance(artifact_id, str) or not artifact_id.strip():
+        return CopilotToolResult(
+            tool=tool_call.tool,
+            error="tool validation failed: artifact_id is required",
+        )
+    artifact_id = artifact_id.strip()
+    artifacts = _artifacts_by_id(conversation_messages)
+    artifact = artifacts.get(artifact_id)
+    if artifact is None:
+        return CopilotToolResult(
+            tool=tool_call.tool,
+            error=f"tool execution failed: artifact {artifact_id!r} is unavailable",
+        )
+
+    action = "present" if tool_call.tool == "present_canvas_artifact" else "update"
+    title = arguments.get("title")
+    return CopilotToolResult(
+        tool=tool_call.tool,
+        tool_permission=f"assistant.canvas.{action}",
+        canvas_action=CopilotCanvasAction(
+            action=action,
+            target="split-right",
+            artifact_id=str(artifact.get("artifact_id") or artifact_id),
+            title=(
+                title
+                if isinstance(title, str) and title.strip()
+                else str(artifact.get("title") or artifact_id)
+            ),
+        ),
+        summary=(
+            f"{'Presented' if action == 'present' else 'Updated'} canvas artifact "
+            f"{str(artifact.get('title') or artifact_id)}."
+        ),
+        row_count=1,
+        truncated=False,
+    )
+
+
+def _artifacts_by_id(
+    conversation_messages: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    artifacts: dict[str, dict[str, Any]] = {}
+    for message in conversation_messages:
+        if not isinstance(message, dict) or message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        artifact = parsed.get("artifact")
+        if not isinstance(artifact, dict):
+            continue
+        artifact_id = artifact.get("artifact_id")
+        if isinstance(artifact_id, str) and artifact_id:
+            artifacts[artifact_id] = artifact
+    return artifacts
 
 
 def _infer_variables(
@@ -1395,6 +1582,18 @@ def _tool_status_started_event(tool_call: CopilotToolCall) -> CopilotToolStatusE
             summary="Running read-only SPARQL query.",
             query_preview=_query_preview(tool_call.query or ""),
         )
+    if tool_call.tool in {"present_canvas_artifact", "update_canvas_artifact", "close_canvas"}:
+        verb = {
+            "present_canvas_artifact": "Presenting an artifact in",
+            "update_canvas_artifact": "Updating",
+            "close_canvas": "Closing",
+        }[tool_call.tool]
+        return CopilotToolStatusEvent(
+            status="started",
+            tool=tool_call.tool,
+            call_id=tool_call.call_id or "call_unknown",
+            summary=f"{verb} the assistant canvas.",
+        )
     return CopilotToolStatusEvent(
         status="started",
         tool=tool_call.tool,
@@ -1450,6 +1649,19 @@ def _tool_status_summary(tool_result: CopilotToolResult) -> str:
             "Read-only SELECT query completed with "
             f"{tool_result.row_count} rows{truncated_suffix}."
         )
+    if tool_result.canvas_action is not None:
+        if tool_result.error:
+            return f"Canvas action failed: {tool_result.error}"
+        title = (
+            tool_result.canvas_action.title
+            or tool_result.canvas_action.artifact_id
+            or "artifact"
+        )
+        if tool_result.canvas_action.action == "close":
+            return "Closed the assistant canvas."
+        if tool_result.canvas_action.action == "update":
+            return f"Updated the assistant canvas with {title}."
+        return f"Presented {title} in the assistant canvas."
     if tool_result.error:
         return f"Assistant tool {tool_result.tool} failed: {tool_result.error}"
     if tool_result.summary:
@@ -1495,6 +1707,20 @@ def _summarize_tool_result(tool_result: CopilotToolResult | None) -> str:
             "I ran a read-only SELECT query and found "
             f"{tool_result.row_count} rows{truncated_suffix}."
         )
+
+    if tool_result.canvas_action is not None:
+        if tool_result.error:
+            return f"I tried to update the assistant canvas, but it failed: {tool_result.error}"
+        title = (
+            tool_result.canvas_action.title
+            or tool_result.canvas_action.artifact_id
+            or "the artifact"
+        )
+        if tool_result.canvas_action.action == "close":
+            return "I closed the assistant canvas."
+        if tool_result.canvas_action.action == "update":
+            return f"I updated the assistant canvas with {title}."
+        return f"I presented {title} in the assistant canvas."
 
     if tool_result.error:
         return f"I ran assistant tool {tool_result.tool}, but it failed: {tool_result.error}"

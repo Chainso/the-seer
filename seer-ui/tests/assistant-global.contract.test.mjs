@@ -75,4 +75,21 @@ test("shared assistant runtime wires cancel controls to thread abort", () => {
   const runtime = read("app/components/assistant/use-shared-assistant-runtime.ts");
   assert.match(runtime, /onCancel/);
   assert.match(runtime, /cancelThread/);
+  assert.match(runtime, /activeCanvasState/);
+});
+
+test("assistant canvas state derives from persisted completion messages", () => {
+  const helper = read("app/lib/assistant-canvas-state.ts");
+  assert.match(helper, /deriveCanvasStateFromCompletionMessages/);
+  assert.match(helper, /canvas_action/);
+  assert.match(helper, /artifact_id/);
+  assert.match(helper, /action === 'close'/);
+  assert.match(helper, /action: 'close'/);
+  assert.match(helper, /artifacts\.set/);
+});
+
+test("shared assistant state exposes thread canvas derivation", () => {
+  const sharedState = read("app/components/assistant/shared-assistant-state.tsx");
+  assert.match(sharedState, /getThreadCanvasState/);
+  assert.match(sharedState, /deriveCanvasStateFromCompletionMessages/);
 });

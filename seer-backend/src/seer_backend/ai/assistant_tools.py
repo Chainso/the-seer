@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -34,7 +36,11 @@ from seer_backend.analytics.service import ProcessMiningService, UnavailableProc
 from seer_backend.history.errors import HistoryDependencyUnavailableError, HistoryError
 from seer_backend.history.models import LatestObjectsSearchRequest, ObjectPropertyFilter
 from seer_backend.history.service import HistoryService, UnavailableHistoryService
-from seer_backend.ontology.models import CopilotToolCall, CopilotToolResult
+from seer_backend.ontology.models import (
+    CopilotArtifact,
+    CopilotToolCall,
+    CopilotToolResult,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -392,6 +398,11 @@ class AssistantDomainToolAdapter:
                     result=response["result"],
                     summary=response["summary"],
                     row_count=response["row_count"],
+                    artifact=self._artifact_for_result(
+                        definition=definition,
+                        result=response["result"],
+                        summary=response["summary"],
+                    ),
                 )
             if definition.function_name == "process_trace_drilldown":
                 request = _ProcessTraceRequest.model_validate(tool_call.arguments)
@@ -420,6 +431,14 @@ class AssistantDomainToolAdapter:
                         f"for {response.anchor_object_type}."
                     ),
                     row_count=len(response.insights),
+                    artifact=self._artifact_for_result(
+                        definition=definition,
+                        result={"run": response.model_dump(mode="json")},
+                        summary=(
+                            f"Root-cause analysis returned {len(response.insights)} insights "
+                            f"for {response.anchor_object_type}."
+                        ),
+                    ),
                 )
             if definition.function_name == "root_cause_evidence":
                 request = _RootCauseEvidenceRequest.model_validate(tool_call.arguments)
@@ -474,6 +493,14 @@ class AssistantDomainToolAdapter:
                         f"for {request.object_type}."
                     ),
                     row_count=len(response.items),
+                    artifact=self._artifact_for_result(
+                        definition=definition,
+                        result={"timeline": response.model_dump(mode="json")},
+                        summary=(
+                            f"Object timeline returned {len(response.items)} snapshots "
+                            f"for {request.object_type}."
+                        ),
+                    ),
                 )
             if definition.function_name == "history_object_events":
                 request = _ObjectEventsToolRequest.model_validate(tool_call.arguments)
@@ -530,6 +557,14 @@ class AssistantDomainToolAdapter:
                     ),
                     row_count=len(response.items),
                     truncated=response.total > len(response.items),
+                    artifact=self._artifact_for_result(
+                        definition=definition,
+                        result={"latest_objects": response.model_dump(mode="json")},
+                        summary=(
+                            f"Latest object search returned {len(response.items)} objects "
+                            f"from {response.total} total matches."
+                        ),
+                    ),
                 )
         except ValidationError as exc:
             return self._error(
@@ -600,11 +635,13 @@ class AssistantDomainToolAdapter:
         summary: str,
         row_count: int = 0,
         truncated: bool = False,
+        artifact: CopilotArtifact | None = None,
     ) -> CopilotToolResult:
         return CopilotToolResult(
             tool=definition.function_name,
             tool_permission=definition.permission_name,
             result=result,
+            artifact=artifact,
             summary=summary,
             row_count=row_count,
             truncated=truncated,
@@ -621,3 +658,94 @@ class AssistantDomainToolAdapter:
             tool_permission=definition.permission_name,
             error=message,
         )
+
+    def _artifact_for_result(
+        self,
+        *,
+        definition: AssistantToolDefinition,
+        result: dict[str, Any],
+        summary: str,
+    ) -> CopilotArtifact | None:
+        function_name = definition.function_name
+
+        if function_name == "process_mine":
+            analysis_kind = result.get("analysis_kind")
+            run = result.get("run")
+            if isinstance(run, dict) and analysis_kind in {"ocdfg", "process"}:
+                anchor_object_type = str(run.get("anchor_object_type") or "object").strip()
+                suffix = "OC-DFG" if analysis_kind == "ocdfg" else "Process Map"
+                return CopilotArtifact(
+                    artifact_id=self._artifact_id(
+                        definition=definition,
+                        artifact_type=str(analysis_kind),
+                        payload=result,
+                    ),
+                    artifact_type="ocdfg" if analysis_kind == "ocdfg" else "process",
+                    title=f"{anchor_object_type} {suffix}",
+                    summary=summary,
+                    data=result,
+                )
+
+        if function_name == "root_cause_run":
+            run = result.get("run")
+            if isinstance(run, dict):
+                anchor_object_type = str(run.get("anchor_object_type") or "object").strip()
+                return CopilotArtifact(
+                    artifact_id=self._artifact_id(
+                        definition=definition,
+                        artifact_type="rca",
+                        payload=result,
+                    ),
+                    artifact_type="rca",
+                    title=f"{anchor_object_type} Root Cause Analysis",
+                    summary=summary,
+                    data=result,
+                )
+
+        if function_name == "history_object_timeline":
+            timeline = result.get("timeline")
+            if isinstance(timeline, dict):
+                object_type = str(timeline.get("object_type") or "object").strip()
+                return CopilotArtifact(
+                    artifact_id=self._artifact_id(
+                        definition=definition,
+                        artifact_type="object-timeline",
+                        payload=result,
+                    ),
+                    artifact_type="object-timeline",
+                    title=f"{object_type} Timeline",
+                    summary=summary,
+                    data=result,
+                )
+
+        if function_name == "history_latest_objects":
+            latest_objects = result.get("latest_objects")
+            if isinstance(latest_objects, dict):
+                object_type = str(latest_objects.get("object_type") or "object").strip()
+                return CopilotArtifact(
+                    artifact_id=self._artifact_id(
+                        definition=definition,
+                        artifact_type="table",
+                        payload=result,
+                    ),
+                    artifact_type="table",
+                    title=f"{object_type} Object Table",
+                    summary=summary,
+                    data=result,
+                )
+
+        return None
+
+    def _artifact_id(
+        self,
+        *,
+        definition: AssistantToolDefinition,
+        artifact_type: str,
+        payload: dict[str, Any],
+    ) -> str:
+        digest = hashlib.sha1(
+            json.dumps(payload, sort_keys=True, ensure_ascii=True).encode("utf-8")
+        ).hexdigest()[:12]
+        normalized_type = artifact_type.replace("_", "-")
+        normalized_tool = definition.function_name.replace("_", "-")
+        return f"{normalized_type}-{normalized_tool}-{digest}"

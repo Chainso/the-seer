@@ -892,6 +892,9 @@ def _assistant_tool_permissions(
 ) -> list[str]:
     permissions = [
         "assistant.context",
+        "assistant.canvas.present",
+        "assistant.canvas.update",
+        "assistant.canvas.close",
         "ontology.current",
         "ontology.concepts",
         "ontology.concept_detail",
@@ -1445,6 +1448,22 @@ def _build_copilot_evidence_and_caveats(
                     "Assistant domain tool execution failed; response may rely on partial evidence."
                 )
         else:
+            if copilot.tool_result.canvas_action is not None:
+                action = copilot.tool_result.canvas_action
+                label = "Assistant canvas action"
+                if action.action == "close":
+                    result_detail = "Closed the assistant canvas."
+                else:
+                    artifact_title = action.title or action.artifact_id or "artifact"
+                    verb = "Presented" if action.action == "present" else "Updated"
+                    result_detail = f"{verb} {artifact_title} in the assistant canvas."
+            elif copilot.tool_result.artifact is not None:
+                artifact = copilot.tool_result.artifact
+                label = "Assistant artifact created"
+                result_detail = (
+                    artifact.summary
+                    or f"{artifact.artifact_type} artifact {artifact.artifact_id} created"
+                )
             if copilot.tool_result.tool == "sparql_read_only_query":
                 result_detail = (
                     f"{copilot.tool_result.query_type} query returned "
@@ -1453,7 +1472,7 @@ def _build_copilot_evidence_and_caveats(
                 if copilot.tool_result.truncated:
                     result_detail += " (truncated)"
                 label = "Read-only SPARQL tool result"
-            else:
+            elif copilot.tool_result.canvas_action is None and copilot.tool_result.artifact is None:
                 result_detail = copilot.tool_result.summary or (
                     f"{copilot.tool_result.tool_permission or copilot.tool_result.tool} completed"
                 )

@@ -263,10 +263,12 @@ class _LoadSkillThenAnswerRuntime(CopilotModelRuntime):
         self.calls += 1
         if self.calls == 1:
             assert tools is not None
-            assert {tool["function"]["name"] for tool in tools} == {
-                "sparql_read_only_query",
-                "load_skill",
-            }
+            tool_names = {tool["function"]["name"] for tool in tools}
+            assert "sparql_read_only_query" in tool_names
+            assert "load_skill" in tool_names
+            assert "present_canvas_artifact" in tool_names
+            assert "update_canvas_artifact" in tool_names
+            assert "close_canvas" in tool_names
             return CopilotStructuredOutput(
                 mode="tool_call",
                 answer="Loading process mining guidance.",
@@ -377,6 +379,72 @@ class _UsePersistedProcessTraceRuntime(CopilotModelRuntime):
         return CopilotStructuredOutput(
             mode="direct_answer",
             answer="Fetched example traces from the persisted process mining result.",
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _LoadSkillMineAndPresentCanvasRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        self.calls += 1
+        assert tools is not None
+        tool_names = {tool["function"]["name"] for tool in tools}
+
+        if self.calls == 1:
+            assert "load_skill" in tool_names
+            assert "present_canvas_artifact" in tool_names
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Loading process mining guidance.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="load_skill",
+                    skill_name="process-mining",
+                    call_id="call_skill_canvas_1",
+                ),
+            )
+
+        if self.calls == 2:
+            assert "process_mine" in tool_names
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Running OC-DFG discovery.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="process_mine",
+                    arguments={
+                        "anchor_object_type": _ORDER_URI,
+                        "start_at": "2026-02-22T07:00:00Z",
+                        "end_at": "2026-02-22T11:00:00Z",
+                    },
+                    call_id="call_process_canvas_1",
+                ),
+            )
+
+        if self.calls == 3:
+            artifact_id = _extract_artifact_id_from_messages(messages, tool_name="process_mine")
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Opening the OC-DFG in canvas.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="present_canvas_artifact",
+                    arguments={"artifact_id": artifact_id},
+                    call_id="call_canvas_present_1",
+                ),
+            )
+
+        assert self.calls == 4
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="I ran OC-DFG discovery and opened it in the assistant canvas.",
             evidence=[],
             tool_call=None,
         )
@@ -511,6 +579,29 @@ def _extract_process_trace_handle_from_messages(
                 if isinstance(handle, str) and handle:
                     return handle
     raise AssertionError("process mining tool result did not persist a trace handle")
+
+
+def _extract_artifact_id_from_messages(
+    messages: list[dict[str, object]],
+    *,
+    tool_name: str,
+) -> str:
+    for message in reversed(messages):
+        if message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        parsed = json.loads(content)
+        if parsed.get("tool") != tool_name:
+            continue
+        artifact = parsed.get("artifact")
+        if not isinstance(artifact, dict):
+            continue
+        artifact_id = artifact.get("artifact_id")
+        if isinstance(artifact_id, str) and artifact_id:
+            return artifact_id
+    raise AssertionError(f"{tool_name} tool result did not persist an artifact id")
 
 
 def seed_fixture_dataset(client: TestClient) -> None:
@@ -1156,6 +1247,58 @@ def test_ai_assistant_chat_reuses_skill_permissions_from_persisted_completion_me
     ]
     assert tool_messages[-1]["tool_permission"] == "process.traces"
     assert tool_messages[-1]["result"]["drilldown"]["traces"]
+
+
+def test_ai_assistant_chat_persists_artifact_and_canvas_tool_results() -> None:
+    client = build_skill_runtime_client(_LoadSkillMineAndPresentCanvasRuntime())
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "Show me the order flow and open it beside the chat."},
+            ],
+            "thread_id": "thread-canvas-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    events = _parse_sse_events(response.text)
+    tool_status_events = [payload for event, payload in events if event == "tool_status"]
+    assert [payload["tool"] for payload in tool_status_events] == [
+        "load_skill",
+        "load_skill",
+        "process_mine",
+        "process_mine",
+        "present_canvas_artifact",
+        "present_canvas_artifact",
+    ]
+
+    final_event = next(payload for event, payload in events if event == "final")
+    assert "assistant.canvas.present" in final_event["tool_permissions"]
+    assert "assistant.canvas.update" in final_event["tool_permissions"]
+    assert "assistant.canvas.close" in final_event["tool_permissions"]
+
+    tool_messages = [
+        json.loads(message["content"])
+        for message in final_event["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    process_result = next(item for item in tool_messages if item["tool"] == "process_mine")
+    assert process_result["artifact"]["artifact_type"] == "ocdfg"
+    assert process_result["artifact"]["artifact_id"]
+
+    canvas_result = next(
+        item for item in tool_messages if item["tool"] == "present_canvas_artifact"
+    )
+    assert canvas_result["tool_permission"] == "assistant.canvas.present"
+    assert canvas_result["canvas_action"]["action"] == "present"
+    assert canvas_result["canvas_action"]["target"] == "split-right"
+    assert (
+        canvas_result["canvas_action"]["artifact_id"]
+        == process_result["artifact"]["artifact_id"]
+    )
 
 
 def test_ai_assistant_chat_logs_failure(caplog) -> None:

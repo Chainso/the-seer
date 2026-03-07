@@ -150,6 +150,8 @@ class CopilotToolCall(BaseModel):
 
 
 class CopilotToolResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     tool: CopilotToolName
     tool_permission: str | None = None
     query: str | None = None
@@ -166,8 +168,46 @@ class CopilotToolResult(BaseModel):
     truncated: bool = False
     graphs: list[str] = Field(default_factory=list)
     result: dict[str, Any] | None = None
+    artifact: CopilotArtifact | None = None
+    canvas_action: CopilotCanvasAction | None = None
     summary: str | None = None
     error: str | None = None
+
+
+CopilotArtifactType = Literal[
+    "ocdfg",
+    "process",
+    "rca",
+    "object-timeline",
+    "table",
+]
+
+
+class CopilotArtifact(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_id: str = Field(min_length=1, max_length=160)
+    artifact_type: CopilotArtifactType
+    title: str = Field(min_length=1, max_length=200)
+    summary: str | None = Field(default=None, max_length=600)
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class CopilotCanvasAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["present", "update", "close"]
+    target: Literal["split-right"] = "split-right"
+    artifact_id: str | None = Field(default=None, max_length=160)
+    title: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_artifact_reference(self) -> CopilotCanvasAction:
+        if self.action == "close":
+            return self
+        if not self.artifact_id:
+            raise ValueError("artifact_id is required unless action is close")
+        return self
 
 
 class CopilotStructuredOutput(BaseModel):
