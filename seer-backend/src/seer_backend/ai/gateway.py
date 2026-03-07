@@ -37,7 +37,6 @@ from seer_backend.analytics.rca_service import RootCauseService, UnavailableRoot
 from seer_backend.analytics.service import ProcessMiningService, UnavailableProcessMiningService
 from seer_backend.history.service import HistoryService, UnavailableHistoryService
 from seer_backend.ontology.models import CopilotChatResponse, CopilotConversationMessage
-from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
 _TOOL_CALL_ID_MAX_LENGTH = 120
 _ASSISTANT_TURN_LOGGER = logging.getLogger("seer_backend.ai.assistant_turn")
@@ -260,7 +259,6 @@ class AiGatewayService:
         self,
         *,
         ontology_copilot_service: OntologyCopilotService,
-        ontology_service: OntologyService | UnavailableOntologyService,
         process_service: ProcessMiningService | UnavailableProcessMiningService,
         root_cause_service: RootCauseService | UnavailableRootCauseService,
         history_service: HistoryService | UnavailableHistoryService,
@@ -269,7 +267,6 @@ class AiGatewayService:
         self._process_service = process_service
         self._root_cause_service = root_cause_service
         self._assistant_tool_adapter = AssistantDomainToolAdapter(
-            ontology_service=ontology_service,
             process_service=process_service,
             root_cause_service=root_cause_service,
             history_service=history_service,

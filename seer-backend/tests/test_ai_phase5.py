@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -11,7 +10,6 @@ from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 
-from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
 from seer_backend.ai.gateway import GuidedInvestigationRequest
 from seer_backend.ai.ontology_copilot import (
     CopilotAnswerFinalEvent,
@@ -23,16 +21,15 @@ from seer_backend.ai.ontology_copilot import (
 )
 from seer_backend.ai.skills import AssistantSkillRegistry
 from seer_backend.analytics.rca_repository import InMemoryRootCauseRepository
-from seer_backend.analytics.rca_service import RootCauseService, UnavailableRootCauseService
+from seer_backend.analytics.rca_service import RootCauseService
 from seer_backend.analytics.repository import InMemoryProcessMiningRepository
 from seer_backend.analytics.service import (
     OcpnMiningWrapper,
     ProcessMiningService,
-    UnavailableProcessMiningService,
 )
 from seer_backend.history.canonicalization import canonicalize_object_ref, xxhash64_uint64
 from seer_backend.history.repository import InMemoryHistoryRepository
-from seer_backend.history.service import HistoryService, UnavailableHistoryService
+from seer_backend.history.service import HistoryService
 from seer_backend.main import create_app
 from seer_backend.ontology.errors import OntologyNotReadyError
 from seer_backend.ontology.models import (
@@ -43,9 +40,6 @@ from seer_backend.ontology.models import (
     CopilotToolCall,
     CopilotToolResult,
     CurrentReleasePointer,
-    OntologyGraphEdge,
-    OntologyGraphNode,
-    OntologyGraphResponse,
     OntologySparqlQueryResponse,
 )
 
@@ -1162,47 +1156,6 @@ def test_ai_assistant_chat_reuses_skill_permissions_from_persisted_completion_me
     ]
     assert tool_messages[-1]["tool_permission"] == "process.traces"
     assert tool_messages[-1]["result"]["drilldown"]["traces"]
-
-
-def test_assistant_domain_tool_adapter_executes_deep_ontology_graph_tool() -> None:
-    class _StubOntologyGraphService:
-        async def graph(self) -> OntologyGraphResponse:
-            return OntologyGraphResponse(
-                release_id="phase5-test-release",
-                graph_iri="urn:seer:test:graph",
-                nodes=[
-                    OntologyGraphNode(
-                        iri="urn:seer:test:Order",
-                        label="Order",
-                        category="ObjectModel",
-                    )
-                ],
-                edges=[
-                    OntologyGraphEdge(
-                        from_iri="urn:seer:test:Order",
-                        to_iri="urn:seer:test:DelayedOrder",
-                        predicate="urn:seer:test:relatedTo",
-                    )
-                ],
-            )
-
-    adapter = AssistantDomainToolAdapter(
-        ontology_service=_StubOntologyGraphService(),
-        process_service=UnavailableProcessMiningService("unused"),
-        root_cause_service=UnavailableRootCauseService("unused"),
-        history_service=UnavailableHistoryService("unused"),
-    )
-
-    result = asyncio.run(
-        adapter.execute_tool_call(
-            CopilotToolCall(tool="ontology_graph", arguments={})
-        )
-    )
-
-    assert result.error is None
-    assert result.tool_permission == "ontology.graph"
-    assert result.result is not None
-    assert result.result["graph"]["nodes"][0]["label"] == "Order"
 
 
 def test_ai_assistant_chat_logs_failure(caplog) -> None:

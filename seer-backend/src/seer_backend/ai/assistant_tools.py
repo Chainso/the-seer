@@ -34,13 +34,7 @@ from seer_backend.analytics.service import ProcessMiningService, UnavailableProc
 from seer_backend.history.errors import HistoryDependencyUnavailableError, HistoryError
 from seer_backend.history.models import LatestObjectsSearchRequest, ObjectPropertyFilter
 from seer_backend.history.service import HistoryService, UnavailableHistoryService
-from seer_backend.ontology.errors import (
-    OntologyDependencyUnavailableError,
-    OntologyError,
-    OntologyNotReadyError,
-)
 from seer_backend.ontology.models import CopilotToolCall, CopilotToolResult
-from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,26 +152,14 @@ class AssistantDomainToolAdapter:
     def __init__(
         self,
         *,
-        ontology_service: OntologyService | UnavailableOntologyService,
         process_service: ProcessMiningService | UnavailableProcessMiningService,
         root_cause_service: RootCauseService | UnavailableRootCauseService,
         history_service: HistoryService | UnavailableHistoryService,
     ) -> None:
-        self._ontology_service = ontology_service
         self._process_service = process_service
         self._root_cause_service = root_cause_service
         self._history_service = history_service
         definitions = (
-            AssistantToolDefinition(
-                permission_name="ontology.graph",
-                function_name="ontology_graph",
-                description="Fetch the active ontology graph for deeper structural inspection.",
-                parameters={
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False,
-                },
-            ),
             AssistantToolDefinition(
                 permission_name="process.mine",
                 function_name="process_mine",
@@ -402,17 +384,6 @@ class AssistantDomainToolAdapter:
             )
 
         try:
-            if definition.function_name == "ontology_graph":
-                response = await self._ontology_service.graph()
-                return self._success(
-                    definition=definition,
-                    result={"graph": response.model_dump(mode="json")},
-                    summary=(
-                        f"Ontology graph returned {len(response.nodes)} nodes and "
-                        f"{len(response.edges)} edges."
-                    ),
-                    row_count=len(response.nodes),
-                )
             if definition.function_name == "process_mine":
                 request = _ProcessMineToolRequest.model_validate(tool_call.arguments)
                 response = await self._execute_process_mine(request)
@@ -566,9 +537,6 @@ class AssistantDomainToolAdapter:
                 message=f"tool validation failed: {exc.errors()[0]['msg']}",
             )
         except (
-            OntologyDependencyUnavailableError,
-            OntologyNotReadyError,
-            OntologyError,
             ProcessMiningValidationError,
             ProcessMiningLimitExceededError,
             ProcessMiningNoDataError,
