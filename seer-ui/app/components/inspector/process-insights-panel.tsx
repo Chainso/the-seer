@@ -1507,7 +1507,9 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
               <div className="rounded-xl border border-border bg-background px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Anchor</p>
-                <p className="mt-2 text-sm font-medium">{run.anchor_object_type}</p>
+                <p className="mt-2 text-sm font-medium">
+                  {ontologyDisplay.displayObjectType(run.anchor_object_type)}
+                </p>
               </div>
               <div className="rounded-xl border border-border bg-background px-4 py-3">
                 <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Cohort</p>
@@ -1544,7 +1546,7 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
                   </div>
                   <Badge variant="outline">{run.insights.length} hypotheses</Badge>
                 </div>
-                <Table.Root className="mt-4" variant="surface">
+                <Table.Root className="mt-4" variant="surface" striped>
                   <Table.Header>
                     <Table.Row>
                       <Table.ColumnHeaderCell>Hypothesis</Table.ColumnHeaderCell>
