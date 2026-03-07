@@ -138,6 +138,9 @@ Single-command launch with zellij multiplexing:
 This starts Fuseki + ClickHouse in Docker, then opens a `zellij` session with panes
 for backend, UI, DB logs, and a dedicated assistant turn log stream.
 
+By default, rerunning the script recreates that zellij session so pane commands and
+layout changes are applied immediately rather than reattaching to stale panes.
+
 The assistant pane tails:
 
 ```bash
@@ -158,6 +161,12 @@ Optional session name override:
 
 ```bash
 SEER_ZELLIJ_SESSION=seer-dev ./scripts/dev-local-zellij.sh
+```
+
+Reattach to an existing session instead of recreating it:
+
+```bash
+SEER_ZELLIJ_RECREATE_SESSION=0 ./scripts/dev-local-zellij.sh
 ```
 
 Disable auto DB shutdown on zellij exit:
