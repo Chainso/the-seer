@@ -458,9 +458,10 @@ function areSerializedFiltersEqual(left: string[], right: string[]): boolean {
 
 interface ProcessInsightsPanelProps {
   isActive: boolean;
+  showIntro?: boolean;
 }
 
-export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
+export function ProcessInsightsPanel({ isActive, showIntro = true }: ProcessInsightsPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1222,22 +1223,24 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Process Insights</p>
-            <h1 className="mt-3 font-display text-3xl">Root-Cause Intelligence</h1>
-            <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-              Find which attributes are most associated with a target failure outcome, then open trace evidence for
-              each hypothesis.
-            </p>
+      {showIntro && (
+        <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Process Insights</p>
+              <h1 className="mt-3 font-display text-3xl">Root-Cause Intelligence</h1>
+              <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
+                Find which attributes are most associated with a target failure outcome, then open trace evidence for
+                each hypothesis.
+              </p>
+            </div>
+            <Badge className="gap-2 rounded-full bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
+              <Radar className="h-3 w-3" />
+              WRAcc + Lift Ranking
+            </Badge>
           </div>
-          <Badge className="gap-2 rounded-full bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
-            <Radar className="h-3 w-3" />
-            WRAcc + Lift Ranking
-          </Badge>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <InspectorScopeFilters
