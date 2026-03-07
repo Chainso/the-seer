@@ -41,7 +41,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-seer_backend.ai = ["assistant_skills/*/SKILL.md"]
+"seer_backend.ai" = ["assistant_skills/*/SKILL.md"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
