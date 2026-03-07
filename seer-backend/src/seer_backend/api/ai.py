@@ -180,8 +180,10 @@ async def run_guided_investigation(
 def inject_ai_gateway_service(app: Any) -> None:
     app.state.ai_gateway_service = AiGatewayService(
         ontology_copilot_service=app.state.ontology_copilot_service,
+        ontology_service=app.state.ontology_service,
         process_service=app.state.process_service,
         root_cause_service=app.state.root_cause_service,
+        history_service=app.state.history_service,
     )
 
 

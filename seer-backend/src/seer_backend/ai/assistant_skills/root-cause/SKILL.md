@@ -14,4 +14,3 @@ Guidance:
 - Use setup assistance when the user has not named a concrete outcome.
 - Use evidence retrieval when the user asks to inspect traces or examples behind an insight.
 - Separate correlation from causation in the final answer.
-

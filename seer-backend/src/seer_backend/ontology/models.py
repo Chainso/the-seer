@@ -125,13 +125,14 @@ class CopilotEvidence(BaseModel):
     query: str
 
 
-CopilotToolName = Literal["sparql_read_only_query", "load_skill"]
+CopilotToolName = str
 
 
 class CopilotToolCall(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tool: CopilotToolName
+    arguments: dict[str, Any] = Field(default_factory=dict)
     query: str | None = Field(default=None, max_length=20000)
     skill_name: str | None = Field(default=None, max_length=160)
     call_id: str | None = None
@@ -150,6 +151,7 @@ class CopilotToolCall(BaseModel):
 
 class CopilotToolResult(BaseModel):
     tool: CopilotToolName
+    tool_permission: str | None = None
     query: str | None = None
     skill_name: str | None = None
     skill_description: str | None = None
@@ -163,6 +165,8 @@ class CopilotToolResult(BaseModel):
     row_count: int = 0
     truncated: bool = False
     graphs: list[str] = Field(default_factory=list)
+    result: dict[str, Any] | None = None
+    summary: str | None = None
     error: str | None = None
 
 

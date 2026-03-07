@@ -14,4 +14,3 @@ Guidance:
 - Prefer OC-DFG style analysis when the user wants to understand the dominant path, where work branches, or where objects stall.
 - Use trace drilldown when the user asks for examples behind an edge, path, or activity.
 - Keep causal language careful. Process mining shows behavior and sequence, not proof of root cause on its own.
-

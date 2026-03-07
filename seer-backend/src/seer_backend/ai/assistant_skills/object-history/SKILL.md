@@ -14,4 +14,3 @@ Guidance:
 - Use event history when the user wants the sequence of events.
 - Use relations when the user wants neighboring entities or linked context.
 - Keep the time window explicit when the question is bounded in time.
-

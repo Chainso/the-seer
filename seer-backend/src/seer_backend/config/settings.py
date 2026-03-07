@@ -8,7 +8,9 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-_DEFAULT_ASSISTANT_SKILL_DIRS = (str(_REPO_ROOT / "assistant-skills"),)
+_DEFAULT_ASSISTANT_SKILL_DIRS = (
+    str(_REPO_ROOT / "seer-backend" / "src" / "seer_backend" / "ai" / "assistant_skills"),
+)
 
 
 class Settings(BaseSettings):

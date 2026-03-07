@@ -109,6 +109,7 @@ Expected internal service areas:
    - tool access and runtime-guardrail enforcement
    - evidence and caveat packaging
    - SSE-first assistant/investigation streaming orchestration
+   - backend-owned assistant skill catalog under `seer-backend/src/seer_backend/ai/assistant_skills/`
 5. `actions` domain:
    - ontology-backed submit validation and enqueue semantics
    - pull-based claim + lease assignment

@@ -43,7 +43,9 @@ VALID_FIXTURE = (
 )
 INVALID_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "ontology_invalid_missing_name.ttl"
 PROPHET_METAMODEL = REPO_ROOT / "prophet" / "prophet.ttl"
-ASSISTANT_SKILLS_ROOT = REPO_ROOT / "assistant-skills"
+ASSISTANT_SKILLS_ROOT = (
+    REPO_ROOT / "seer-backend" / "src" / "seer_backend" / "ai" / "assistant_skills"
+)
 
 
 class FakeModelRuntime(CopilotModelRuntime):
@@ -414,13 +416,7 @@ def test_default_assistant_skill_catalog_is_separate_from_developer_skills() -> 
     discovered = registry.discover()
 
     expected_tools = {
-        "deep-ontology": (
-            "ontology.current",
-            "ontology.concepts",
-            "ontology.concept_detail",
-            "ontology.graph",
-            "ontology.query(read_only)",
-        ),
+        "deep-ontology": (),
         "object-history": (
             "history.object_events",
             "history.relations",

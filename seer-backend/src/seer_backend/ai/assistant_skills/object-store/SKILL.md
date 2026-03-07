@@ -13,4 +13,3 @@ Guidance:
 - Use latest-object search to find matching objects by type and property filters.
 - Move into object history once a specific object or cohort has been identified.
 - Keep the answer focused on discoverability and selection, not broad causal claims.
-

@@ -12,6 +12,7 @@ from typing import Any, Literal, Protocol
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
 
+from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
 from seer_backend.ai.skills import (
     AssistantSkill,
     AssistantSkillError,
@@ -301,7 +302,7 @@ class CopilotAssistantDeltaEvent:
 @dataclass(slots=True)
 class CopilotToolStatusEvent:
     status: Literal["started", "completed", "failed"]
-    tool: Literal["sparql_read_only_query", "load_skill"]
+    tool: str
     call_id: str
     summary: str
     query_preview: str | None = None
@@ -422,11 +423,13 @@ class OntologyCopilotService:
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, Any]] | None = None,
+        assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
     ) -> CopilotChatResponse:
         async for event in self.answer_stream(
             question,
             conversation=conversation,
             completion_conversation=completion_conversation,
+            assistant_tool_adapter=assistant_tool_adapter,
         ):
             if isinstance(event, CopilotAnswerFinalEvent):
                 return event.response
@@ -437,6 +440,7 @@ class OntologyCopilotService:
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, Any]] | None = None,
+        assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
     ) -> AsyncIterator[CopilotAnswerStreamEvent]:
         current = await self._ontology_service.current()
         ontology_index_markdown = await self._build_ontology_index_markdown(
@@ -467,7 +471,10 @@ class OntologyCopilotService:
         for round_index in range(_TOOL_CALL_MAX_ROUNDS):
             model_output = await self._model_runtime.run_messages(
                 messages,
-                tools=_tool_schemas(),
+                tools=_tool_schemas(
+                    conversation_messages=messages,
+                    assistant_tool_adapter=assistant_tool_adapter,
+                ),
             )
             answer_text = model_output.answer
             requested_calls = _requested_tool_calls(model_output)
@@ -509,7 +516,13 @@ class OntologyCopilotService:
                 yield _tool_status_started_event(resolved_call)
 
             tool_results = await asyncio.gather(
-                *(self._execute_tool_call(resolved_call) for resolved_call in resolved_calls)
+                *(
+                    self._execute_tool_call(
+                        resolved_call,
+                        assistant_tool_adapter=assistant_tool_adapter,
+                    )
+                    for resolved_call in resolved_calls
+                )
             )
             total_tool_calls += len(resolved_calls)
 
@@ -626,9 +639,24 @@ class OntologyCopilotService:
         except AssistantSkillError:
             return {}
 
-    async def _execute_tool_call(self, tool_call: CopilotToolCall) -> CopilotToolResult:
+    async def _execute_tool_call(
+        self,
+        tool_call: CopilotToolCall,
+        *,
+        assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+    ) -> CopilotToolResult:
         if tool_call.tool == "load_skill":
             return self._execute_load_skill_call(tool_call)
+        if tool_call.tool != "sparql_read_only_query":
+            if assistant_tool_adapter is None:
+                return CopilotToolResult(
+                    tool=tool_call.tool,
+                    error=(
+                        "tool execution failed: assistant domain tools are unavailable "
+                        "for this request"
+                    ),
+                )
+            return await assistant_tool_adapter.execute_tool_call(tool_call)
 
         if not tool_call.query:
             return CopilotToolResult(
@@ -795,6 +823,7 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
         arguments: Any = getattr(function_payload, "arguments", None)
         if arguments is None and isinstance(function_payload, dict):
             arguments = function_payload.get("arguments")
+        parsed_arguments = _parse_tool_arguments(arguments)
         query: str | None = None
         skill_name: str | None = None
         if function_name == "sparql_read_only_query":
@@ -805,8 +834,6 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
             skill_name = _extract_tool_skill_name_from_arguments(arguments)
             if skill_name is None:
                 continue
-        else:
-            continue
 
         call_id = getattr(tool, "id", None)
         if call_id is None and isinstance(tool, dict):
@@ -823,6 +850,7 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
         parsed_calls.append(
             CopilotToolCall(
                 tool=function_name,
+                arguments=parsed_arguments,
                 query=query,
                 skill_name=skill_name,
                 call_id=call_id,
@@ -1004,8 +1032,18 @@ def _to_tool_result(
     )
 
 
-def _tool_schemas() -> list[dict[str, Any]]:
-    return [_SPARQL_READ_ONLY_TOOL_SCHEMA, _LOAD_SKILL_TOOL_SCHEMA]
+def _tool_schemas(
+    *,
+    conversation_messages: list[dict[str, Any]],
+    assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+) -> list[dict[str, Any]]:
+    schemas = [_SPARQL_READ_ONLY_TOOL_SCHEMA, _LOAD_SKILL_TOOL_SCHEMA]
+    if assistant_tool_adapter is None:
+        return schemas
+
+    enabled_permissions = _loaded_skill_tool_permissions(conversation_messages)
+    schemas.extend(assistant_tool_adapter.tool_schemas(enabled_permissions))
+    return schemas
 
 
 def _build_skill_catalog_markdown(available_skills: dict[str, AssistantSkill]) -> str:
@@ -1024,6 +1062,33 @@ def _build_skill_catalog_markdown(available_skills: dict[str, AssistantSkill]) -
         description = skill.description or "No description provided."
         lines.append(f"- {skill.name}: {description}")
     return "\n".join(lines)
+
+
+def _loaded_skill_tool_permissions(
+    conversation_messages: list[dict[str, Any]],
+) -> set[str]:
+    enabled: set[str] = set()
+    for message in conversation_messages:
+        if not isinstance(message, dict) or message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        if parsed.get("tool") != "load_skill" or parsed.get("error"):
+            continue
+        allowed_tools = parsed.get("allowed_tools")
+        if not isinstance(allowed_tools, list):
+            continue
+        for tool_name in allowed_tools:
+            if isinstance(tool_name, str) and tool_name:
+                enabled.add(tool_name)
+    return enabled
 
 
 def _infer_variables(
@@ -1285,7 +1350,7 @@ def _build_tool_result_messages(
     raw_function = dict(raw_tool_call.get("function", {}))
     raw_tool_call["id"] = tool_call.call_id
     raw_tool_call["type"] = raw_tool_call.get("type") or "function"
-    raw_function["name"] = tool_call.tool
+    raw_function["name"] = raw_function.get("name") or tool_call.tool
     raw_function["arguments"] = json.dumps(
         _tool_call_arguments(tool_call),
         ensure_ascii=True,
@@ -1308,7 +1373,9 @@ def _build_tool_result_messages(
 def _tool_call_arguments(tool_call: CopilotToolCall) -> dict[str, Any]:
     if tool_call.tool == "load_skill":
         return {"skill_name": tool_call.skill_name}
-    return {"query": tool_call.query}
+    if tool_call.tool == "sparql_read_only_query":
+        return {"query": tool_call.query}
+    return dict(tool_call.arguments)
 
 
 def _tool_status_started_event(tool_call: CopilotToolCall) -> CopilotToolStatusEvent:
@@ -1320,12 +1387,19 @@ def _tool_status_started_event(tool_call: CopilotToolCall) -> CopilotToolStatusE
             call_id=tool_call.call_id or "call_unknown",
             summary=f"Loading assistant skill {skill_name}.",
         )
+    if tool_call.tool == "sparql_read_only_query":
+        return CopilotToolStatusEvent(
+            status="started",
+            tool=tool_call.tool,
+            call_id=tool_call.call_id or "call_unknown",
+            summary="Running read-only SPARQL query.",
+            query_preview=_query_preview(tool_call.query or ""),
+        )
     return CopilotToolStatusEvent(
         status="started",
         tool=tool_call.tool,
         call_id=tool_call.call_id or "call_unknown",
-        summary="Running read-only SPARQL query.",
-        query_preview=_query_preview(tool_call.query or ""),
+        summary=f"Running assistant tool {tool_call.tool}.",
     )
 
 
@@ -1361,22 +1435,26 @@ def _tool_status_summary(tool_result: CopilotToolResult) -> str:
             else "no additional tools"
         )
         return f"Loaded assistant skill {skill_name}. Enabled {enabled}."
-    if tool_result.error:
+    if tool_result.tool == "sparql_read_only_query" and tool_result.error:
         return f"Read-only SPARQL query failed: {tool_result.error}"
-    if tool_result.query_type == "ASK":
+    if tool_result.tool == "sparql_read_only_query" and tool_result.query_type == "ASK":
         if tool_result.ask_result is None:
             return "Read-only ASK query completed without a boolean result."
         return (
             "Read-only ASK query completed with result "
             f"{str(tool_result.ask_result).lower()}."
         )
-    if tool_result.query_type == "SELECT":
+    if tool_result.tool == "sparql_read_only_query" and tool_result.query_type == "SELECT":
         truncated_suffix = " (truncated)" if tool_result.truncated else ""
         return (
             "Read-only SELECT query completed with "
             f"{tool_result.row_count} rows{truncated_suffix}."
         )
-    return "Read-only SPARQL query completed."
+    if tool_result.error:
+        return f"Assistant tool {tool_result.tool} failed: {tool_result.error}"
+    if tool_result.summary:
+        return tool_result.summary
+    return f"Assistant tool {tool_result.tool} completed."
 
 
 def _query_preview(query: str, max_len: int = 160) -> str:
@@ -1400,10 +1478,10 @@ def _summarize_tool_result(tool_result: CopilotToolResult | None) -> str:
             f"I loaded {skill_name}, but the model did not produce a final answer after "
             "skill activation."
         )
-    if tool_result.error:
+    if tool_result.tool == "sparql_read_only_query" and tool_result.error:
         return f"I ran a read-only SPARQL query, but it failed: {tool_result.error}"
 
-    if tool_result.query_type == "ASK":
+    if tool_result.tool == "sparql_read_only_query" and tool_result.query_type == "ASK":
         if tool_result.ask_result is None:
             return "I ran a read-only ASK query, but the boolean result was unavailable."
         return (
@@ -1411,11 +1489,15 @@ def _summarize_tool_result(tool_result: CopilotToolResult | None) -> str:
             f"{str(tool_result.ask_result).lower()}."
         )
 
-    if tool_result.query_type == "SELECT":
+    if tool_result.tool == "sparql_read_only_query" and tool_result.query_type == "SELECT":
         truncated_suffix = " (truncated)" if tool_result.truncated else ""
         return (
             "I ran a read-only SELECT query and found "
             f"{tool_result.row_count} rows{truncated_suffix}."
         )
 
-    return "I ran a read-only SPARQL query and returned the structured results."
+    if tool_result.error:
+        return f"I ran assistant tool {tool_result.tool}, but it failed: {tool_result.error}"
+    if tool_result.summary:
+        return tool_result.summary
+    return f"I ran assistant tool {tool_result.tool} and returned the structured results."

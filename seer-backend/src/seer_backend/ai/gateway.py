@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
 from seer_backend.ai.ontology_copilot import (
     CopilotAnswerFinalEvent,
     CopilotAssistantDeltaEvent,
@@ -34,7 +35,9 @@ from seer_backend.analytics.rca_models import (
 )
 from seer_backend.analytics.rca_service import RootCauseService, UnavailableRootCauseService
 from seer_backend.analytics.service import ProcessMiningService, UnavailableProcessMiningService
+from seer_backend.history.service import HistoryService, UnavailableHistoryService
 from seer_backend.ontology.models import CopilotChatResponse, CopilotConversationMessage
+from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
 _TOOL_CALL_ID_MAX_LENGTH = 120
 _ASSISTANT_TURN_LOGGER = logging.getLogger("seer_backend.ai.assistant_turn")
@@ -257,12 +260,20 @@ class AiGatewayService:
         self,
         *,
         ontology_copilot_service: OntologyCopilotService,
+        ontology_service: OntologyService | UnavailableOntologyService,
         process_service: ProcessMiningService | UnavailableProcessMiningService,
         root_cause_service: RootCauseService | UnavailableRootCauseService,
+        history_service: HistoryService | UnavailableHistoryService,
     ) -> None:
         self._ontology_copilot_service = ontology_copilot_service
         self._process_service = process_service
         self._root_cause_service = root_cause_service
+        self._assistant_tool_adapter = AssistantDomainToolAdapter(
+            ontology_service=ontology_service,
+            process_service=process_service,
+            root_cause_service=root_cause_service,
+            history_service=history_service,
+        )
 
     async def ontology_question(
         self,
@@ -342,6 +353,7 @@ class AiGatewayService:
                 question,
                 conversation=[],
                 completion_conversation=completion_conversation,
+                assistant_tool_adapter=self._assistant_tool_adapter,
             )
             stream_event: object
             try:
@@ -1416,30 +1428,42 @@ def _build_copilot_evidence_and_caveats(
                     )
                 )
         elif copilot.tool_result.error:
-            caveats.append(
-                "Tool execution failed; response may rely on incomplete ontology context."
-            )
-            lowered = copilot.tool_result.error.lower()
-            if "not allowed" in lowered or "restricted" in lowered:
+            if copilot.tool_result.tool == "sparql_read_only_query":
                 caveats.append(
-                    "Read-only SPARQL policy blocked a mutating or dataset-scoped query."
+                    "Tool execution failed; response may rely on incomplete ontology context."
                 )
-                evidence.append(
-                    AiEvidenceItem(
-                        label="Read-only SPARQL policy block",
-                        detail=copilot.tool_result.error,
+                lowered = copilot.tool_result.error.lower()
+                if "not allowed" in lowered or "restricted" in lowered:
+                    caveats.append(
+                        "Read-only SPARQL policy blocked a mutating or dataset-scoped query."
                     )
+                    evidence.append(
+                        AiEvidenceItem(
+                            label="Read-only SPARQL policy block",
+                            detail=copilot.tool_result.error,
+                        )
+                    )
+            else:
+                caveats.append(
+                    "Assistant domain tool execution failed; response may rely on partial evidence."
                 )
         else:
-            result_detail = (
-                f"{copilot.tool_result.query_type} query returned "
-                f"{copilot.tool_result.row_count} rows"
-            )
-            if copilot.tool_result.truncated:
-                result_detail += " (truncated)"
+            if copilot.tool_result.tool == "sparql_read_only_query":
+                result_detail = (
+                    f"{copilot.tool_result.query_type} query returned "
+                    f"{copilot.tool_result.row_count} rows"
+                )
+                if copilot.tool_result.truncated:
+                    result_detail += " (truncated)"
+                label = "Read-only SPARQL tool result"
+            else:
+                result_detail = copilot.tool_result.summary or (
+                    f"{copilot.tool_result.tool_permission or copilot.tool_result.tool} completed"
+                )
+                label = "Assistant domain tool result"
             evidence.append(
                 AiEvidenceItem(
-                    label="Read-only SPARQL tool result",
+                    label=label,
                     detail=result_detail,
                 )
             )

@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 
+from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
 from seer_backend.ai.gateway import GuidedInvestigationRequest
 from seer_backend.ai.ontology_copilot import (
     CopilotAnswerFinalEvent,
@@ -21,11 +22,16 @@ from seer_backend.ai.ontology_copilot import (
 )
 from seer_backend.ai.skills import AssistantSkillRegistry
 from seer_backend.analytics.rca_repository import InMemoryRootCauseRepository
-from seer_backend.analytics.rca_service import RootCauseService
+from seer_backend.analytics.rca_service import RootCauseService, UnavailableRootCauseService
 from seer_backend.analytics.repository import InMemoryProcessMiningRepository
-from seer_backend.analytics.service import OcpnMiningWrapper, ProcessMiningService
+from seer_backend.analytics.service import (
+    OcpnMiningWrapper,
+    ProcessMiningService,
+    UnavailableProcessMiningService,
+)
+from seer_backend.history.canonicalization import canonicalize_object_ref, xxhash64_uint64
 from seer_backend.history.repository import InMemoryHistoryRepository
-from seer_backend.history.service import HistoryService
+from seer_backend.history.service import HistoryService, UnavailableHistoryService
 from seer_backend.main import create_app
 from seer_backend.ontology.errors import OntologyNotReadyError
 from seer_backend.ontology.models import (
@@ -36,10 +42,20 @@ from seer_backend.ontology.models import (
     CopilotToolCall,
     CopilotToolResult,
     CurrentReleasePointer,
+    OntologyGraphEdge,
+    OntologyGraphNode,
+    OntologyGraphResponse,
     OntologySparqlQueryResponse,
 )
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "rca_phase4_orders.json"
+ASSISTANT_SKILLS_ROOT = (
+    Path(__file__).resolve().parents[1]
+    / "src"
+    / "seer_backend"
+    / "ai"
+    / "assistant_skills"
+)
 _ORDER_URI = "urn:seer:test:order"
 
 
@@ -80,14 +96,19 @@ def _normalize_event_payload(payload: dict[str, object]) -> dict[str, object]:
     return normalized
 
 
+def _object_ref_hash(object_ref: dict[str, object]) -> int:
+    return xxhash64_uint64(canonicalize_object_ref(object_ref))
+
+
 class StubOntologyCopilotService:
     async def answer(
         self,
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, object]] | None = None,
+        assistant_tool_adapter: object | None = None,
     ) -> CopilotChatResponse:
-        del conversation, completion_conversation
+        del conversation, completion_conversation, assistant_tool_adapter
         return CopilotChatResponse(
             mode="direct_answer",
             answer=f"Ontology context for: {question}",
@@ -113,11 +134,13 @@ class StubOntologyCopilotService:
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, object]] | None = None,
+        assistant_tool_adapter: object | None = None,
     ) -> AsyncIterator[CopilotAnswerStreamEvent]:
         response = await self.answer(
             question,
             conversation=conversation,
             completion_conversation=completion_conversation,
+            assistant_tool_adapter=assistant_tool_adapter,
         )
         yield CopilotAssistantDeltaEvent(text=response.answer)
         yield CopilotAnswerFinalEvent(response=response)
@@ -129,8 +152,9 @@ class StubOntologyCopilotWithPolicyBlock:
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, object]] | None = None,
+        assistant_tool_adapter: object | None = None,
     ) -> CopilotChatResponse:
-        del question, conversation, completion_conversation
+        del question, conversation, completion_conversation, assistant_tool_adapter
         return CopilotChatResponse(
             mode="direct_answer",
             answer="Blocked a mutating SPARQL attempt and continued with safe guidance.",
@@ -162,11 +186,13 @@ class StubOntologyCopilotWithPolicyBlock:
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, object]] | None = None,
+        assistant_tool_adapter: object | None = None,
     ) -> AsyncIterator[CopilotAnswerStreamEvent]:
         response = await self.answer(
             question,
             conversation=conversation,
             completion_conversation=completion_conversation,
+            assistant_tool_adapter=assistant_tool_adapter,
         )
         if response.tool_call is not None:
             call_id = response.tool_call.call_id or "call_1"
@@ -195,8 +221,9 @@ class StubOntologyCopilotNotReady:
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, object]] | None = None,
+        assistant_tool_adapter: object | None = None,
     ) -> CopilotChatResponse:
-        del question, conversation, completion_conversation
+        del question, conversation, completion_conversation, assistant_tool_adapter
         raise OntologyNotReadyError("Ontology release is still initializing")
 
     async def answer_stream(
@@ -204,8 +231,9 @@ class StubOntologyCopilotNotReady:
         question: str,
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, object]] | None = None,
+        assistant_tool_adapter: object | None = None,
     ) -> AsyncIterator[CopilotAnswerStreamEvent]:
-        del question, conversation, completion_conversation
+        del question, conversation, completion_conversation, assistant_tool_adapter
         raise OntologyNotReadyError("Ontology release is still initializing")
         yield CopilotAssistantDeltaEvent(text="")
 
@@ -258,6 +286,102 @@ class _LoadSkillThenAnswerRuntime(CopilotModelRuntime):
         return CopilotStructuredOutput(
             mode="direct_answer",
             answer="Loaded process mining guidance and can mine OC-DFGs next.",
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _LoadSkillThenUseToolRuntime(CopilotModelRuntime):
+    def __init__(
+        self,
+        *,
+        skill_name: str,
+        function_name: str,
+        tool_arguments: dict[str, object],
+        final_answer: str,
+    ) -> None:
+        self.skill_name = skill_name
+        self.function_name = function_name
+        self.tool_arguments = tool_arguments
+        self.final_answer = final_answer
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        self.calls += 1
+        assert tools is not None
+        tool_names = {tool["function"]["name"] for tool in tools}
+
+        if self.calls == 1:
+            assert self.function_name not in tool_names
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer=f"Loading {self.skill_name} skill.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="load_skill",
+                    skill_name=self.skill_name,
+                    call_id="call_skill_1",
+                ),
+            )
+
+        if self.calls == 2:
+            assert self.function_name in tool_names
+            assert any(message.get("role") == "tool" for message in messages)
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer=f"Running {self.function_name}.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool=self.function_name,
+                    arguments=self.tool_arguments,
+                    call_id="call_domain_1",
+                ),
+            )
+
+        assert self.calls == 3
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer=self.final_answer,
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _UsePersistedProcessTraceRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        self.calls += 1
+        assert tools is not None
+        tool_names = {tool["function"]["name"] for tool in tools}
+
+        if self.calls == 1:
+            assert "process_trace_drilldown" in tool_names
+            handle = _extract_process_trace_handle_from_messages(messages)
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Fetching persisted process traces.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="process_trace_drilldown",
+                    arguments={"handle": handle, "limit": 2},
+                    call_id="call_domain_2",
+                ),
+            )
+
+        assert self.calls == 2
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="Fetched example traces from the persisted process mining result.",
             evidence=[],
             tool_call=None,
         )
@@ -337,6 +461,61 @@ def build_client_with_copilot(copilot_service: object) -> TestClient:
 
     inject_ai_gateway_service(app)
     return TestClient(app)
+
+
+def build_skill_runtime_client(runtime: CopilotModelRuntime) -> TestClient:
+    copilot = OntologyCopilotService(
+        _SkillAwareOntologyService(),
+        model_runtime=runtime,
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+    return build_client_with_copilot(copilot)
+
+
+def _fixture_order_object_ref() -> dict[str, object]:
+    payloads = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    for payload in payloads:
+        normalized = _normalize_event_payload(payload)
+        updated_objects = normalized.get("updated_objects")
+        if not isinstance(updated_objects, list):
+            continue
+        for item in updated_objects:
+            if not isinstance(item, dict):
+                continue
+            if item.get("object_type") != _ORDER_URI:
+                continue
+            object_ref = item.get("object_ref")
+            if isinstance(object_ref, dict):
+                return object_ref
+    raise AssertionError("fixture dataset does not contain an Order object_ref")
+
+
+def _extract_process_trace_handle_from_messages(
+    messages: list[dict[str, object]],
+) -> str:
+    for message in reversed(messages):
+        if message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str):
+            continue
+        parsed = json.loads(content)
+        if parsed.get("tool_permission") != "process.mine":
+            continue
+        result = parsed.get("result")
+        if not isinstance(result, dict):
+            continue
+        run = result.get("run")
+        if not isinstance(run, dict):
+            continue
+        edges = run.get("edges")
+        if isinstance(edges, list) and edges:
+            first_edge = edges[0]
+            if isinstance(first_edge, dict):
+                handle = first_edge.get("trace_handle")
+                if isinstance(handle, str) and handle:
+                    return handle
+    raise AssertionError("process mining tool result did not persist a trace handle")
 
 
 def seed_fixture_dataset(client: TestClient) -> None:
@@ -746,6 +925,285 @@ def test_ai_assistant_chat_load_skill_updates_permissions_and_logs_tool_status(
     assert tool_records[0].tool == "load_skill"
 
 
+def test_ai_assistant_chat_process_skill_unlocks_ocdfg_tool_and_persists_result() -> None:
+    client = build_skill_runtime_client(
+        _LoadSkillThenUseToolRuntime(
+            skill_name="process-mining",
+            function_name="process_mine",
+            tool_arguments={
+                "anchor_object_type": _ORDER_URI,
+                "start_at": "2026-02-22T07:00:00Z",
+                "end_at": "2026-02-22T11:00:00Z",
+            },
+            final_answer="I loaded process mining and ran OC-DFG discovery for orders.",
+        )
+    )
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "Show me the order flow as an OC-DFG."},
+            ],
+            "thread_id": "thread-process-skill-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    events = _parse_sse_events(response.text)
+    tool_status_events = [payload for event, payload in events if event == "tool_status"]
+    assert [payload["tool"] for payload in tool_status_events] == [
+        "load_skill",
+        "load_skill",
+        "process_mine",
+        "process_mine",
+    ]
+
+    final_event = next(payload for event, payload in events if event == "final")
+    assert "process.mine" in final_event["tool_permissions"]
+    tool_messages = [
+        json.loads(message["content"])
+        for message in final_event["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    assert tool_messages[0]["tool"] == "load_skill"
+    assert tool_messages[1]["tool"] == "process_mine"
+    assert tool_messages[1]["tool_permission"] == "process.mine"
+    assert tool_messages[1]["result"]["analysis_kind"] == "ocdfg"
+    assert tool_messages[1]["result"]["run"]["edges"]
+
+
+def test_ai_assistant_chat_root_cause_skill_unlocks_run_tool_and_persists_result() -> None:
+    client = build_skill_runtime_client(
+        _LoadSkillThenUseToolRuntime(
+            skill_name="root-cause",
+            function_name="root_cause_run",
+            tool_arguments={
+                "anchor_object_type": _ORDER_URI,
+                "start_at": "2026-02-22T07:00:00Z",
+                "end_at": "2026-02-22T11:00:00Z",
+                "outcome": {"event_type": _to_uri_identifier("order.delayed")},
+            },
+            final_answer="I loaded root cause analysis and ranked the delay drivers.",
+        )
+    )
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "Why are orders delayed in this window?"},
+            ],
+            "thread_id": "thread-root-cause-skill-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    events = _parse_sse_events(response.text)
+    tool_status_events = [payload for event, payload in events if event == "tool_status"]
+    assert [payload["tool"] for payload in tool_status_events] == [
+        "load_skill",
+        "load_skill",
+        "root_cause_run",
+        "root_cause_run",
+    ]
+
+    final_event = next(payload for event, payload in events if event == "final")
+    assert "root_cause.run" in final_event["tool_permissions"]
+    tool_messages = [
+        json.loads(message["content"])
+        for message in final_event["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    assert tool_messages[1]["tool"] == "root_cause_run"
+    assert tool_messages[1]["tool_permission"] == "root_cause.run"
+    assert tool_messages[1]["result"]["run"]["insights"]
+
+
+def test_ai_assistant_chat_object_store_skill_unlocks_search_tool_and_persists_result() -> None:
+    client = build_skill_runtime_client(
+        _LoadSkillThenUseToolRuntime(
+            skill_name="object-store",
+            function_name="history_latest_objects",
+            tool_arguments={
+                "object_type": _ORDER_URI,
+                "size": 5,
+            },
+            final_answer="I loaded the object store skill and searched the latest order snapshots.",
+        )
+    )
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "Find the latest order records for me."},
+            ],
+            "thread_id": "thread-object-store-skill-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    final_event = next(
+        payload for event, payload in _parse_sse_events(response.text) if event == "final"
+    )
+    assert "history.latest_objects" in final_event["tool_permissions"]
+    tool_messages = [
+        json.loads(message["content"])
+        for message in final_event["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    assert tool_messages[1]["tool"] == "history_latest_objects"
+    assert tool_messages[1]["tool_permission"] == "history.latest_objects"
+    assert tool_messages[1]["result"]["latest_objects"]["items"]
+
+
+def test_ai_assistant_chat_object_history_skill_unlocks_timeline_tool_and_persists_result() -> None:
+    client = build_skill_runtime_client(
+        _LoadSkillThenUseToolRuntime(
+            skill_name="object-history",
+            function_name="history_object_timeline",
+            tool_arguments={
+                "object_type": _ORDER_URI,
+                "object_ref_hash": _object_ref_hash({"tenant": "acme", "order_id": "O-100"}),
+                "limit": 10,
+            },
+            final_answer="I loaded object history and inspected the order timeline.",
+        )
+    )
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {
+                    "role": "user",
+                    "content": "Show me the history of order O-100.",
+                },
+            ],
+            "thread_id": "thread-object-history-skill-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    final_event = next(
+        payload for event, payload in _parse_sse_events(response.text) if event == "final"
+    )
+    assert "history.object_timeline" in final_event["tool_permissions"]
+    tool_messages = [
+        json.loads(message["content"])
+        for message in final_event["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    assert tool_messages[1]["tool"] == "history_object_timeline"
+    assert tool_messages[1]["tool_permission"] == "history.object_timeline"
+    assert len(tool_messages[1]["result"]["timeline"]["items"]) >= 2
+
+
+def test_ai_assistant_chat_reuses_skill_permissions_from_persisted_completion_messages() -> None:
+    first_client = build_skill_runtime_client(
+        _LoadSkillThenUseToolRuntime(
+            skill_name="process-mining",
+            function_name="process_mine",
+            tool_arguments={
+                "anchor_object_type": _ORDER_URI,
+                "start_at": "2026-02-22T07:00:00Z",
+                "end_at": "2026-02-22T11:00:00Z",
+            },
+            final_answer="I loaded process mining and ran OC-DFG discovery for orders.",
+        )
+    )
+    seed_fixture_dataset(first_client)
+    first_response = first_client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "Show me the order flow as an OC-DFG."},
+            ],
+            "thread_id": "thread-process-skill-2",
+        },
+    )
+    assert first_response.status_code == 200, first_response.text
+    first_events = _parse_sse_events(first_response.text)
+    first_final = next(payload for event, payload in first_events if event == "final")
+
+    second_client = build_skill_runtime_client(_UsePersistedProcessTraceRuntime())
+    seed_fixture_dataset(second_client)
+    second_response = second_client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                *first_final["completion_messages"],
+                {"role": "user", "content": "Show me example traces behind that graph."},
+            ],
+            "thread_id": "thread-process-skill-2",
+        },
+    )
+
+    assert second_response.status_code == 200, second_response.text
+    second_events = _parse_sse_events(second_response.text)
+    tool_status_events = [payload for event, payload in second_events if event == "tool_status"]
+    assert [payload["tool"] for payload in tool_status_events] == [
+        "process_trace_drilldown",
+        "process_trace_drilldown",
+    ]
+    second_final = next(payload for event, payload in second_events if event == "final")
+    assert "process.mine" in second_final["tool_permissions"]
+    assert "process.traces" in second_final["tool_permissions"]
+    tool_messages = [
+        json.loads(message["content"])
+        for message in second_final["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    assert tool_messages[-1]["tool_permission"] == "process.traces"
+    assert tool_messages[-1]["result"]["drilldown"]["traces"]
+
+
+def test_assistant_domain_tool_adapter_executes_deep_ontology_graph_tool() -> None:
+    class _StubOntologyGraphService:
+        async def graph(self) -> OntologyGraphResponse:
+            return OntologyGraphResponse(
+                release_id="phase5-test-release",
+                graph_iri="urn:seer:test:graph",
+                nodes=[
+                    OntologyGraphNode(
+                        iri="urn:seer:test:Order",
+                        label="Order",
+                        category="ObjectModel",
+                    )
+                ],
+                edges=[
+                    OntologyGraphEdge(
+                        from_iri="urn:seer:test:Order",
+                        to_iri="urn:seer:test:DelayedOrder",
+                        predicate="urn:seer:test:relatedTo",
+                    )
+                ],
+            )
+
+    adapter = AssistantDomainToolAdapter(
+        ontology_service=_StubOntologyGraphService(),
+        process_service=UnavailableProcessMiningService("unused"),
+        root_cause_service=UnavailableRootCauseService("unused"),
+        history_service=UnavailableHistoryService("unused"),
+    )
+
+    result = asyncio.run(
+        adapter.execute_tool_call(
+            CopilotToolCall(tool="ontology_graph", arguments={})
+        )
+    )
+
+    assert result.error is None
+    assert result.tool_permission == "ontology.graph"
+    assert result.result is not None
+    assert result.result["graph"]["nodes"][0]["label"] == "Order"
+
+
 def test_ai_assistant_chat_logs_failure(caplog) -> None:
     client = build_client_with_copilot(StubOntologyCopilotNotReady())
 
@@ -834,8 +1292,9 @@ def test_ai_assistant_chat_sanitizes_tool_call_ids_but_keeps_tool_history() -> N
             question: str,
             conversation: list[CopilotConversationMessage] | None = None,
             completion_conversation: list[dict[str, object]] | None = None,
+            assistant_tool_adapter: object | None = None,
         ) -> CopilotChatResponse:
-            del question, conversation
+            del question, conversation, assistant_tool_adapter
             self.captured_completion_conversation = completion_conversation
             return CopilotChatResponse(
                 mode="direct_answer",
@@ -854,11 +1313,13 @@ def test_ai_assistant_chat_sanitizes_tool_call_ids_but_keeps_tool_history() -> N
             question: str,
             conversation: list[CopilotConversationMessage] | None = None,
             completion_conversation: list[dict[str, object]] | None = None,
+            assistant_tool_adapter: object | None = None,
         ) -> AsyncIterator[CopilotAnswerStreamEvent]:
             response = await self.answer(
                 question,
                 conversation=conversation,
                 completion_conversation=completion_conversation,
+                assistant_tool_adapter=assistant_tool_adapter,
             )
             yield CopilotAssistantDeltaEvent(text=response.answer)
             yield CopilotAnswerFinalEvent(response=response)
