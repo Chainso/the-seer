@@ -1,7 +1,7 @@
 # AI Investigation Workbench
 
 **Status:** draft  
-**Owner plan:** `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md`  
+**Owner plan:** `docs/exec-plans/active/ai-investigation-workbench-execution.md`  
 **Last updated:** 2026-03-07
 
 ---
@@ -72,6 +72,7 @@ The workbench may use:
 2. User asks a question in business language.
 3. Seer resolves the question against ontology concepts, recent context, and available evidence sources.
 4. If needed, Seer asks a small number of clarifying questions.
+   Clarifying turns should collect missing anchor-object and time-window scope without breaking the active investigation thread.
 5. Seer begins investigating and shows what it is checking in plain language.
 6. Seer may:
    - query history,
@@ -144,6 +145,10 @@ The workbench must be able to hand off into:
 5. action status,
 6. and managed-agent operations.
 
+Those handoffs should carry the resolved investigation scope when Seer has it.
+
+If Seer cannot safely infer a specific history object or there is no dedicated live action-status page yet, the handoff must still land on a real expert surface and say what the user needs to verify next.
+
 Those handoffs are for verification and deeper analysis, not because the default experience failed.
 
 ## AI Behavior Expectations
@@ -164,6 +169,7 @@ The investigation AI should:
 4. The surface exposes a clear handoff into expert drill-down modules when deeper inspection is needed.
 5. Follow-up questions preserve investigation context rather than restarting from scratch.
 6. Recommended actions and managed-agent suggestions are clearly distinguished from established facts.
+7. Clarifying turns collect missing scope with lightweight controls and allow the user to rerun the investigation in the same thread.
 
 ## Out Of Scope For This Spec
 

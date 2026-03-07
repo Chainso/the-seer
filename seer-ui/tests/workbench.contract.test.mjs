@@ -37,6 +37,9 @@ test("assistant workspace renders semantic workbench blocks", () => {
   assert.match(workspace, /WorkbenchTextPart/);
   assert.match(workspace, /SemanticBlockLabel/);
   assert.match(workspace, /Open surface/);
+  assert.match(workspace, /Suggestion, not a finding/);
+  assert.match(workspace, /Clarify scope/);
+  assert.match(workspace, /Run scoped investigation/);
   assert.match(workspace, /AI Investigation Workbench/);
   assert.match(workspace, /Ask an operational question in business language/);
   assert.match(workspace, /Investigating/);
@@ -46,4 +49,11 @@ test("shared assistant runtime scopes threads by experience", () => {
   const runtime = read("app/components/assistant/use-shared-assistant-runtime.ts");
   assert.match(runtime, /thread\.experience === experience/);
   assert.match(runtime, /state\.createNewThread\(undefined, experience\)/);
+});
+
+test("shared assistant state persists workbench scope between turns", () => {
+  const state = read("app/components/assistant/shared-assistant-state.tsx");
+  assert.match(state, /workbenchContext/);
+  assert.match(state, /setThreadWorkbenchContext/);
+  assert.match(state, /mergeAssistantContexts/);
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   AssistantRuntimeProvider,
   AuiIf,
@@ -11,17 +11,20 @@ import {
   useMessage,
 } from '@assistant-ui/react';
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown';
-import { ArrowUpRight, LoaderCircle, Plus, SendHorizontal, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, LoaderCircle, Plus, SearchCheck, SendHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 
 import { parseWorkbenchSemanticBlock } from '@/app/lib/workbench-semantic-markdown';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import {
   type AssistantExperience,
   formatModuleName,
+  type StoredThread,
   type StoredWorkbenchMessage,
 } from '@/app/components/assistant/shared-assistant-state';
 import { useSharedAssistantRuntime } from '@/app/components/assistant/use-shared-assistant-runtime';
+import { useOntologyDisplay } from '@/app/lib/ontology-display';
 
 const QUICK_PROMPTS: Record<AssistantExperience, string[]> = {
   assistant: [
@@ -35,6 +38,50 @@ const QUICK_PROMPTS: Record<AssistantExperience, string[]> = {
     'Summarize the strongest evidence and the biggest caveats.',
   ],
 };
+
+const WORKBENCH_WINDOW_PRESETS = [
+  { key: '24h', label: 'Last 24h', hours: 24 },
+  { key: '7d', label: 'Last 7d', hours: 24 * 7 },
+  { key: '30d', label: 'Last 30d', hours: 24 * 30 },
+] as const;
+
+function buildWindowPreset(hours: number) {
+  const end = new Date();
+  const start = new Date(end.getTime() - hours * 60 * 60 * 1000);
+  return {
+    start_at: start.toISOString(),
+    end_at: end.toISOString(),
+  };
+}
+
+function getLatestUserQuestion(thread: StoredThread | null): string {
+  if (!thread) return '';
+  const latestUserMessage = [...thread.messages]
+    .reverse()
+    .find((message) => message.role === 'user');
+  return latestUserMessage?.text.trim() || '';
+}
+
+function formatScopedWindow(startAt?: string | null, endAt?: string | null): string {
+  if (!startAt || !endAt) return '';
+  const start = new Date(startAt);
+  const end = new Date(endAt);
+  if (Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf())) {
+    return '';
+  }
+  return `${start.toLocaleString()} to ${end.toLocaleString()}`;
+}
+
+function matchesPreset(startAt: string | undefined, endAt: string | undefined, hours: number): boolean {
+  if (!startAt || !endAt) return false;
+  const start = Date.parse(startAt);
+  const end = Date.parse(endAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+
+  const durationMs = hours * 60 * 60 * 1000;
+  const driftMs = Math.abs(Date.now() - end);
+  return Math.abs((end - start) - durationMs) < 120_000 && driftMs < 120_000;
+}
 
 function QuickPrompts({
   moduleName,
@@ -103,30 +150,55 @@ function WorkbenchTextPart({ text }: { text: string }) {
 
   const label =
     block.kind === 'next-action'
-      ? 'Next Action'
+      ? 'Recommendation'
       : block.kind === 'follow-up'
         ? 'Follow-up'
         : block.kind === 'linked-surface'
-          ? 'Linked Surface'
+          ? 'Expert Handoff'
           : `${block.kind.charAt(0).toUpperCase()}${block.kind.slice(1)}`;
+  const helperCopy =
+    block.kind === 'next-action'
+      ? 'Suggestion, not a finding'
+      : block.kind === 'caveat'
+        ? 'Read before acting'
+        : block.kind === 'linked-surface'
+          ? 'Use the expert surface to verify or drill deeper'
+          : null;
 
   return (
     <div className={`rounded-2xl border px-3 py-3 ${toneClass}`}>
       <SemanticBlockLabel label={label} />
-      <MarkdownTextPrimitive
-        className="space-y-2 text-[13px] [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
-        preprocess={() => block.body}
-      />
-      {block.kind === 'linked-surface' && block.attributes.href && (
-        <div className="mt-3">
-          <a
-            href={block.attributes.href}
-            className="inline-flex items-center gap-1 text-sm font-medium text-primary underline"
-          >
-            Open surface
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </a>
+      {helperCopy ? (
+        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+          {helperCopy}
+        </p>
+      ) : null}
+      {block.kind === 'linked-surface' ? (
+        <div className="space-y-3">
+          {block.attributes.label ? (
+            <p className="text-sm font-semibold text-foreground">{block.attributes.label}</p>
+          ) : null}
+          <MarkdownTextPrimitive
+            className="space-y-2 text-[13px] [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+            preprocess={() => block.body}
+          />
+          {block.attributes.href ? (
+            <div>
+              <a
+                href={block.attributes.href}
+                className="inline-flex items-center gap-1 text-sm font-medium text-primary underline"
+              >
+                Open surface
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </a>
+            </div>
+          ) : null}
         </div>
+      ) : (
+        <MarkdownTextPrimitive
+          className="space-y-2 text-[13px] [&_a]:text-primary [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5"
+          preprocess={() => block.body}
+        />
       )}
     </div>
   );
@@ -167,8 +239,14 @@ function AssistantMessageBubble() {
       >
         {workbench && (
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
-              {workbench.turnKind === 'clarifying_question' ? 'Clarifying Turn' : 'Investigation'}
+            <span
+              className={`rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${
+                workbench.turnKind === 'clarifying_question'
+                  ? 'border border-amber-500/25 bg-amber-500/10 text-amber-700'
+                  : 'border border-primary/20 bg-primary/10 text-primary'
+              }`}
+            >
+              {workbench.turnKind === 'clarifying_question' ? 'Clarify Scope' : 'Investigation'}
             </span>
             {workbench.whyItMatters && (
               <p className="text-xs text-muted-foreground">{workbench.whyItMatters}</p>
@@ -186,6 +264,129 @@ function AssistantMessageBubble() {
         />
       </div>
     </MessagePrimitive.Root>
+  );
+}
+
+function WorkbenchClarificationPanel({
+  thread,
+  disabled,
+  onSetContext,
+  onRun,
+}: {
+  thread: StoredThread;
+  disabled: boolean;
+  onSetContext: (context: { anchor_object_type?: string; start_at?: string; end_at?: string }) => void;
+  onRun: (question: string) => void;
+}) {
+  const ontologyDisplay = useOntologyDisplay();
+  const scope = thread.workbenchContext || {};
+  const latestUserQuestion = getLatestUserQuestion(thread);
+  const objectOptions = useMemo(
+    () =>
+      [...ontologyDisplay.catalog.objectModels]
+        .map((model) => ({
+          value: model.uri,
+          label: ontologyDisplay.displayObjectType(model.uri),
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [ontologyDisplay]
+  );
+  const selectedWindow = formatScopedWindow(scope.start_at, scope.end_at);
+  const canRun =
+    Boolean(latestUserQuestion) &&
+    Boolean(scope.anchor_object_type) &&
+    Boolean(scope.start_at) &&
+    Boolean(scope.end_at);
+
+  return (
+    <div className="mt-4 rounded-2xl border border-amber-500/25 bg-amber-500/8 p-4 shadow-[0_18px_34px_-24px_rgba(217,119,6,0.45)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="max-w-2xl">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
+            Clarify scope
+          </p>
+          <p className="mt-2 text-sm text-foreground">
+            Pick an object and time window. The rerun keeps this thread and reuses your original
+            question.
+          </p>
+        </div>
+        <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-background/80 px-3 py-1 text-xs text-muted-foreground">
+          <SearchCheck className="h-3.5 w-3.5 text-amber-700" />
+          No analysis has run yet
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Business object
+            </p>
+            <Select
+              value={scope.anchor_object_type || ''}
+              onValueChange={(value) => onSetContext({ anchor_object_type: value })}
+              disabled={disabled || objectOptions.length === 0}
+            >
+              <SelectTrigger className="w-full bg-background">
+                <SelectValue placeholder="Choose an anchor object" />
+              </SelectTrigger>
+              <SelectContent>
+                {objectOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Investigation window
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {WORKBENCH_WINDOW_PRESETS.map((preset) => {
+                const selected = matchesPreset(scope.start_at, scope.end_at, preset.hours);
+                return (
+                  <button
+                    key={preset.key}
+                    type="button"
+                    onClick={() => onSetContext(buildWindowPreset(preset.hours))}
+                    disabled={disabled}
+                    className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                      selected
+                        ? 'border-primary/35 bg-primary/12 text-foreground'
+                        : 'border-border/70 bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedWindow ? (
+              <p className="text-xs text-muted-foreground">{selectedWindow}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">Choose a recent time window to continue.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex min-w-52 flex-col justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 p-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Ready when scoped
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              You can type a follow-up after selecting scope, or rerun the original question now.
+            </p>
+          </div>
+          <Button type="button" onClick={() => onRun(latestUserQuestion)} disabled={!canRun || disabled}>
+            Run scoped investigation
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -218,7 +419,15 @@ export function AssistantWorkspace({
   onRequestClose,
   seedPrompt,
 }: AssistantWorkspaceProps) {
-  const { runtime, threads, activeThreadId, hydrated } = useSharedAssistantRuntime({
+  const {
+    runtime,
+    threads,
+    activeThreadId,
+    hydrated,
+    sendMessage,
+    isThreadRunning,
+    setThreadWorkbenchContext,
+  } = useSharedAssistantRuntime({
     context: {
       route,
       module: experience === 'workbench' ? 'workbench' : moduleName,
@@ -267,11 +476,33 @@ export function AssistantWorkspace({
     ? 'Ask an operational question in business language...'
     : 'Ask the assistant...';
   const activeThread = threads.find((thread) => thread.id === activeThreadId) || null;
+  const threadRunning = activeThread ? isThreadRunning(activeThread.id) : false;
   const pendingStatus = activeThread?.pendingStatus || null;
+  const latestWorkbenchTurn = activeThread
+    ? [...activeThread.messages]
+        .reverse()
+        .find((message) => message.role === 'assistant' && message.workbench)
+        ?.workbench ?? null
+    : null;
+  const showClarificationPanel =
+    isWorkbenchPage &&
+    !!activeThread &&
+    latestWorkbenchTurn?.turnKind === 'clarifying_question' &&
+    !pendingStatus;
   const emptyStateTitle = isWorkbenchPage ? 'AI investigation workbench' : 'Investigation-ready assistant';
   const emptyStateCopy = isWorkbenchPage
     ? 'Start from the question. Seer will investigate, surface evidence, and make uncertainty visible.'
     : 'Grounded responses with evidence and caveats.';
+  const baseWorkbenchContext =
+    experience === 'workbench'
+      ? {
+          route,
+          module: 'workbench',
+        }
+      : {
+          route,
+          module: moduleName,
+        };
 
   const workspaceContent = (
     <>
@@ -422,6 +653,18 @@ export function AssistantWorkspace({
                     AssistantMessage: AssistantMessageBubble,
                   }}
                 />
+                {showClarificationPanel && activeThread ? (
+                  <WorkbenchClarificationPanel
+                    thread={activeThread}
+                    disabled={threadRunning}
+                    onSetContext={(contextUpdate) => {
+                      setThreadWorkbenchContext(activeThread.id, contextUpdate);
+                    }}
+                    onRun={(question) => {
+                      void sendMessage(question, baseWorkbenchContext, 'workbench');
+                    }}
+                  />
+                ) : null}
                 <AuiIf condition={({ thread }) => thread.isRunning}>
                   <LoadingBubble />
                 </AuiIf>

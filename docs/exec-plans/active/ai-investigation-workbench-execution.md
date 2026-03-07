@@ -543,6 +543,7 @@ Milestone validation:
 9. 2026-03-07: Backend semantic markdown stays narrative-first; typed linked-surface metadata remains in the response contract alongside rendered `:::linked-surface` blocks.
 10. 2026-03-07: Phase 3 routes the dedicated `/assistant` page through workbench stream mode while intentionally deferring the full copy/layout rewrite to Phase 4.
 11. 2026-03-07: Phase 4 keeps the shared assistant surface component but allows the dedicated `/assistant` page variant to diverge aggressively in copy, layout, and investigation-status treatment.
+12. 2026-03-07: Phase 5 deep links should prefer real scoped expert surfaces; where Seer cannot safely infer a specific live action-status target, the handoff should land on ontology action capabilities and explicitly say that live status still requires manual verification.
 
 ## Progress Log
 
@@ -578,6 +579,13 @@ Milestone validation:
    - widened workbench answer cards so semantic markdown sections read like investigation artifacts rather than chat bubbles
    - preserved `?q=` seed behavior and validated the live clarifying-turn flow against `http://127.0.0.1:3000/assistant?q=Investigate%20order%20delay%20risk`
    - validation passed: `cd seer-ui && npm run lint`, `cd seer-ui && npm run build`, and `cd seer-ui && npm run test:contracts` with only the pre-existing `tests/insights.contract.test.mjs` failure remaining
+10. 2026-03-07: Completed Phase 5 expert handoffs + clarifying-question UX:
+   - replaced placeholder workbench `:::linked-surface` targets with scoped ontology, history, process-mining, RCA, and ontology-actions deep links
+   - used sampled RCA anchor keys for precise history links when available and explicit non-dead-end history/action fallback copy when not
+   - persisted workbench scope in thread state so clarification choices carry into reruns and later follow-up turns
+   - added a lightweight clarification strip on `/assistant` for anchor-object selection, recent time-window presets, and scoped reruns
+   - strengthened recommendation/caveat treatment so suggestions read distinctly from findings and caveats stay prominent before acting
+   - validation passed: `seer-backend/.venv/bin/pytest seer-backend/tests/test_ai_phase5.py -q`, `cd seer-ui && npm run build`, `cd seer-ui && npm run test:contracts` with only the pre-existing `tests/insights.contract.test.mjs` failure remaining, plus browser QA against `http://127.0.0.1:3000/assistant?q=Investigate%20order%20delay%20risk` using a mocked scoped rerun because the local backend returned an invalid OpenAI API key on real scoped investigation requests
 
 ## Progress Tracking
 
@@ -586,14 +594,14 @@ Milestone validation:
 - [x] Phase 2 complete
 - [x] Phase 3 complete
 - [x] Phase 4 complete
-- [ ] Phase 5 complete
+- [x] Phase 5 complete
 - [ ] Phase 6 complete
 
 Current execution state:
 
 1. Plan opened and in progress.
-2. Baseline, backend contract, backend semantic-markdown, frontend renderer foundation, and dedicated `/assistant` workbench surface phases complete.
-3. Next controller action: execute Phase 5 expert handoffs + clarifying-question UX.
+2. Baseline, backend contract, backend semantic-markdown, frontend renderer foundation, dedicated `/assistant` workbench surface, and expert handoff/clarification phases complete.
+3. Next controller action: execute Phase 6 hardening, docs, and completion transition.
 
 ## Controller Handoff Packet: Phase 1
 

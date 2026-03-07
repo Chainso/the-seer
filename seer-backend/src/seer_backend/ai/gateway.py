@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime
 from time import perf_counter
 from typing import Any, Literal
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -984,7 +985,7 @@ def _build_workbench_clarification_response(
     answer_markdown = _join_markdown_sections(
         [
             payload.question.strip(),
-            "I can investigate this, but I need a bit more scope first.",
+            "I can investigate this once you lock the scope.",
             _render_semantic_block(
                 "follow-up",
                 _bullet_lines(next_actions),
@@ -993,8 +994,8 @@ def _build_workbench_clarification_response(
                 "caveat",
                 [
                     (
-                        "Running the investigation without anchor or time scope "
-                        "would likely produce misleading results."
+                        "I have not started analysis yet because missing scope would likely "
+                        "produce misleading results."
                     )
                 ],
             ),
@@ -1015,8 +1016,8 @@ def _build_workbench_clarification_response(
         turn_kind="clarifying_question",
         answer_markdown=answer_markdown,
         why_it_matters=(
-            "Running the investigation without anchor or time scope would likely produce "
-            "misleading results."
+            "The workbench needs an anchor object and a time window before it can produce a "
+            "trustworthy investigation."
         ),
         follow_up_questions=next_actions,
         clarifying_questions=clarifying_questions,
@@ -1093,36 +1094,96 @@ def _build_workbench_investigation_response(
 def _build_workbench_linked_surfaces(
     guided_response: GuidedInvestigationResponse,
 ) -> list[AiWorkbenchLinkedSurface]:
+    anchor_object_type = guided_response.anchor_object_type
+    ontology_uri = _first_non_empty_uri(
+        [item.uri for item in guided_response.ontology.evidence],
+        fallback=anchor_object_type,
+    )
+    start_at = _to_query_datetime(guided_response.start_at)
+    end_at = _to_query_datetime(guided_response.end_at)
+    history_target = _extract_history_target(guided_response)
+    rca_outcome = guided_response.root_cause_run.outcome.event_type
+
     return [
         AiWorkbenchLinkedSurface(
             kind="ontology",
             label="Open ontology exploration",
-            href="/ontology",
-            reason="Verify the ontology concepts involved in this investigation.",
+            href=_build_query_href(
+                "/ontology/overview",
+                {"conceptUri": ontology_uri},
+            ),
+            reason="Verify the ontology concept that anchored this investigation.",
         ),
         AiWorkbenchLinkedSurface(
             kind="history",
-            label="Open history inspection",
-            href="/inspector/history",
-            reason="Inspect object timelines and event history for the anchor object.",
+            label=(
+                "Inspect sample object history"
+                if history_target is not None
+                else "Open history inspection"
+            ),
+            href=(
+                _build_query_href(
+                    "/inspector/history/object",
+                    {
+                        "object_type": history_target["object_type"],
+                        "object_ref_canonical": history_target["object_ref_canonical"],
+                        "object_ref_hash": history_target["object_ref_hash"],
+                    },
+                )
+                if history_target is not None
+                else "/inspector/history"
+            ),
+            reason=(
+                "Open the sampled anchor object's timeline and verify the sequence of events."
+                if history_target is not None
+                else (
+                    "No single anchor object was reliable enough to preselect, so start in "
+                    "History and choose the object instance you want to verify."
+                )
+            ),
         ),
         AiWorkbenchLinkedSurface(
             kind="process",
             label="Open process analysis",
-            href="/inspector/analytics",
-            reason="Review process structure and dominant paths for this time window.",
+            href=_build_query_href(
+                "/inspector/insights",
+                {
+                    "tab": "process-mining",
+                    "pm_model": anchor_object_type,
+                    "pm_from": start_at,
+                    "pm_to": end_at,
+                    "pm_run": "1",
+                },
+            ),
+            reason="Review process structure and dominant paths for this investigation window.",
         ),
         AiWorkbenchLinkedSurface(
             kind="root_cause",
             label="Open root-cause analysis",
-            href="/inspector/insights",
-            reason="Inspect the ranked RCA findings and evidence traces.",
+            href=_build_query_href(
+                "/inspector/insights",
+                {
+                    "tab": "process-insights",
+                    "rca_anchor": anchor_object_type,
+                    "rca_from": start_at,
+                    "rca_to": end_at,
+                    "rca_outcome": rca_outcome,
+                    "rca_run": "1",
+                },
+            ),
+            reason="Inspect the ranked RCA findings and their supporting evidence traces.",
         ),
         AiWorkbenchLinkedSurface(
             kind="action_status",
-            label="Open action status",
-            href="/ontology?action_status=1",
-            reason="Check related action capabilities and current action state where available.",
+            label="Open action capabilities",
+            href=_build_query_href(
+                "/ontology/actions",
+                {"conceptUri": ontology_uri},
+            ),
+            reason=(
+                "There is no workbench-level live action status deep link yet, so hand off to "
+                "the ontology actions tab to inspect related actions and workflows."
+            ),
         ),
     ]
 
@@ -1151,12 +1212,12 @@ def _build_workbench_answer_markdown(
         _render_semantic_block(
             "linked-surface",
             [
-                f"**{surface.label}**",
                 surface.reason,
             ],
             attributes={
                 "kind": surface.kind,
                 "href": surface.href,
+                "label": surface.label,
             },
         )
         for surface in linked_surfaces
@@ -1166,15 +1227,15 @@ def _build_workbench_answer_markdown(
         [
             *investigation_sections,
             _render_semantic_block(
+                "caveat",
+                caveats,
+            ),
+            _render_semantic_block(
                 "evidence",
                 [
                     f"**{item.label}:** {item.detail}"
                     for item in evidence
                 ],
-            ),
-            _render_semantic_block(
-                "caveat",
-                caveats,
             ),
             "Recommendations below are suggestions, not established facts.",
             _render_semantic_block(
@@ -1229,6 +1290,60 @@ def _join_markdown_sections(sections: list[str]) -> str:
 
 def _escape_semantic_block_attribute(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _build_query_href(path: str, params: dict[str, str | int | None]) -> str:
+    encoded = urlencode(
+        [
+            (key, str(value))
+            for key, value in params.items()
+            if value is not None and str(value).strip()
+        ]
+    )
+    return f"{path}?{encoded}" if encoded else path
+
+
+def _to_query_datetime(value: datetime) -> str:
+    return _ensure_utc(value).isoformat().replace("+00:00", "Z")
+
+
+def _first_non_empty_uri(values: list[str | None], *, fallback: str) -> str:
+    for value in values:
+        if value and value.strip():
+            return value
+    return fallback
+
+
+def _extract_history_target(
+    guided_response: GuidedInvestigationResponse,
+) -> dict[str, str | int] | None:
+    for insight in guided_response.root_cause_run.insights:
+        for anchor_key in insight.evidence.sample_anchor_keys:
+            target = _parse_anchor_key(anchor_key)
+            if target is not None:
+                return target
+    return None
+
+
+def _parse_anchor_key(anchor_key: str) -> dict[str, str | int] | None:
+    object_type, separator, remainder = anchor_key.partition("|")
+    if not separator:
+        return None
+
+    object_ref_hash, separator, object_ref_canonical = remainder.partition("|")
+    if not separator or not object_type.strip() or not object_ref_canonical.strip():
+        return None
+
+    try:
+        parsed_hash = int(object_ref_hash)
+    except ValueError:
+        return None
+
+    return {
+        "object_type": object_type,
+        "object_ref_hash": parsed_hash,
+        "object_ref_canonical": object_ref_canonical,
+    }
 
 
 def _build_copilot_evidence_and_caveats(

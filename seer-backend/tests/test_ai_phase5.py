@@ -5,6 +5,7 @@ import logging
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 
@@ -466,6 +467,36 @@ def test_ai_workbench_chat_streams_investigation_answer_and_linked_surfaces() ->
     assert final["follow_up_questions"]
     assert final["anchor_object_type"] == _ORDER_URI
 
+    linked_by_kind = {
+        item["kind"]: item
+        for item in final["linked_surfaces"]
+    }
+    assert linked_by_kind["ontology"]["href"] == (
+        "/ontology/overview?conceptUri=urn%3Aseer%3Atest%3AOrder"
+    )
+    history_link = urlparse(linked_by_kind["history"]["href"])
+    history_query = parse_qs(history_link.query)
+    assert history_link.path == "/inspector/history/object"
+    assert history_query["object_type"] == [_ORDER_URI]
+    assert history_query["object_ref_canonical"]
+    assert history_query["object_ref_hash"]
+    assert linked_by_kind["process"]["href"] == (
+        "/inspector/insights?"
+        "tab=process-mining&pm_model=urn%3Aseer%3Atest%3Aorder"
+        "&pm_from=2026-02-22T07%3A00%3A00Z&pm_to=2026-02-22T11%3A00%3A00Z&pm_run=1"
+    )
+    assert linked_by_kind["root_cause"]["href"] == (
+        "/inspector/insights?"
+        "tab=process-insights&rca_anchor=urn%3Aseer%3Atest%3Aorder"
+        "&rca_from=2026-02-22T07%3A00%3A00Z&rca_to=2026-02-22T11%3A00%3A00Z"
+        "&rca_outcome=urn%3Aseer%3Atest%3Aorder_delayed&rca_run=1"
+    )
+    assert linked_by_kind["action_status"]["href"] == (
+        "/ontology/actions?conceptUri=urn%3Aseer%3Atest%3AOrder"
+    )
+    assert "live action status deep link yet" in linked_by_kind["action_status"]["reason"].lower()
+    assert "label=\"Open ontology exploration\"" in final["answer_markdown"]
+
 
 def test_ai_workbench_chat_returns_clarifying_turn_without_scope() -> None:
     client = build_client()
@@ -502,7 +533,7 @@ def test_ai_workbench_chat_returns_clarifying_turn_without_scope() -> None:
         "anchor_object_type",
         "time_window",
     }
-    assert "need a bit more scope" in final["answer_markdown"].lower()
+    assert "lock the scope" in final["answer_markdown"].lower()
     assert ":::follow-up" in final["answer_markdown"]
     assert ":::caveat" in final["answer_markdown"]
 

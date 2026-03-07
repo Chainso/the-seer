@@ -52,6 +52,7 @@ export interface StoredThread {
   experience: AssistantExperience;
   investigationId?: string | null;
   pendingStatus?: string | null;
+  workbenchContext?: AssistantChatContext | null;
   messages: StoredMessage[];
   completionMessages: AssistantCompletionMessage[];
 }
@@ -70,6 +71,7 @@ interface SharedAssistantStateContextValue {
   createNewThread: (seedText?: string, experience?: AssistantExperience) => string;
   deleteThread: (threadId: string) => void;
   renameThread: (threadId: string, title: string) => void;
+  setThreadWorkbenchContext: (threadId: string, context: Partial<AssistantChatContext>) => void;
   sendMessage: (
     userText: string,
     context?: AssistantChatContext,
@@ -108,9 +110,60 @@ function createThread(seedText?: string, experience: AssistantExperience = 'assi
     experience,
     investigationId: null,
     pendingStatus: null,
+    workbenchContext: null,
     messages: [],
     completionMessages: [],
   };
+}
+
+function normalizeAssistantContext(input: unknown): AssistantChatContext | null {
+  if (!input || typeof input !== 'object') return null;
+  const maybe = input as Partial<AssistantChatContext>;
+  const normalized: AssistantChatContext = {};
+
+  if (typeof maybe.route === 'string' && maybe.route.trim()) {
+    normalized.route = maybe.route.trim();
+  }
+  if (typeof maybe.module === 'string' && maybe.module.trim()) {
+    normalized.module = maybe.module.trim();
+  }
+  if (typeof maybe.anchor_object_type === 'string' && maybe.anchor_object_type.trim()) {
+    normalized.anchor_object_type = maybe.anchor_object_type.trim();
+  }
+  if (typeof maybe.start_at === 'string' && maybe.start_at.trim()) {
+    normalized.start_at = maybe.start_at.trim();
+  }
+  if (typeof maybe.end_at === 'string' && maybe.end_at.trim()) {
+    normalized.end_at = maybe.end_at.trim();
+  }
+  if (Array.isArray(maybe.concept_uris)) {
+    normalized.concept_uris = maybe.concept_uris.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0
+    );
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : null;
+}
+
+function mergeAssistantContexts(
+  ...contexts: Array<AssistantChatContext | null | undefined>
+): AssistantChatContext | undefined {
+  const merged: AssistantChatContext = {};
+
+  for (const context of contexts) {
+    const normalized = normalizeAssistantContext(context);
+    if (!normalized) continue;
+    if (normalized.route) merged.route = normalized.route;
+    if (normalized.module) merged.module = normalized.module;
+    if (normalized.anchor_object_type) merged.anchor_object_type = normalized.anchor_object_type;
+    if (normalized.start_at) merged.start_at = normalized.start_at;
+    if (normalized.end_at) merged.end_at = normalized.end_at;
+    if (normalized.concept_uris && normalized.concept_uris.length > 0) {
+      merged.concept_uris = normalized.concept_uris;
+    }
+  }
+
+  return Object.keys(merged).length > 0 ? merged : undefined;
 }
 
 function normalizeMessage(input: unknown): StoredMessage | null {
@@ -229,6 +282,9 @@ function normalizeThreads(rawThreads: unknown): StoredThread[] {
             typeof maybe.investigationId === 'string' ? maybe.investigationId : null,
           pendingStatus:
             typeof maybe.pendingStatus === 'string' ? maybe.pendingStatus : null,
+          workbenchContext: normalizeAssistantContext(
+            (maybe as { workbenchContext?: unknown }).workbenchContext
+          ),
           messages,
           completionMessages,
         };
@@ -562,6 +618,17 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
     [updateThread]
   );
 
+  const setThreadWorkbenchContext = useCallback(
+    (threadId: string, context: Partial<AssistantChatContext>) => {
+      updateThread(threadId, (thread) => ({
+        ...thread,
+        updatedAt: Date.now(),
+        workbenchContext: mergeAssistantContexts(thread.workbenchContext, context) ?? null,
+      }));
+    },
+    [updateThread]
+  );
+
   const sendMessage = useCallback(
     async (
       userText: string,
@@ -598,6 +665,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
         setActiveThreadIdState(currentActiveId);
       }
       const baseThread = existingThread || createThread(trimmed, threadExperience);
+      const resolvedContext = mergeAssistantContexts(context, baseThread.workbenchContext);
       const nextMessages = [...baseThread.messages, userMessage].slice(-MAX_THREAD_MESSAGES);
       const nextMessagesWithPlaceholder = upsertAssistantMessage(
         nextMessages,
@@ -622,6 +690,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
               updatedAt: Date.now(),
               experience: threadExperience,
               pendingStatus: null,
+              workbenchContext: resolvedContext ?? null,
               messages: nextMessagesWithPlaceholder,
               completionMessages: nextCompletionMessages,
             },
@@ -635,6 +704,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           updatedAt: Date.now(),
           experience: threadExperience,
           pendingStatus: null,
+          workbenchContext: resolvedContext ?? null,
           messages: nextMessagesWithPlaceholder,
           completionMessages: nextCompletionMessages,
         }));
@@ -671,7 +741,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
             {
               question: trimmed,
               context: {
-                ...context,
+                ...resolvedContext,
                 module: 'workbench',
               },
               thread_id: currentActiveId,
@@ -705,7 +775,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
             {
               thread_id: currentActiveId,
               completion_messages: nextCompletionMessages,
-              context,
+              context: resolvedContext,
             },
             {
               onAssistantDelta: ({ text }) => {
@@ -749,6 +819,13 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
           const canonicalCompletionMessages = finalEvent
             ? normalizeCompletionMessages(finalEvent.completion_messages)
             : [];
+          const finalizedContext = mergeAssistantContexts(thread.workbenchContext, {
+            route: resolvedContext?.route,
+            module: threadExperience === 'workbench' ? 'workbench' : resolvedContext?.module,
+            anchor_object_type: finalWorkbenchEvent?.anchor_object_type ?? undefined,
+            start_at: finalWorkbenchEvent?.start_at ?? undefined,
+            end_at: finalWorkbenchEvent?.end_at ?? undefined,
+          });
           const completionMessages =
             canonicalCompletionMessages.length > 0
               ? canonicalCompletionMessages
@@ -768,6 +845,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
             experience: threadExperience,
             investigationId: workbenchMetadata?.investigationId || thread.investigationId || null,
             pendingStatus: null,
+            workbenchContext: finalizedContext ?? null,
             messages: finalizedMessages,
             completionMessages,
           };
@@ -838,6 +916,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
       createNewThread,
       deleteThread,
       renameThread,
+      setThreadWorkbenchContext,
       sendMessage,
       cancelThread,
       isThreadRunning,
@@ -850,6 +929,7 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
       createNewThread,
       deleteThread,
       renameThread,
+      setThreadWorkbenchContext,
       sendMessage,
       cancelThread,
       isThreadRunning,
