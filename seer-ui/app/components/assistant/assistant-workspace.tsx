@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import {
   AssistantRuntimeProvider,
   AuiIf,
@@ -11,94 +11,38 @@ import {
   useMessage,
 } from '@assistant-ui/react';
 import { MarkdownTextPrimitive } from '@assistant-ui/react-markdown';
-import { ArrowUpRight, LoaderCircle, Plus, SearchCheck, SendHorizontal, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowUpRight, Plus, SendHorizontal, Sparkles, Trash2, X } from 'lucide-react';
 
 import { parseWorkbenchSemanticBlock } from '@/app/lib/workbench-semantic-markdown';
+import { AssistantCanvasPanel } from '@/app/components/assistant/assistant-canvas-panel';
 import { Button } from '@/app/components/ui/button';
 import { Card } from '@/app/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/app/components/ui/select';
 import {
   type AssistantExperience,
   formatModuleName,
-  type StoredThread,
-  type StoredWorkbenchMessage,
 } from '@/app/components/assistant/shared-assistant-state';
 import { useSharedAssistantRuntime } from '@/app/components/assistant/use-shared-assistant-runtime';
-import { useOntologyDisplay } from '@/app/lib/ontology-display';
 
-const QUICK_PROMPTS: Record<AssistantExperience, string[]> = {
-  assistant: [
-    'Summarize the current process risk signals in this module.',
-    'What should I investigate first based on this context?',
-    'Explain this area in business language with concrete examples.',
-  ],
-  workbench: [
-    'Investigate the main operational risks in this area.',
-    'What changed recently that deserves investigation first?',
-    'Summarize the strongest evidence and the biggest caveats.',
-  ],
-};
-
-const WORKBENCH_WINDOW_PRESETS = [
-  { key: '24h', label: 'Last 24h', hours: 24 },
-  { key: '7d', label: 'Last 7d', hours: 24 * 7 },
-  { key: '30d', label: 'Last 30d', hours: 24 * 30 },
-] as const;
-
-function buildWindowPreset(hours: number) {
-  const end = new Date();
-  const start = new Date(end.getTime() - hours * 60 * 60 * 1000);
-  return {
-    start_at: start.toISOString(),
-    end_at: end.toISOString(),
-  };
-}
-
-function getLatestUserQuestion(thread: StoredThread | null): string {
-  if (!thread) return '';
-  const latestUserMessage = [...thread.messages]
-    .reverse()
-    .find((message) => message.role === 'user');
-  return latestUserMessage?.text.trim() || '';
-}
-
-function formatScopedWindow(startAt?: string | null, endAt?: string | null): string {
-  if (!startAt || !endAt) return '';
-  const start = new Date(startAt);
-  const end = new Date(endAt);
-  if (Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf())) {
-    return '';
-  }
-  return `${start.toLocaleString()} to ${end.toLocaleString()}`;
-}
-
-function matchesPreset(startAt: string | undefined, endAt: string | undefined, hours: number): boolean {
-  if (!startAt || !endAt) return false;
-  const start = Date.parse(startAt);
-  const end = Date.parse(endAt);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
-
-  const durationMs = hours * 60 * 60 * 1000;
-  const driftMs = Math.abs(Date.now() - end);
-  return Math.abs((end - start) - durationMs) < 120_000 && driftMs < 120_000;
-}
+const QUICK_PROMPTS = [
+  'Summarize the current process risk signals in this module.',
+  'What should I investigate first based on this context?',
+  'Explain this area in business language with concrete examples.',
+];
 
 function QuickPrompts({
   moduleName,
-  experience,
 }: {
   moduleName: string;
-  experience: AssistantExperience;
 }) {
   const aui = useAui();
   const promptPrefix =
-    experience === 'assistant' && moduleName !== 'assistant' && moduleName !== 'general'
+    moduleName !== 'assistant' && moduleName !== 'general'
       ? `[${moduleName}] `
       : '';
 
   return (
     <div className="mt-4 grid gap-2">
-      {QUICK_PROMPTS[experience].map((prompt) => (
+      {QUICK_PROMPTS.map((prompt) => (
         <button
           key={prompt}
           type="button"
@@ -133,7 +77,7 @@ function SemanticBlockLabel({ label }: { label: string }) {
   );
 }
 
-function WorkbenchTextPart({ text }: { text: string }) {
+function AssistantTextPart({ text }: { text: string }) {
   const block = parseWorkbenchSemanticBlock(text);
   if (!block) {
     return (
@@ -226,171 +170,24 @@ function AssistantMessageBubble() {
   const hasRenderableText = useMessage((state) =>
     state.content.some((part) => part.type === 'text' && part.text.trim().length > 0)
   );
-  const workbench = useMessage((state) => {
-    const custom = state.metadata?.custom as { workbench?: StoredWorkbenchMessage | null } | undefined;
-    return custom?.workbench ?? null;
-  });
   if (!hasRenderableText) {
     return null;
   }
 
   return (
     <MessagePrimitive.Root className="mb-3 flex justify-start">
-      <div
-        className={`rounded-2xl rounded-tl-sm border border-border/85 bg-card/95 px-3 py-2 text-sm leading-relaxed shadow-[0_8px_22px_-14px_color-mix(in_oklch,var(--foreground)_18%,transparent)] ${
-          workbench ? 'w-full max-w-none' : 'max-w-[90%]'
-        }`}
-      >
-        {workbench && (
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded-full px-2.5 py-1 text-[11px] font-medium uppercase tracking-[0.18em] ${
-                workbench.turnKind === 'clarifying_question'
-                  ? 'border border-amber-500/25 bg-amber-500/10 text-amber-700'
-                  : 'border border-primary/20 bg-primary/10 text-primary'
-              }`}
-            >
-              {workbench.turnKind === 'clarifying_question' ? 'Clarify Scope' : 'Investigation'}
-            </span>
-            {workbench.whyItMatters && (
-              <p className="text-xs text-muted-foreground">{workbench.whyItMatters}</p>
-            )}
-          </div>
-        )}
+      <div className="max-w-[90%] rounded-2xl rounded-tl-sm border border-border/85 bg-card/95 px-3 py-2 text-sm leading-relaxed shadow-[0_8px_22px_-14px_color-mix(in_oklch,var(--foreground)_18%,transparent)]">
         <MessagePrimitive.Content
           components={{
             Text: (part) => (
               <div className="mb-3 last:mb-0">
-                <WorkbenchTextPart text={part.text} />
+                <AssistantTextPart text={part.text} />
               </div>
             ),
           }}
         />
       </div>
     </MessagePrimitive.Root>
-  );
-}
-
-function WorkbenchClarificationPanel({
-  thread,
-  disabled,
-  onSetContext,
-  onRun,
-}: {
-  thread: StoredThread;
-  disabled: boolean;
-  onSetContext: (context: { anchor_object_type?: string; start_at?: string; end_at?: string }) => void;
-  onRun: (question: string) => void;
-}) {
-  const ontologyDisplay = useOntologyDisplay();
-  const scope = thread.workbenchContext || {};
-  const latestUserQuestion = getLatestUserQuestion(thread);
-  const objectOptions = useMemo(
-    () =>
-      [...ontologyDisplay.catalog.objectModels]
-        .map((model) => ({
-          value: model.uri,
-          label: ontologyDisplay.displayObjectType(model.uri),
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [ontologyDisplay]
-  );
-  const selectedWindow = formatScopedWindow(scope.start_at, scope.end_at);
-  const canRun =
-    Boolean(latestUserQuestion) &&
-    Boolean(scope.anchor_object_type) &&
-    Boolean(scope.start_at) &&
-    Boolean(scope.end_at);
-
-  return (
-    <div className="mt-4 rounded-2xl border border-amber-500/25 bg-amber-500/8 p-4 shadow-[0_18px_34px_-24px_rgba(217,119,6,0.45)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="max-w-2xl">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">
-            Clarify scope
-          </p>
-          <p className="mt-2 text-sm text-foreground">
-            Pick an object and time window. The rerun keeps this thread and reuses your original
-            question.
-          </p>
-        </div>
-        <div className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-background/80 px-3 py-1 text-xs text-muted-foreground">
-          <SearchCheck className="h-3.5 w-3.5 text-amber-700" />
-          No analysis has run yet
-        </div>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto]">
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Business object
-            </p>
-            <Select
-              value={scope.anchor_object_type || ''}
-              onValueChange={(value) => onSetContext({ anchor_object_type: value })}
-              disabled={disabled || objectOptions.length === 0}
-            >
-              <SelectTrigger className="w-full bg-background">
-                <SelectValue placeholder="Choose an anchor object" />
-              </SelectTrigger>
-              <SelectContent>
-                {objectOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Investigation window
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {WORKBENCH_WINDOW_PRESETS.map((preset) => {
-                const selected = matchesPreset(scope.start_at, scope.end_at, preset.hours);
-                return (
-                  <button
-                    key={preset.key}
-                    type="button"
-                    onClick={() => onSetContext(buildWindowPreset(preset.hours))}
-                    disabled={disabled}
-                    className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-                      selected
-                        ? 'border-primary/35 bg-primary/12 text-foreground'
-                        : 'border-border/70 bg-background text-muted-foreground hover:border-primary/30 hover:text-foreground'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-            {selectedWindow ? (
-              <p className="text-xs text-muted-foreground">{selectedWindow}</p>
-            ) : (
-              <p className="text-xs text-muted-foreground">Choose a recent time window to continue.</p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex min-w-52 flex-col justify-between gap-3 rounded-2xl border border-border/70 bg-background/80 p-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Ready when scoped
-            </p>
-            <p className="mt-2 text-sm text-muted-foreground">
-              You can type a follow-up after selecting scope, or rerun the original question now.
-            </p>
-          </div>
-          <Button type="button" onClick={() => onRun(latestUserQuestion)} disabled={!canRun || disabled}>
-            Run scoped investigation
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -428,19 +225,18 @@ export function AssistantWorkspace({
     threads,
     activeThreadId,
     hydrated,
-    sendMessage,
-    isThreadRunning,
-    setThreadWorkbenchContext,
+    activeCanvasState,
   } = useSharedAssistantRuntime({
     context: {
       route,
-      module: experience === 'workbench' ? 'workbench' : moduleName,
+      module: moduleName,
     },
     experience,
   });
   const seedPromptRef = useRef('');
   const normalizedSeedPrompt = (seedPrompt || '').trim();
-  const isWorkbenchPage = variant === 'page' && experience === 'workbench';
+  const isPage = variant === 'page';
+  const canvasVisible = isPage && activeCanvasState.visible;
 
   useEffect(() => {
     if (variant !== 'page') return;
@@ -455,85 +251,40 @@ export function AssistantWorkspace({
 
   const panelFrameClass =
     'relative flex h-full flex-col overflow-hidden border-l border-border/75 bg-background/94 shadow-[-32px_0_90px_-50px_black] sm:rounded-l-[30px]';
-  const headerClass =
-    variant === 'panel'
-      ? 'relative border-b border-border/75 bg-gradient-to-r from-card/95 to-background/90 px-5 py-4'
-      : isWorkbenchPage
-        ? 'border-b border-border/70 bg-[radial-gradient(circle_at_top_left,_color-mix(in_oklch,var(--primary)_18%,transparent),transparent_38%),linear-gradient(135deg,color-mix(in_oklch,var(--background)_88%,white),color-mix(in_oklch,var(--muted)_68%,white))] px-6 py-5'
-        : 'border-b px-6 py-4';
+  const headerClass = variant === 'panel'
+    ? 'relative border-b border-border/75 bg-gradient-to-r from-card/95 to-background/90 px-5 py-4'
+    : 'border-b border-border/70 bg-background/92 px-6 py-5 backdrop-blur';
   const viewportClass =
     variant === 'panel'
       ? 'relative min-h-0 flex-1 overflow-y-auto bg-gradient-to-b from-background via-background to-muted/20 px-5 py-4'
-      : isWorkbenchPage
-        ? 'min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(180deg,color-mix(in_oklch,var(--background)_98%,white),color-mix(in_oklch,var(--muted)_36%,white))] px-6 py-5'
-        : 'min-h-0 flex-1 overflow-y-auto px-6 py-4';
+      : 'min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-8';
   const sidebarClass =
     variant === 'panel'
       ? 'hidden w-64 shrink-0 border-r border-border/70 bg-card/55 p-3 md:block'
-      : isWorkbenchPage
-        ? 'hidden w-72 shrink-0 border-r border-border/70 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--background)_94%,white),color-mix(in_oklch,var(--muted)_50%,white))] p-4 md:block'
-        : 'hidden w-64 shrink-0 border-r p-3 md:block';
-  const pageCardClass = isWorkbenchPage
-    ? 'h-[calc(100dvh-3rem)] overflow-hidden border-border/70 bg-[linear-gradient(180deg,color-mix(in_oklch,var(--background)_94%,white),color-mix(in_oklch,var(--muted)_40%,white))] p-0 shadow-[0_30px_90px_-48px_black]'
-    : 'h-[calc(100dvh-3rem)] overflow-hidden p-0';
-  const composerPlaceholder = isWorkbenchPage
-    ? 'Ask an operational question in business language...'
-    : 'Ask the assistant...';
-  const activeThread = threads.find((thread) => thread.id === activeThreadId) || null;
-  const threadRunning = activeThread ? isThreadRunning(activeThread.id) : false;
-  const pendingStatus = activeThread?.pendingStatus || null;
-  const latestWorkbenchTurn = activeThread
-    ? [...activeThread.messages]
-        .reverse()
-        .find((message) => message.role === 'assistant' && message.workbench)
-        ?.workbench ?? null
-    : null;
-  const showClarificationPanel =
-    isWorkbenchPage &&
-    !!activeThread &&
-    latestWorkbenchTurn?.turnKind === 'clarifying_question' &&
-    !pendingStatus;
-  const emptyStateTitle = isWorkbenchPage ? 'AI investigation workbench' : 'Investigation-ready assistant';
-  const emptyStateCopy = isWorkbenchPage
-    ? 'Start from the question. Seer will investigate, surface evidence, and make uncertainty visible.'
-    : 'Grounded responses with evidence and caveats.';
-  const baseContext =
-    experience === 'workbench'
-      ? {
-          route,
-          module: 'workbench',
-        }
-      : {
-          route,
-          module: moduleName,
-        };
+      : 'hidden w-60 shrink-0 border-r border-border/70 bg-muted/20 p-4 lg:block';
+  const pageCardClass = 'h-[calc(100dvh-3rem)] overflow-hidden border-border/70 bg-background/95 p-0 shadow-sm';
 
   const workspaceContent = (
     <>
-      <div className={headerClass}>
+      <div className={headerClass} data-assistant-page-header={isPage ? 'true' : 'false'}>
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="max-w-3xl">
             <p className="text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-              {variant === 'panel'
-                ? 'Global Assistant'
-                : isWorkbenchPage
-                  ? 'Primary Investigation Surface'
-                  : 'Assistant Workspace'}
+              {variant === 'panel' ? 'Global Assistant' : 'Assistant'}
             </p>
             <h2 className="mt-1 font-display text-xl leading-none">
-              {isWorkbenchPage ? 'AI Investigation Workbench' : 'Atlas Copilot'}
+              {variant === 'panel' ? 'Atlas Copilot' : 'Seer Assistant'}
             </h2>
-            {isWorkbenchPage ? (
-              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Ask what changed, what is driving risk, or what deserves action next. The workbench
-                investigates first, then sends you into deeper surfaces only when verification
-                matters.
+            {isPage ? (
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Ask in business language. Seer can ground the answer, load the right skill, and
+                open a canvas when a visual helps you inspect the result.
               </p>
             ) : null}
             <div className="mt-2 inline-flex items-center gap-2 rounded-full border border-border/80 bg-card/80 px-2.5 py-1">
               <span className="h-2 w-2 rounded-full bg-emerald-500" aria-hidden />
               <p className="text-xs font-medium text-foreground/90">
-                {isWorkbenchPage ? 'Workbench context' : `${formatModuleName(moduleName)} context`}
+                {variant === 'panel' ? `${formatModuleName(moduleName)} context` : 'Assistant context'}
               </p>
             </div>
           </div>
@@ -552,16 +303,20 @@ export function AssistantWorkspace({
       </div>
 
       <AssistantRuntimeProvider runtime={runtime}>
-        <div className="flex min-h-0 flex-1">
+        <div
+          data-assistant-page-shell={isPage ? 'true' : 'false'}
+          data-canvas-open={canvasVisible ? 'true' : 'false'}
+          className="flex min-h-0 flex-1"
+        >
           <aside className={sidebarClass}>
-            {isWorkbenchPage ? (
-              <div className="mb-4 rounded-2xl border border-border/70 bg-card/80 p-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Investigations
+            {isPage ? (
+              <div className="mb-4 rounded-2xl border border-border/70 bg-background/70 p-4">
+                <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-muted-foreground">
+                  Threads
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Keep one thread per question or risk theme so follow-ups stay grounded in the
-                  same evidence trail.
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  Keep the conversation running in one place. When the assistant presents an
+                  artifact, the canvas stays attached to this thread.
                 </p>
               </div>
             ) : null}
@@ -603,101 +358,96 @@ export function AssistantWorkspace({
             </div>
           </aside>
 
-          <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
-            <ThreadPrimitive.Viewport className={viewportClass}>
-              <AuiIf condition={({ thread }) => thread.isEmpty}>
-                <div className="mx-auto max-w-lg pt-6">
-                  <div
-                    className={`rounded-2xl border border-border/70 p-5 shadow-[0_16px_40px_-26px_black] ${
-                      isWorkbenchPage
-                        ? 'bg-[linear-gradient(135deg,color-mix(in_oklch,var(--card)_92%,white),color-mix(in_oklch,var(--muted)_44%,white))]'
-                        : 'bg-card/70'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/16 text-primary">
-                        <Sparkles className="h-5 w-5" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold">{emptyStateTitle}</p>
-                        <p className="text-xs text-muted-foreground">{emptyStateCopy}</p>
-                      </div>
-                    </div>
-                    {isWorkbenchPage ? (
-                      <div className="mt-4 grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-                        <div className="rounded-xl border border-border/70 bg-background/75 px-3 py-2">
-                          Natural-language intake
-                        </div>
-                        <div className="rounded-xl border border-border/70 bg-background/75 px-3 py-2">
-                          Evidence and caveats stay explicit
-                        </div>
-                        <div className="rounded-xl border border-border/70 bg-background/75 px-3 py-2">
-                          Follow-ups preserve investigation context
-                        </div>
-                      </div>
-                    ) : null}
-                    <QuickPrompts moduleName={moduleName} experience={experience} />
-                  </div>
-                </div>
-              </AuiIf>
-
-              <AuiIf condition={({ thread }) => !thread.isEmpty}>
-                {isWorkbenchPage && pendingStatus ? (
-                  <div className="mb-4 flex items-start gap-3 rounded-2xl border border-primary/18 bg-primary/8 px-4 py-3 text-sm shadow-[0_14px_28px_-18px_var(--primary)]">
-                    <LoaderCircle className="mt-0.5 h-4 w-4 animate-spin text-primary" />
-                    <div>
-                      <p className="font-medium text-foreground">Investigating</p>
-                      <p className="text-muted-foreground">{pendingStatus}</p>
-                    </div>
+          <div className="flex min-w-0 flex-1 xl:flex-row">
+            <ThreadPrimitive.Root
+              data-assistant-thread-column
+              className="flex min-w-0 flex-1 flex-col"
+            >
+              <ThreadPrimitive.Viewport className={viewportClass}>
+                {isPage && canvasVisible ? (
+                  <div className="mb-4 xl:hidden">
+                    <AssistantCanvasPanel state={activeCanvasState} compact />
                   </div>
                 ) : null}
-                <ThreadPrimitive.Messages
-                  components={{
-                    UserMessage: UserMessageBubble,
-                    AssistantMessage: AssistantMessageBubble,
-                  }}
-                />
-                {showClarificationPanel && activeThread ? (
-                  <WorkbenchClarificationPanel
-                    thread={activeThread}
-                    disabled={threadRunning}
-                    onSetContext={(contextUpdate) => {
-                      setThreadWorkbenchContext(activeThread.id, contextUpdate);
-                    }}
-                    onRun={(question) => {
-                      void sendMessage(question, baseContext, 'workbench');
+
+                <AuiIf condition={({ thread }) => thread.isEmpty}>
+                  <div className={`mx-auto pt-8 ${isPage ? 'max-w-2xl' : 'max-w-lg'}`}>
+                    <div className="rounded-3xl border border-border/70 bg-card/75 p-6 shadow-sm sm:p-8">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/12 text-primary">
+                          <Sparkles className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">
+                            {isPage ? 'Conversational by default' : 'Investigation-ready assistant'}
+                          </p>
+                          <p className="text-sm leading-6 text-muted-foreground">
+                            {isPage
+                              ? 'Start with a question. The assistant can bring a canvas in only when a visual adds clarity.'
+                              : 'Grounded responses with evidence and caveats.'}
+                          </p>
+                        </div>
+                      </div>
+                      <QuickPrompts moduleName={moduleName} />
+                      {isPage ? (
+                        <p className="mt-4 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          Canvas opens beside the conversation when the assistant presents an artifact.
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </AuiIf>
+
+                <AuiIf condition={({ thread }) => !thread.isEmpty}>
+                  <ThreadPrimitive.Messages
+                    components={{
+                      UserMessage: UserMessageBubble,
+                      AssistantMessage: AssistantMessageBubble,
                     }}
                   />
-                ) : null}
-                <AuiIf condition={({ thread }) => thread.isRunning}>
-                  <LoadingBubble />
+                  <AuiIf condition={({ thread }) => thread.isRunning}>
+                    <LoadingBubble />
+                  </AuiIf>
                 </AuiIf>
-              </AuiIf>
-            </ThreadPrimitive.Viewport>
+              </ThreadPrimitive.Viewport>
 
-            <div className="border-t border-border/70 bg-background/95 p-4">
-              <ComposerPrimitive.Root className="grid grid-cols-[1fr_auto] items-end gap-2 rounded-2xl border border-border/80 bg-card/80 p-2 shadow-[inset_0_1px_0_color-mix(in_oklch,var(--foreground)_8%,transparent)]">
-                <ComposerPrimitive.Input
-                  className="max-h-36 min-h-[3rem] w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring/50"
-                  placeholder={composerPlaceholder}
-                  rows={1}
-                />
-                <AuiIf condition={({ thread }) => thread.isRunning}>
-                  <ComposerPrimitive.Cancel className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:bg-accent">
-                    <X className="h-4 w-4" />
-                  </ComposerPrimitive.Cancel>
-                </AuiIf>
-                <AuiIf condition={({ thread }) => !thread.isRunning}>
-                  <ComposerPrimitive.Send className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_10px_24px_-12px_var(--primary)] hover:bg-primary/90 disabled:opacity-50">
-                    <SendHorizontal className="h-4 w-4" />
-                  </ComposerPrimitive.Send>
-                </AuiIf>
-                <p className="col-span-2 px-1 text-[11px] text-muted-foreground">
-                  Enter to send. Shift+Enter for newline.
-                </p>
-              </ComposerPrimitive.Root>
-            </div>
-          </ThreadPrimitive.Root>
+              <div className="border-t border-border/70 bg-background/95 p-4">
+                <ComposerPrimitive.Root className="grid grid-cols-[1fr_auto] items-end gap-2 rounded-2xl border border-border/80 bg-card/80 p-2 shadow-[inset_0_1px_0_color-mix(in_oklch,var(--foreground)_8%,transparent)]">
+                  <ComposerPrimitive.Input
+                    className="max-h-36 min-h-[3rem] w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none transition-shadow focus-visible:ring-2 focus-visible:ring-ring/50"
+                    placeholder={isPage ? 'Ask Seer Assistant...' : 'Ask the assistant...'}
+                    rows={1}
+                  />
+                  <AuiIf condition={({ thread }) => thread.isRunning}>
+                    <ComposerPrimitive.Cancel className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-card text-muted-foreground hover:bg-accent">
+                      <X className="h-4 w-4" />
+                    </ComposerPrimitive.Cancel>
+                  </AuiIf>
+                  <AuiIf condition={({ thread }) => !thread.isRunning}>
+                    <ComposerPrimitive.Send className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[0_10px_24px_-12px_var(--primary)] hover:bg-primary/90 disabled:opacity-50">
+                      <SendHorizontal className="h-4 w-4" />
+                    </ComposerPrimitive.Send>
+                  </AuiIf>
+                  <p className="col-span-2 px-1 text-[11px] text-muted-foreground">
+                    Enter to send. Shift+Enter for newline.
+                  </p>
+                </ComposerPrimitive.Root>
+              </div>
+            </ThreadPrimitive.Root>
+
+            {isPage ? (
+              <div
+                data-assistant-page-canvas
+                className={`hidden min-h-0 min-w-0 flex-col overflow-hidden transition-[width,opacity,border-color] duration-300 ease-out xl:flex ${
+                  canvasVisible
+                    ? 'w-[min(36rem,42vw)] border-l border-border/70 opacity-100'
+                    : 'w-0 border-l border-transparent opacity-0'
+                }`}
+              >
+                {canvasVisible ? <AssistantCanvasPanel state={activeCanvasState} /> : null}
+              </div>
+            ) : null}
+          </div>
         </div>
       </AssistantRuntimeProvider>
     </>

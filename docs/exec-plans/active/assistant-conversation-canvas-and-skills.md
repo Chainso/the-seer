@@ -562,6 +562,7 @@ Validation:
 9. 2026-03-07: Product assistant skills should load from the backend-owned catalog at `seer-backend/src/seer_backend/ai/assistant_skills/` rather than the developer `.agent/skills` or `.agents/skills` roots so the runtime skill corpus stays product-owned, reviewable, and shipped with backend code.
 10. 2026-03-07: Phase 3B intentionally does not expose an ontology graph dump tool to the assistant; deep-ontology remains instruction-only because full graph payloads provide too much raw information for the agent loop.
 11. 2026-03-07: Phase 4 keeps canvas state inside the existing assistant tool/message loop by storing typed `artifact` payloads on domain-tool results and typed `canvas_action` payloads on canvas-tool results; the frontend derives visible canvas state by replaying persisted `completion_messages` instead of relying on a second canvas state store or custom SSE events.
+12. 2026-03-07: Phase 5 keeps the global floating assistant panel as a compact conversation-only surface, while the dedicated `/assistant` page alone consumes `activeCanvasState` and opens the attached split-right canvas. This preserves a lighter global panel without reintroducing a second conversation runtime.
 
 ## Progress Log
 
@@ -575,6 +576,7 @@ Validation:
 8. 2026-03-07: Started Phase 3A by moving default product assistant skill discovery to the backend-owned catalog at `seer-backend/src/seer_backend/ai/assistant_skills/`, seeding `process-mining`, `root-cause`, `deep-ontology`, `object-history`, and `object-store` SKILL specs, and adding assertions that the default assistant catalog no longer matches the developer `.agents/skills` corpus.
 9. 2026-03-07: Completed Phase 3B by adding a backend assistant domain-tool adapter layer, gating process/RCA/history/object-store tools behind loaded skill permissions, persisting domain tool results through `completion_messages`, and relocating the skill corpus under backend source so the catalog ships as backend-owned code. The ontology graph adapter was explicitly removed in the same subphase to avoid flooding the assistant loop with raw graph structure.
 10. 2026-03-07: Completed Phase 4 by extending assistant tool results with typed artifact and canvas-action payloads, adding the built-in `present_canvas_artifact` / `update_canvas_artifact` / `close_canvas` tools, deriving canvas state from persisted `completion_messages` in the frontend runtime helpers, and covering the new contract with backend tests plus assistant UI contract checks. Validation passed for `test_ai_phase5.py`, backend Ruff, and `seer-ui` lint; `cd seer-ui && npm run test:contracts` still fails only on the pre-existing `tests/insights.contract.test.mjs`.
+11. 2026-03-07: Completed Phase 5 by rebuilding `/assistant` into a calmer split-canvas shell that consumes `activeCanvasState`, removing the page-specific workbench dashboard chrome and clarification UI, preserving the compact global panel variant, and replacing old workbench-page contract assertions with split-canvas shell checks. Validation passed for `seer-ui` lint and build, while `cd seer-ui && npm run test:contracts` still fails only on the pre-existing `tests/insights.contract.test.mjs`.
 
 ## Progress Tracking
 
@@ -583,7 +585,7 @@ Validation:
 - [x] Phase 2 complete
 - [x] Phase 3 complete
 - [x] Phase 4 complete
-- [ ] Phase 5 complete
+- [x] Phase 5 complete
 - [ ] Phase 6 complete
 - [ ] Phase 7 complete
 
@@ -595,4 +597,5 @@ Current execution state:
 4. Phase 2 completed on `2026-03-07`.
 5. Phase 3 completed on `2026-03-07`; the backend-owned skill catalog, skill-gated domain tool adapters, and durable tool-result persistence are all in place and validated.
 6. Phase 4 completed on `2026-03-07`; typed artifacts, canvas tools, and frontend canvas-state derivation now flow through the canonical assistant conversation history.
-7. Next action: start Phase 5 split-canvas `/assistant` shell work on top of the completed artifact and canvas contract.
+7. Phase 5 completed on `2026-03-07`; `/assistant` now presents the calmer split-canvas shell on top of the shared assistant runtime, while the global overlay remains compact.
+8. Next action: start Phase 6 OC-DFG canvas integration on top of the delivered generic split-canvas shell.

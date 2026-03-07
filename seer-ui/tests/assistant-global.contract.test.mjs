@@ -78,6 +78,17 @@ test("shared assistant runtime wires cancel controls to thread abort", () => {
   assert.match(runtime, /activeCanvasState/);
 });
 
+test("assistant workspace consumes canvas state in the page shell", () => {
+  const workspace = read("app/components/assistant/assistant-workspace.tsx");
+  assert.match(workspace, /data-assistant-page-shell/);
+  assert.match(workspace, /data-assistant-page-canvas/);
+  assert.match(workspace, /AssistantCanvasPanel/);
+  assert.match(workspace, /activeCanvasState/);
+  assert.doesNotMatch(workspace, /WorkbenchClarificationPanel/);
+  assert.doesNotMatch(workspace, /AI Investigation Workbench/);
+  assert.doesNotMatch(workspace, /Primary Investigation Surface/);
+});
+
 test("assistant canvas state derives from persisted completion messages", () => {
   const helper = read("app/lib/assistant-canvas-state.ts");
   assert.match(helper, /deriveCanvasStateFromCompletionMessages/);

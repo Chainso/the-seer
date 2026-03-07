@@ -24,25 +24,22 @@ test("workbench semantic markdown parser supports the shipped block set", () => 
   assert.match(parser, /stripSemanticBlockWrapper/);
 });
 
-test("assistant workspace still carries the dedicated workbench page affordances", () => {
-  const workspace = read("app/components/assistant/assistant-workspace.tsx");
-  assert.match(workspace, /isWorkbenchPage/);
-  assert.match(workspace, /WorkbenchClarificationPanel/);
-  assert.match(workspace, /module: 'workbench'/);
-});
-
-test("assistant workspace renders semantic workbench blocks", () => {
+test("assistant workspace keeps semantic markdown rendering without workbench page chrome", () => {
   const workspace = read("app/components/assistant/assistant-workspace.tsx");
   assert.match(workspace, /parseWorkbenchSemanticBlock/);
-  assert.match(workspace, /WorkbenchTextPart/);
+  assert.match(workspace, /AssistantTextPart/);
+  assert.match(workspace, /SemanticBlockLabel/);
+  assert.doesNotMatch(workspace, /WorkbenchClarificationPanel/);
+  assert.doesNotMatch(workspace, /AI Investigation Workbench/);
+});
+
+test("assistant workspace still renders semantic markdown block affordances", () => {
+  const workspace = read("app/components/assistant/assistant-workspace.tsx");
+  assert.match(workspace, /parseWorkbenchSemanticBlock/);
+  assert.match(workspace, /AssistantTextPart/);
   assert.match(workspace, /SemanticBlockLabel/);
   assert.match(workspace, /Open surface/);
   assert.match(workspace, /Suggestion, not a finding/);
-  assert.match(workspace, /Clarify scope/);
-  assert.match(workspace, /Run scoped investigation/);
-  assert.match(workspace, /AI Investigation Workbench/);
-  assert.match(workspace, /Ask an operational question in business language/);
-  assert.match(workspace, /Investigating/);
 });
 
 test("shared assistant runtime scopes threads by experience", () => {
