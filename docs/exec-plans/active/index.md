@@ -65,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `docs/exec-plans/active/ai-first-investigation-and-managed-agents.md` - in progress
+None.
 
 ## Post-MVP Status Tracking
 
@@ -82,8 +82,9 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: `docs/exec-plans/active/ai-first-investigation-and-managed-agents.md` (product reframing around AI-first investigation, ontology-defined capabilities, and managed agent workflows started on 2026-03-07)
+- `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md` (product reframing and draft-spec phase closed on 2026-03-07; follow-on execution/runtime planning intentionally deferred)
 - `completed`: `docs/exec-plans/completed/responsive-shell-and-mobile-navigation.md` (responsive shell, drawer lifecycle hardening, and mobile shell validation ratified on 2026-03-07)
 - `completed`: `docs/exec-plans/completed/analytics-run-results-discoverability.md` (analytics completion summaries and result-reveal behavior ratified on 2026-03-07)
 - `completed`: `docs/exec-plans/completed/url-backed-analysis-state.md` (deep-linkable insights state, restore flows, and query normalization ratified on 2026-03-07)

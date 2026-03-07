@@ -35,3 +35,4 @@ Each completed plan should preserve:
 23. `responsive-shell-and-mobile-navigation.md` - completed (2026-03-07)
 24. `analytics-run-results-discoverability.md` - completed (2026-03-07)
 25. `url-backed-analysis-state.md` - completed (2026-03-07)
+26. `ai-first-investigation-and-managed-agents.md` - completed (2026-03-07)

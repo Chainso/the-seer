@@ -2,9 +2,16 @@
 
 ## Purpose
 
-Catalog user-facing product specs.
+Catalog user-facing product specs and make implementation state obvious.
 
-## Specs
+## How To Read This Index
+
+1. `completed` means the spec describes behavior that has already been delivered or ratified.
+2. `draft` means the spec captures intended product behavior that is not yet implemented end-to-end.
+3. If a draft spec moves into active delivery, the relevant execution plan under `docs/exec-plans/active/` should be the canonical place to track implementation progress.
+4. If there are no active execution plans for a draft spec, treat it as product direction only, not in-flight implementation.
+
+## Implemented Specs
 
 1. `foundation-module-shell-phase-0.md` - completed
 2. `new-user-onboarding.md` - completed
@@ -17,9 +24,19 @@ Catalog user-facing product specs.
 
 ## Draft Specs
 
-1. `ai-investigation-workbench.md` - draft
-2. `managed-agentic-workflows.md` - draft
-3. `managed-agent-controls-and-approvals.md` - draft (`Managed Agent Runtime Controls`)
+1. `ai-investigation-workbench.md` - draft (`not implemented yet`)
+2. `managed-agentic-workflows.md` - draft (`not implemented yet`)
+3. `managed-agent-controls-and-approvals.md` - draft (`Managed Agent Runtime Controls`, `not implemented yet`)
+
+## Current Implementation Gaps
+
+1. `ai-investigation-workbench.md`
+2. `managed-agentic-workflows.md`
+3. `managed-agent-controls-and-approvals.md`
+
+Current active execution coverage:
+
+1. none
 
 ## Usage
 

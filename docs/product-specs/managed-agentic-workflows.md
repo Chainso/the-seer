@@ -1,7 +1,7 @@
 # Managed Agentic Workflows
 
 **Status:** draft  
-**Owner plan:** `docs/exec-plans/active/ai-first-investigation-and-managed-agents.md`  
+**Owner plan:** `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md`  
 **Last updated:** 2026-03-07
 
 ---
