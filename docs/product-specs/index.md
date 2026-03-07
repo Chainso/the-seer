@@ -21,7 +21,7 @@ Catalog user-facing product specs and make implementation state obvious.
 6. `ui-experience-replatform-phase-f-hardening-rollout.md` - completed
 7. `history-inspector-phase-3a.md` - completed
 8. `action-orchestration-backend-service.md` - completed
-9. `ai-investigation-workbench.md` - completed
+9. `ai-investigation-workbench.md` - completed (`delivered workbench snapshot; active `/assistant` supersession tracked separately`)
 
 ## Draft Specs
 
@@ -35,7 +35,7 @@ Catalog user-facing product specs and make implementation state obvious.
 
 Current active execution coverage:
 
-1. none
+1. `ai-investigation-workbench.md` -> `docs/exec-plans/active/assistant-conversation-canvas-and-skills.md` (`assistant/canvas/skills supersession track`; Phase 0 complete, Phase 1 contract unification next)
 
 ## Usage
 

@@ -1,14 +1,25 @@
 # AI Investigation Workbench
 
-**Status:** completed  
-**Owner plan:** `docs/exec-plans/completed/ai-investigation-workbench-execution.md`  
+**Status:** completed (`delivered workbench snapshot; active `/assistant` supersession in progress`)
+**Owner plan:** `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
+**Active supersession plan:** `docs/exec-plans/active/assistant-conversation-canvas-and-skills.md`
 **Last updated:** 2026-03-07
+
+---
+
+## Current Status
+
+This spec captures the delivered AI investigation workbench behavior that shipped under the archived workbench execution plan.
+
+It is not the forward product target for `/assistant`.
+
+The active `/assistant` redesign now lives in `docs/exec-plans/active/assistant-conversation-canvas-and-skills.md`, which restores a canonical conversational assistant contract and adds dynamic skill loading plus an optional right-side artifact canvas.
 
 ---
 
 ## What This Is
 
-This spec defines Seer's primary user-facing analytics experience.
+This spec defines the delivered workbench-first analytics experience that temporarily became Seer's primary `/assistant` surface.
 
 The core idea is simple:
 
@@ -19,7 +30,7 @@ The core idea is simple:
 
 This is not a "chatbot on top of dashboards."
 
-It is the product's default investigation workflow.
+It was the delivered default investigation workflow for the initial workbench track.
 
 ## Why It Exists
 
