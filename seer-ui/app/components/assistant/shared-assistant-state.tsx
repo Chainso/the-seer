@@ -567,8 +567,6 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
       const trimmed = userText.trim();
       if (!trimmed) return;
 
-      const currentActiveId =
-        activeThreadIdRef.current || createNewThread(trimmed, requestedExperience);
       const now = new Date().toISOString();
       const userMessage: StoredMessage = {
         id: makeId('msg-user'),
@@ -580,11 +578,21 @@ export function SharedAssistantStateProvider({ children }: { children: React.Rea
       const assistantMessageAt = new Date().toISOString();
 
       const snapshot = threadsRef.current;
-      const existingThread = snapshot.find((thread) => thread.id === currentActiveId);
       const threadExperience =
-        existingThread?.experience ||
         requestedExperience ||
         (context?.module === 'workbench' ? 'workbench' : 'assistant');
+      const matchingActiveThread = snapshot.find(
+        (thread) =>
+          thread.id === activeThreadIdRef.current && thread.experience === threadExperience
+      );
+      const existingThread =
+        matchingActiveThread ||
+        snapshot.find((thread) => thread.experience === threadExperience);
+      const currentActiveId =
+        existingThread?.id || createNewThread(trimmed, threadExperience);
+      if (activeThreadIdRef.current !== currentActiveId) {
+        setActiveThreadIdState(currentActiveId);
+      }
       const baseThread = existingThread || createThread(trimmed, threadExperience);
       const nextMessages = [...baseThread.messages, userMessage].slice(-MAX_THREAD_MESSAGES);
       const nextMessagesWithPlaceholder = upsertAssistantMessage(

@@ -38,3 +38,9 @@ test("assistant workspace renders semantic workbench blocks", () => {
   assert.match(workspace, /SemanticBlockLabel/);
   assert.match(workspace, /Open surface/);
 });
+
+test("shared assistant runtime scopes threads by experience", () => {
+  const runtime = read("app/components/assistant/use-shared-assistant-runtime.ts");
+  assert.match(runtime, /thread\.experience === experience/);
+  assert.match(runtime, /state\.createNewThread\(undefined, experience\)/);
+});

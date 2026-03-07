@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useExternalStoreRuntime } from '@assistant-ui/react';
 
 import type { AssistantChatContext } from '@/app/lib/api/assistant-chat';
@@ -19,9 +19,41 @@ interface UseSharedAssistantRuntimeOptions {
 
 export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOptions) {
   const state = useSharedAssistantState();
+  const experience = options?.experience ?? 'assistant';
+  const {
+    activeThreadId,
+    createNewThread,
+    hydrated,
+    setActiveThreadId,
+  } = state;
+  const scopedThreads = useMemo(
+    () => state.threads.filter((thread) => thread.experience === experience),
+    [state.threads, experience]
+  );
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (scopedThreads.some((thread) => thread.id === activeThreadId)) return;
+    if (scopedThreads[0]) {
+      setActiveThreadId(scopedThreads[0].id);
+      return;
+    }
+    createNewThread(undefined, experience);
+  }, [
+    activeThreadId,
+    createNewThread,
+    experience,
+    hydrated,
+    scopedThreads,
+    setActiveThreadId,
+  ]);
+
   const activeThread = useMemo(
-    () => state.threads.find((thread) => thread.id === state.activeThreadId) || null,
-    [state.threads, state.activeThreadId]
+    () =>
+      scopedThreads.find((thread) => thread.id === activeThreadId) ||
+      scopedThreads[0] ||
+      null,
+    [scopedThreads, activeThreadId]
   );
   const activeThreadMessages = useMemo(
     () => (activeThread?.messages || []).map(toThreadMessage),
@@ -43,7 +75,7 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
       threadList: {
         threadId: state.activeThreadId,
         isLoading: !state.hydrated,
-        threads: state.threads.map((thread) => ({
+        threads: scopedThreads.map((thread) => ({
           status: 'regular',
           id: thread.id,
           title: thread.title || DEFAULT_THREAD_TITLE,
@@ -53,7 +85,7 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
           state.setActiveThreadId(threadId);
         },
         onSwitchToNewThread: async () => {
-          state.createNewThread();
+          state.createNewThread(undefined, experience);
         },
         onDelete: async (threadId: string) => {
           state.deleteThread(threadId);
@@ -69,6 +101,7 @@ export function useSharedAssistantRuntime(options?: UseSharedAssistantRuntimeOpt
     runtime,
     activeThread,
     activeThreadMessages,
+    scopedThreads,
     ...state,
   };
 }
