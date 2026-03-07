@@ -3,11 +3,13 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
 from openai import APIError
+
 import seer_backend.ai.ontology_copilot as ontology_copilot
 
 pytest.importorskip("rdflib")
@@ -18,6 +20,7 @@ from seer_backend.ai.ontology_copilot import (
     OntologyCopilotService,
     OpenAiChatCompletionsRuntime,
 )
+from seer_backend.ai.skills import AssistantSkillCollisionError, AssistantSkillRegistry
 from seer_backend.api.ontology import build_ontology_services
 from seer_backend.config.settings import Settings
 from seer_backend.main import create_app
@@ -45,10 +48,16 @@ PROPHET_METAMODEL = REPO_ROOT / "prophet" / "prophet.ttl"
 class FakeModelRuntime(CopilotModelRuntime):
     def __init__(self, output: CopilotStructuredOutput) -> None:
         self.output = output
-        self.messages: list[list[dict[str, str]]] = []
+        self.messages: list[list[dict[str, Any]]] = []
+        self.tools: list[list[dict[str, Any]] | None] = []
 
-    async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
+    async def run_messages(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> CopilotStructuredOutput:
         self.messages.append(messages)
+        self.tools.append(tools)
         return self.output
 
 
@@ -156,6 +165,10 @@ def test_openai_runtime_uses_chat_completions_json_contract() -> None:
     assert kwargs["tool_choice"] == "auto"
     assert kwargs["parallel_tool_calls"] is True
     assert isinstance(kwargs["tools"], list)
+    assert {tool["function"]["name"] for tool in kwargs["tools"]} == {
+        "sparql_read_only_query",
+        "load_skill",
+    }
     assert kwargs["messages"] == [{"role": "user", "content": "Explain Ticket"}]
 
 
@@ -287,6 +300,104 @@ def test_openai_runtime_collects_multiple_tool_calls() -> None:
     assert output.tool_call.call_id == "call_1"
     assert len(output.tool_calls) == 2
     assert output.tool_calls[1].call_id == "call_2"
+
+
+def test_openai_runtime_supports_load_skill_tool_call_response() -> None:
+    class FakeCompletions:
+        async def create(self, **kwargs: object) -> object:
+            del kwargs
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "",
+                            "tool_calls": [
+                                {
+                                    "id": "call_skill_1",
+                                    "function": {
+                                        "name": "load_skill",
+                                        "arguments": json.dumps(
+                                            {"skill_name": "process-mining"}
+                                        ),
+                                    },
+                                }
+                            ],
+                        }
+                    }
+                ]
+            }
+
+    class FakeClient:
+        chat = type("FakeChat", (), {"completions": FakeCompletions()})()
+
+    runtime = OpenAiChatCompletionsRuntime(
+        base_url="http://localhost:8787/v1",
+        model="local-model",
+        api_key="test-key",
+        timeout_seconds=12.0,
+        client=FakeClient(),
+    )
+    output = asyncio.run(
+        runtime.run_messages([{"role": "user", "content": "Analyze delayed orders"}])
+    )
+
+    assert output.mode == "tool_call"
+    assert output.tool_call is not None
+    assert output.tool_call.tool == "load_skill"
+    assert output.tool_call.skill_name == "process-mining"
+    assert output.tool_call.call_id == "call_skill_1"
+
+
+def test_skill_registry_discovers_allowed_tools_and_detects_collisions(
+    tmp_path: Path,
+) -> None:
+    skill_root_a = tmp_path / "skills-a"
+    skill_root_b = tmp_path / "skills-b"
+    skill_root_a.mkdir()
+    skill_root_b.mkdir()
+
+    (skill_root_a / "process-mining").mkdir()
+    (skill_root_a / "process-mining" / "SKILL.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "name: process-mining",
+                "description: Mine OC-DFGs when the user asks to inspect process flow.",
+                "allowed-tools: process.mine process.traces",
+                "---",
+                "",
+                "# Process Mining",
+                "",
+                "Use this skill for process investigations.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    registry = AssistantSkillRegistry([str(skill_root_a)])
+    discovered = registry.discover()
+    assert discovered["process-mining"].allowed_tools == (
+        "process.mine",
+        "process.traces",
+    )
+
+    (skill_root_b / "process-mining").mkdir()
+    (skill_root_b / "process-mining" / "SKILL.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "name: process-mining",
+                "description: Duplicate collision fixture.",
+                "---",
+                "",
+                "# Duplicate",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(AssistantSkillCollisionError):
+        AssistantSkillRegistry([str(skill_root_a), str(skill_root_b)]).discover()
 
 
 def test_openai_runtime_normalizes_long_provider_tool_call_ids() -> None:
@@ -421,8 +532,12 @@ def test_copilot_preserves_provider_tool_call_fields_in_completion_messages_delt
         def __init__(self) -> None:
             self.calls = 0
 
-        async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
-            del messages
+        async def run_messages(
+            self,
+            messages: list[dict[str, Any]],
+            tools: list[dict[str, Any]] | None = None,
+        ) -> CopilotStructuredOutput:
+            del messages, tools
             self.calls += 1
             if self.calls == 1:
                 return CopilotStructuredOutput(
@@ -501,8 +616,12 @@ def test_build_services_keeps_ontology_available_when_openai_unconfigured() -> N
 
 def test_copilot_returns_503_when_model_runtime_is_unavailable() -> None:
     class UnavailableRuntime(CopilotModelRuntime):
-        async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
-            del messages
+        async def run_messages(
+            self,
+            messages: list[dict[str, Any]],
+            tools: list[dict[str, Any]] | None = None,
+        ) -> CopilotStructuredOutput:
+            del messages, tools
             raise OntologyDependencyUnavailableError("OpenAI endpoint is unavailable")
 
     client = _build_client_with_runtime(UnavailableRuntime())
@@ -553,9 +672,11 @@ def test_copilot_builds_system_and_conversation_messages() -> None:
     assert "# Concepts" in latest[3]["content"]
     assert "support_local" in latest[3]["content"]
     assert "Support Local" in latest[3]["content"]
-    assert latest[4] == {"role": "user", "content": "First question"}
-    assert latest[5] == {"role": "assistant", "content": "First answer"}
-    assert latest[6] == {"role": "user", "content": "What is Ticket?"}
+    assert latest[4]["role"] == "system"
+    assert "Available assistant skills:" in latest[4]["content"]
+    assert latest[5] == {"role": "user", "content": "First question"}
+    assert latest[6] == {"role": "assistant", "content": "First answer"}
+    assert latest[7] == {"role": "user", "content": "What is Ticket?"}
 
 
 def test_valid_ingest_sets_current_release_pointer(client: TestClient) -> None:
@@ -833,8 +954,12 @@ def test_copilot_rejects_unsafe_tool_call_query() -> None:
 
 def test_copilot_returns_502_on_runtime_error() -> None:
     class BrokenRuntime(CopilotModelRuntime):
-        async def run_messages(self, messages: list[dict[str, str]]) -> CopilotStructuredOutput:
-            del messages
+        async def run_messages(
+            self,
+            messages: list[dict[str, Any]],
+            tools: list[dict[str, Any]] | None = None,
+        ) -> CopilotStructuredOutput:
+            del messages, tools
             raise OntologyError("runtime parse failed")
 
     client = _build_client_with_runtime(BrokenRuntime())

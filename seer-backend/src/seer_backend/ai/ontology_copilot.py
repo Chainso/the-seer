@@ -12,6 +12,12 @@ from typing import Any, Literal, Protocol
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
 
+from seer_backend.ai.skills import (
+    AssistantSkill,
+    AssistantSkillError,
+    AssistantSkillNotFoundError,
+    AssistantSkillRegistry,
+)
 from seer_backend.ontology.errors import (
     OntologyDependencyUnavailableError,
     OntologyError,
@@ -66,21 +72,26 @@ Treat this as immutable metamodel context.
 """.strip()
 
 _COPILOT_WORKFLOW_SYSTEM_PROMPT = """
-You are Seer's ontology copilot.
+You are Seer's conversational assistant.
 
 Your job:
-- Help users understand Prophet-modeled ontology semantics and relationships.
-- Stay grounded in the provided ontology context and tool evidence.
-- Use only read-only ontology analysis.
+- Start with ontology-grounded help using the provided context and tool evidence.
+- Stay conversational and concise.
+- Use `load_skill` when the user asks for a deeper capability that is listed in the
+  available skill catalog.
+- Keep the same conversation thread even after skills are loaded.
 
 Workflow for each turn:
 1. Read the user question and prior conversation.
-2. Use the ontology index and ontology context messages first.
-3. Decide whether a tool query is needed:
+2. Use the ontology index, ontology context, and any previously loaded skill
+   instructions first.
+3. Decide whether a tool query or skill activation is needed:
 - Answer directly when context is already sufficient.
+- Use `load_skill` when a listed skill clearly matches the user's request and would
+  expand your available instructions or tools.
 - Use the SPARQL tool when the user asks for exact relationships,
   counts, validation, or when context is ambiguous.
-4. If using the tool, produce one high-quality query first and keep it bounded.
+4. If using a tool, produce one high-quality call first and keep it bounded.
 5. Return a concise answer that cites what you checked and any limits/uncertainty.
 
 Tool planning and budget:
@@ -90,6 +101,7 @@ Tool planning and budget:
 - Keep tool usage small: usually 1 round, at most 2 unless explicitly asked
   for exhaustive validation.
 - If evidence is still incomplete after limited queries, stop and explain what is missing.
+- Load only the smallest relevant skill set; do not load every skill speculatively.
 
 SPARQL query rules:
 - Allowed query forms: SELECT or ASK only.
@@ -257,6 +269,29 @@ _SPARQL_READ_ONLY_TOOL_SCHEMA = {
     },
 }
 
+_LOAD_SKILL_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "load_skill",
+        "description": (
+            "Load one assistant skill by name to expand Seer's instructions and "
+            "allowed tools for the current conversation. Use only when the user "
+            "request clearly matches the skill catalog."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "skill_name": {
+                    "type": "string",
+                    "description": "Exact skill name from the available skill catalog.",
+                }
+            },
+            "required": ["skill_name"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 @dataclass(slots=True)
 class CopilotAssistantDeltaEvent:
@@ -266,7 +301,7 @@ class CopilotAssistantDeltaEvent:
 @dataclass(slots=True)
 class CopilotToolStatusEvent:
     status: Literal["started", "completed", "failed"]
-    tool: Literal["sparql_read_only_query"]
+    tool: Literal["sparql_read_only_query", "load_skill"]
     call_id: str
     summary: str
     query_preview: str | None = None
@@ -292,6 +327,7 @@ class CopilotModelRuntime(Protocol):
     async def run_messages(
         self,
         messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
     ) -> CopilotStructuredOutput: ...
 
 
@@ -318,6 +354,7 @@ class OpenAiChatCompletionsRuntime:
     async def run_messages(
         self,
         messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
     ) -> CopilotStructuredOutput:
         for attempt in range(_OPENAI_TRANSIENT_MAX_RETRIES + 1):
             try:
@@ -326,7 +363,7 @@ class OpenAiChatCompletionsRuntime:
                     messages=messages,
                     stream=False,
                     temperature=0,
-                    tools=[_SPARQL_READ_ONLY_TOOL_SCHEMA],
+                    tools=tools or [_SPARQL_READ_ONLY_TOOL_SCHEMA, _LOAD_SKILL_TOOL_SCHEMA],
                     tool_choice="auto",
                     parallel_tool_calls=True,
                 )
@@ -367,6 +404,7 @@ class OntologyCopilotService:
         model_runtime: CopilotModelRuntime,
         query_row_limit: int = 100,
         base_ontology_turtle: str = "",
+        skill_registry: AssistantSkillRegistry | None = None,
     ) -> None:
         self._ontology_service = ontology_service
         self._model_runtime = model_runtime
@@ -377,6 +415,7 @@ class OntologyCopilotService:
         )
         self._base_prefix_map = _extract_prefix_map(base_ontology_turtle)
         self._ontology_index_cache: dict[str, str] = {}
+        self._skill_registry = skill_registry or AssistantSkillRegistry(())
 
     async def answer(
         self,
@@ -403,6 +442,7 @@ class OntologyCopilotService:
         ontology_index_markdown = await self._build_ontology_index_markdown(
             current_release_id=current.release_id
         )
+        available_skills = self._discover_available_skills()
         conversation_messages = _normalize_completion_conversation(completion_conversation)
         if conversation_messages is None:
             conversation_messages = [
@@ -415,6 +455,7 @@ class OntologyCopilotService:
             current_release_id=current.release_id,
             base_ontology_system_prompt=self._base_ontology_system_prompt,
             ontology_index_markdown=ontology_index_markdown,
+            available_skills=available_skills,
         )
 
         tool_result: CopilotToolResult | None = None
@@ -424,7 +465,10 @@ class OntologyCopilotService:
         completion_messages_delta: list[dict[str, Any]] = []
 
         for round_index in range(_TOOL_CALL_MAX_ROUNDS):
-            model_output = await self._model_runtime.run_messages(messages)
+            model_output = await self._model_runtime.run_messages(
+                messages,
+                tools=_tool_schemas(),
+            )
             answer_text = model_output.answer
             requested_calls = _requested_tool_calls(model_output)
             if not requested_calls:
@@ -576,7 +620,22 @@ class OntologyCopilotService:
         self._ontology_index_cache[cache_key] = markdown
         return markdown
 
+    def _discover_available_skills(self) -> dict[str, AssistantSkill]:
+        try:
+            return self._skill_registry.discover()
+        except AssistantSkillError:
+            return {}
+
     async def _execute_tool_call(self, tool_call: CopilotToolCall) -> CopilotToolResult:
+        if tool_call.tool == "load_skill":
+            return self._execute_load_skill_call(tool_call)
+
+        if not tool_call.query:
+            return CopilotToolResult(
+                tool=tool_call.tool,
+                query=None,
+                error="tool execution failed: missing SPARQL query",
+            )
         query_text = _inject_missing_standard_prefixes(tool_call.query.strip())
         executed_tool_call = tool_call.model_copy(update={"query": query_text})
         try:
@@ -602,6 +661,41 @@ class OntologyCopilotService:
             query_response,
             tool_call=executed_tool_call,
             row_limit=self._query_row_limit,
+        )
+
+    def _execute_load_skill_call(self, tool_call: CopilotToolCall) -> CopilotToolResult:
+        skill_name = (tool_call.skill_name or "").strip()
+        if not skill_name:
+            return CopilotToolResult(
+                tool="load_skill",
+                skill_name=None,
+                error="tool execution failed: missing skill_name",
+            )
+
+        try:
+            skill = self._skill_registry.get(skill_name)
+        except AssistantSkillNotFoundError as exc:
+            return CopilotToolResult(
+                tool="load_skill",
+                skill_name=skill_name,
+                error=f"tool execution failed: {exc}",
+            )
+        except AssistantSkillError as exc:
+            return CopilotToolResult(
+                tool="load_skill",
+                skill_name=skill_name,
+                error=f"tool execution failed: {exc}",
+            )
+
+        return CopilotToolResult(
+            tool="load_skill",
+            skill_name=skill.name,
+            skill_description=skill.description,
+            instructions_markdown=skill.instructions_markdown,
+            allowed_tools=list(skill.allowed_tools),
+            loaded_skill_names=[skill.name],
+            row_count=1,
+            truncated=False,
         )
 
 
@@ -698,14 +792,20 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
         function_name = getattr(function_payload, "name", None)
         if function_name is None and isinstance(function_payload, dict):
             function_name = function_payload.get("name")
-        if function_name != "sparql_read_only_query":
-            continue
-
         arguments: Any = getattr(function_payload, "arguments", None)
         if arguments is None and isinstance(function_payload, dict):
             arguments = function_payload.get("arguments")
-        query = _extract_tool_query_from_arguments(arguments)
-        if query is None:
+        query: str | None = None
+        skill_name: str | None = None
+        if function_name == "sparql_read_only_query":
+            query = _extract_tool_query_from_arguments(arguments)
+            if query is None:
+                continue
+        elif function_name == "load_skill":
+            skill_name = _extract_tool_skill_name_from_arguments(arguments)
+            if skill_name is None:
+                continue
+        else:
             continue
 
         call_id = getattr(tool, "id", None)
@@ -722,8 +822,9 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
 
         parsed_calls.append(
             CopilotToolCall(
-                tool="sparql_read_only_query",
+                tool=function_name,
                 query=query,
+                skill_name=skill_name,
                 call_id=call_id,
                 raw_tool_call=raw_tool_call,
             )
@@ -768,6 +869,29 @@ def _tool_call_to_raw_dict(tool: Any, function_payload: Any) -> dict[str, Any]:
     return raw_tool_call
 
 
+def _extract_tool_skill_name_from_arguments(arguments: Any) -> str | None:
+    parsed = _parse_tool_arguments(arguments)
+    skill_name = parsed.get("skill_name")
+    if isinstance(skill_name, str) and skill_name.strip():
+        return skill_name.strip()
+    return None
+
+
+def _parse_tool_arguments(arguments: Any) -> dict[str, Any]:
+    if isinstance(arguments, str):
+        try:
+            parsed = json.loads(arguments)
+        except json.JSONDecodeError:
+            return {}
+    elif isinstance(arguments, dict):
+        parsed = arguments
+    else:
+        return {}
+    if isinstance(parsed, dict):
+        return parsed
+    return {}
+
+
 def _model_to_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
@@ -780,29 +904,13 @@ def _model_to_dict(value: Any) -> dict[str, Any]:
 
 
 def _extract_tool_query_from_arguments(arguments: Any) -> str | None:
-    if isinstance(arguments, dict):
-        query = arguments.get("query")
-        if isinstance(query, str) and query.strip():
-            return query.strip()
-        return None
-
-    if not isinstance(arguments, str):
-        return None
-
-    text = arguments.strip()
-    if not text:
-        return None
-
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
+    parsed = _parse_tool_arguments(arguments)
+    query = parsed.get("query")
+    if isinstance(query, str) and query.strip():
+        return query.strip()
+    if isinstance(arguments, str):
+        text = arguments.strip()
         return text if len(text) >= 3 else None
-
-    if isinstance(parsed, dict):
-        query = parsed.get("query")
-        if isinstance(query, str) and query.strip():
-            return query.strip()
-
     return None
 
 
@@ -844,6 +952,7 @@ def _build_messages(
     current_release_id: str | None,
     base_ontology_system_prompt: str,
     ontology_index_markdown: str,
+    available_skills: dict[str, AssistantSkill],
 ) -> list[dict[str, Any]]:
     release_text = current_release_id or "none"
     messages: list[dict[str, Any]] = [
@@ -854,6 +963,7 @@ def _build_messages(
             "content": f"Current ontology release: {release_text}",
         },
         {"role": "system", "content": ontology_index_markdown},
+        {"role": "system", "content": _build_skill_catalog_markdown(available_skills)},
     ]
     for message in conversation_messages:
         messages.append(message)
@@ -892,6 +1002,28 @@ def _to_tool_result(
         truncated=truncated,
         graphs=query_response.graphs,
     )
+
+
+def _tool_schemas() -> list[dict[str, Any]]:
+    return [_SPARQL_READ_ONLY_TOOL_SCHEMA, _LOAD_SKILL_TOOL_SCHEMA]
+
+
+def _build_skill_catalog_markdown(available_skills: dict[str, AssistantSkill]) -> str:
+    lines = [
+        "Available assistant skills:",
+        (
+            "Use `load_skill` with the exact skill name when the user's request "
+            "clearly matches one skill."
+        ),
+    ]
+    if not available_skills:
+        lines.append("- none")
+        return "\n".join(lines)
+
+    for skill in sorted(available_skills.values(), key=lambda item: item.name):
+        description = skill.description or "No description provided."
+        lines.append(f"- {skill.name}: {description}")
+    return "\n".join(lines)
 
 
 def _infer_variables(
@@ -1154,7 +1286,10 @@ def _build_tool_result_messages(
     raw_tool_call["id"] = tool_call.call_id
     raw_tool_call["type"] = raw_tool_call.get("type") or "function"
     raw_function["name"] = tool_call.tool
-    raw_function["arguments"] = json.dumps({"query": tool_call.query}, ensure_ascii=True)
+    raw_function["arguments"] = json.dumps(
+        _tool_call_arguments(tool_call),
+        ensure_ascii=True,
+    )
     raw_tool_call["function"] = raw_function
 
     assistant_message: dict[str, Any] = {
@@ -1170,13 +1305,27 @@ def _build_tool_result_messages(
     return assistant_message, tool_message
 
 
+def _tool_call_arguments(tool_call: CopilotToolCall) -> dict[str, Any]:
+    if tool_call.tool == "load_skill":
+        return {"skill_name": tool_call.skill_name}
+    return {"query": tool_call.query}
+
+
 def _tool_status_started_event(tool_call: CopilotToolCall) -> CopilotToolStatusEvent:
+    if tool_call.tool == "load_skill":
+        skill_name = tool_call.skill_name or "unknown"
+        return CopilotToolStatusEvent(
+            status="started",
+            tool=tool_call.tool,
+            call_id=tool_call.call_id or "call_unknown",
+            summary=f"Loading assistant skill {skill_name}.",
+        )
     return CopilotToolStatusEvent(
         status="started",
         tool=tool_call.tool,
         call_id=tool_call.call_id or "call_unknown",
         summary="Running read-only SPARQL query.",
-        query_preview=_query_preview(tool_call.query),
+        query_preview=_query_preview(tool_call.query or ""),
     )
 
 
@@ -1193,7 +1342,7 @@ def _tool_status_completed_event(
         tool=tool_call.tool,
         call_id=tool_call.call_id or "call_unknown",
         summary=_tool_status_summary(tool_result),
-        query_preview=_query_preview(tool_call.query),
+        query_preview=_query_preview(tool_call.query or "") if tool_call.query else None,
         query_type=tool_result.query_type,
         row_count=tool_result.row_count,
         truncated=tool_result.truncated,
@@ -1202,6 +1351,16 @@ def _tool_status_completed_event(
 
 
 def _tool_status_summary(tool_result: CopilotToolResult) -> str:
+    if tool_result.tool == "load_skill":
+        if tool_result.error:
+            return f"Assistant skill load failed: {tool_result.error}"
+        skill_name = tool_result.skill_name or "unknown"
+        enabled = (
+            ", ".join(tool_result.allowed_tools)
+            if tool_result.allowed_tools
+            else "no additional tools"
+        )
+        return f"Loaded assistant skill {skill_name}. Enabled {enabled}."
     if tool_result.error:
         return f"Read-only SPARQL query failed: {tool_result.error}"
     if tool_result.query_type == "ASK":
@@ -1232,6 +1391,14 @@ def _summarize_tool_result(tool_result: CopilotToolResult | None) -> str:
         return (
             "I could not finalize a model response after tool execution, "
             "but no tool result was available."
+        )
+    if tool_result.tool == "load_skill":
+        if tool_result.error:
+            return f"I tried to load an assistant skill, but it failed: {tool_result.error}"
+        skill_name = tool_result.skill_name or "the requested skill"
+        return (
+            f"I loaded {skill_name}, but the model did not produce a final answer after "
+            "skill activation."
         )
     if tool_result.error:
         return f"I ran a read-only SPARQL query, but it failed: {tool_result.error}"

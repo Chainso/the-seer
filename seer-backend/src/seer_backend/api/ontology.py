@@ -13,6 +13,7 @@ from seer_backend.ai.ontology_copilot import (
     OntologyCopilotService,
     OpenAiChatCompletionsRuntime,
 )
+from seer_backend.ai.skills import AssistantSkillRegistry
 from seer_backend.config.settings import Settings
 from seer_backend.ontology.errors import (
     OntologyDependencyUnavailableError,
@@ -42,14 +43,19 @@ class _UnavailableModelRuntime:
     def __init__(self, reason: str) -> None:
         self.reason = reason
 
-    async def run_messages(self, messages: list[dict[str, Any]]) -> CopilotStructuredOutput:
-        del messages
+    async def run_messages(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> CopilotStructuredOutput:
+        del messages, tools
         raise OntologyDependencyUnavailableError(self.reason)
 
 
 def build_ontology_services(
     settings: Settings,
 ) -> tuple[OntologyService | UnavailableOntologyService, OntologyCopilotService]:
+    skill_registry = AssistantSkillRegistry(settings.assistant_skill_dirs)
     fallback_runtime: CopilotModelRuntime = _UnavailableModelRuntime(
         "Model runtime is unavailable"
     )
@@ -59,7 +65,11 @@ def build_ontology_services(
         from seer_backend.ontology.validation import ShaclValidator
     except Exception as exc:
         fallback = UnavailableOntologyService(f"ontology dependencies unavailable: {exc}")
-        return fallback, OntologyCopilotService(fallback, model_runtime=fallback_runtime)
+        return fallback, OntologyCopilotService(
+            fallback,
+            model_runtime=fallback_runtime,
+            skill_registry=skill_registry,
+        )
 
     try:
         validator = ShaclValidator(settings.prophet_metamodel_path)
@@ -74,7 +84,11 @@ def build_ontology_services(
         ontology_service = OntologyService(repository=repository, validator=validator)
     except Exception as exc:
         fallback = UnavailableOntologyService(f"ontology service initialization failed: {exc}")
-        return fallback, OntologyCopilotService(fallback, model_runtime=fallback_runtime)
+        return fallback, OntologyCopilotService(
+            fallback,
+            model_runtime=fallback_runtime,
+            skill_registry=skill_registry,
+        )
 
     if not settings.openai_base_url.strip():
         fallback_runtime = _UnavailableModelRuntime(
@@ -98,6 +112,7 @@ def build_ontology_services(
         model_runtime=fallback_runtime,
         query_row_limit=settings.copilot_query_row_limit,
         base_ontology_turtle=base_ontology_turtle,
+        skill_registry=skill_registry,
     )
     return ontology_service, copilot_service
 

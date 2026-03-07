@@ -125,18 +125,37 @@ class CopilotEvidence(BaseModel):
     query: str
 
 
+CopilotToolName = Literal["sparql_read_only_query", "load_skill"]
+
+
 class CopilotToolCall(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tool: Literal["sparql_read_only_query"]
-    query: str = Field(min_length=3, max_length=20000)
+    tool: CopilotToolName
+    query: str | None = Field(default=None, max_length=20000)
+    skill_name: str | None = Field(default=None, max_length=160)
     call_id: str | None = None
     raw_tool_call: dict[str, Any] | None = Field(default=None, exclude=True)
 
+    @model_validator(mode="after")
+    def validate_tool_arguments(self) -> CopilotToolCall:
+        if self.tool == "sparql_read_only_query":
+            if not self.query or len(self.query.strip()) < 3:
+                raise ValueError("query is required for sparql_read_only_query")
+        elif self.tool == "load_skill":
+            if not self.skill_name or not self.skill_name.strip():
+                raise ValueError("skill_name is required for load_skill")
+        return self
+
 
 class CopilotToolResult(BaseModel):
-    tool: Literal["sparql_read_only_query"]
-    query: str
+    tool: CopilotToolName
+    query: str | None = None
+    skill_name: str | None = None
+    skill_description: str | None = None
+    instructions_markdown: str | None = None
+    allowed_tools: list[str] = Field(default_factory=list)
+    loaded_skill_names: list[str] = Field(default_factory=list)
     query_type: Literal["SELECT", "ASK"] | None = None
     variables: list[str] = Field(default_factory=list)
     rows: list[dict[str, str]] = Field(default_factory=list)

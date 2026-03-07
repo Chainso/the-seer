@@ -4,6 +4,7 @@ import json
 import logging
 import re
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -14,8 +15,11 @@ from seer_backend.ai.ontology_copilot import (
     CopilotAnswerFinalEvent,
     CopilotAnswerStreamEvent,
     CopilotAssistantDeltaEvent,
+    CopilotModelRuntime,
     CopilotToolStatusEvent,
+    OntologyCopilotService,
 )
+from seer_backend.ai.skills import AssistantSkillRegistry
 from seer_backend.analytics.rca_repository import InMemoryRootCauseRepository
 from seer_backend.analytics.rca_service import RootCauseService
 from seer_backend.analytics.repository import InMemoryProcessMiningRepository
@@ -28,8 +32,11 @@ from seer_backend.ontology.models import (
     CopilotChatResponse,
     CopilotConversationMessage,
     CopilotEvidence,
+    CopilotStructuredOutput,
     CopilotToolCall,
     CopilotToolResult,
+    CurrentReleasePointer,
+    OntologySparqlQueryResponse,
 )
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "rca_phase4_orders.json"
@@ -201,6 +208,59 @@ class StubOntologyCopilotNotReady:
         del question, conversation, completion_conversation
         raise OntologyNotReadyError("Ontology release is still initializing")
         yield CopilotAssistantDeltaEvent(text="")
+
+
+class _SkillAwareOntologyService:
+    async def current(self) -> CurrentReleasePointer:
+        return CurrentReleasePointer(
+            release_id="phase5-test-release",
+            graph_iri="urn:seer:test:graph",
+            updated_at=datetime.now(tz=UTC),
+        )
+
+    async def run_read_only_query(self, query: str) -> OntologySparqlQueryResponse:
+        del query
+        return OntologySparqlQueryResponse(
+            query_type="SELECT",
+            bindings=[],
+            graphs=["urn:seer:test:graph"],
+        )
+
+
+class _LoadSkillThenAnswerRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        del messages
+        self.calls += 1
+        if self.calls == 1:
+            assert tools is not None
+            assert {tool["function"]["name"] for tool in tools} == {
+                "sparql_read_only_query",
+                "load_skill",
+            }
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Loading process mining guidance.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="load_skill",
+                    skill_name="process-mining",
+                    call_id="call_skill_1",
+                ),
+            )
+
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="Loaded process mining guidance and can mine OC-DFGs next.",
+            evidence=[],
+            tool_call=None,
+        )
 
 
 def _parse_sse_events(raw_stream: str) -> list[tuple[str, dict[str, object]]]:
@@ -608,6 +668,82 @@ def test_ai_assistant_chat_logs_tool_status_events(caplog) -> None:
     assert all(record.thread_id == "thread-tools-1" for record in tool_records)
     assert tool_records[0].tool == "sparql_read_only_query"
     assert tool_records[0].call_id == "call_1"
+
+
+def test_ai_assistant_chat_load_skill_updates_permissions_and_logs_tool_status(
+    caplog,
+    tmp_path: Path,
+) -> None:
+    skill_root = tmp_path / "skills"
+    skill_dir = skill_root / "process-mining"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "name: process-mining",
+                (
+                    "description: Mine object-centric process flows when the user "
+                    "asks about process behavior."
+                ),
+                "allowed-tools: process.mine process.traces",
+                "---",
+                "",
+                "# Process Mining",
+                "",
+                "Use this skill for OC-DFG analysis and process flow questions.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    copilot = OntologyCopilotService(
+        _SkillAwareOntologyService(),
+        model_runtime=_LoadSkillThenAnswerRuntime(),
+        skill_registry=AssistantSkillRegistry([str(skill_root)]),
+    )
+    client = build_client_with_copilot(copilot)
+
+    with caplog.at_level(logging.INFO, logger="seer_backend.ai.assistant_turn"):
+        response = client.post(
+            "/api/v1/ai/assistant/chat",
+            json={
+                "completion_messages": [
+                    {"role": "user", "content": "Can you analyze the order flow?"},
+                ],
+                "thread_id": "thread-skill-1",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    events = _parse_sse_events(response.text)
+    tool_status_events = [payload for event, payload in events if event == "tool_status"]
+    assert [payload["status"] for payload in tool_status_events] == ["started", "completed"]
+    assert tool_status_events[0]["tool"] == "load_skill"
+
+    final_event = next(payload for event, payload in events if event == "final")
+    assert "process.mine" in final_event["tool_permissions"]
+    assert "process.traces" in final_event["tool_permissions"]
+    tool_messages = [
+        message
+        for message in final_event["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    assert tool_messages
+    loaded_skill = json.loads(tool_messages[0]["content"])
+    assert loaded_skill["tool"] == "load_skill"
+    assert loaded_skill["skill_name"] == "process-mining"
+    assert loaded_skill["allowed_tools"] == ["process.mine", "process.traces"]
+    assert "Process Mining" in loaded_skill["instructions_markdown"]
+
+    tool_records = [
+        record
+        for record in caplog.records
+        if record.name == "seer_backend.ai.assistant_turn"
+        and record.message == "assistant_turn_tool_status"
+    ]
+    assert [record.status for record in tool_records] == ["started", "completed"]
+    assert all(record.thread_id == "thread-skill-1" for record in tool_records)
+    assert tool_records[0].tool == "load_skill"
 
 
 def test_ai_assistant_chat_logs_failure(caplog) -> None:

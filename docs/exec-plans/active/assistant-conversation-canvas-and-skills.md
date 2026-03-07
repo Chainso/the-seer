@@ -337,7 +337,7 @@ Validation:
 
 ## Phase 2: Skill Registry And `load_skill` Runtime
 
-**Status:** pending
+**Status:** completed
 
 **Goal:** add first-class skill discovery and runtime activation to the assistant backend.
 
@@ -558,6 +558,7 @@ Validation:
 5. 2026-03-07: The Gemini local split-canvas pattern is the visual interaction reference: conversation left, artifact canvas right, smooth expansion rather than route changes.
 6. 2026-03-07: `docs/product-specs/ai-investigation-workbench.md` remains the delivered workbench snapshot, but it is no longer the forward `/assistant` product target; this active plan now owns the superseding execution direction until a new ratified spec is written.
 7. 2026-03-07: Phase 1 keeps the dedicated workbench transport as a temporary secondary path, but `/assistant` itself now routes through the canonical assistant chat contract so skill loading and canvas phases can extend one conversation runtime instead of two.
+8. 2026-03-07: Skill activation should persist through ordinary assistant/tool messages in `completion_messages`; Phase 2 therefore avoids a parallel active-skill store and reconstructs enabled tool permissions from saved conversation history.
 
 ## Progress Log
 
@@ -567,12 +568,13 @@ Validation:
 4. 2026-03-07: Recorded the controller baseline ledger in this plan without rerunning the full suite: `seer-ui` lint passed, `seer-ui` build passed, `seer-ui` contract tests failed only in pre-existing `tests/insights.contract.test.mjs`, `test_ai_phase5.py` passed (`15 passed`), and targeted backend Ruff checks passed.
 5. 2026-03-07: Phase 0 completed by locking the redesign direction in the active plan, aligning the spec/index pointers to treat the workbench as delivered-but-superseded behavior, and setting Phase 1 contract unification as the next controller action.
 6. 2026-03-07: Completed Phase 1 by rerouting `/assistant` back to the canonical assistant stream, restoring assistant-turn logging on the real product page path, and updating UI contract tests to treat the workbench transport as secondary.
+7. 2026-03-07: Completed Phase 2 by adding backend skill discovery (`.agent/skills` / `.agents/skills`), parsing `allowed-tools` metadata, introducing `load_skill` into the assistant tool loop, persisting loaded skill instructions in tool messages, and deriving assistant tool permissions from conversation history. Validation passed for `test_ontology_phase1.py`, `test_ai_phase5.py`, and targeted backend Ruff checks.
 
 ## Progress Tracking
 
 - [x] Phase 0 complete
 - [x] Phase 1 complete
-- [ ] Phase 2 complete
+- [x] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 - [ ] Phase 5 complete
@@ -584,4 +586,5 @@ Current execution state:
 1. Phase 0 completed on `2026-03-07`.
 2. Controller baseline validation is recorded above and accepted as the track starting ledger.
 3. Phase 1 completed on `2026-03-07`.
-4. Next action: execute Phase 2 skill runtime.
+4. Phase 2 completed on `2026-03-07`.
+5. Next action: execute Phase 3 domain skill conversion.

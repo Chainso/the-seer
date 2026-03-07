@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import re
 from collections.abc import AsyncIterator, Iterator
@@ -371,7 +372,7 @@ class AiGatewayService:
                     "module": "assistant",
                     "task": "chat",
                     "response_policy": "informational",
-                    "tool_permissions": _assistant_tool_permissions(),
+                    "tool_permissions": _assistant_tool_permissions(completion_messages),
                 },
             )
 
@@ -862,7 +863,7 @@ def _build_assistant_chat_response(
 
     return AiAssistantChatResponse(
         response_policy="informational",
-        tool_permissions=_assistant_tool_permissions(),
+        tool_permissions=_assistant_tool_permissions(completion_messages_for_thread),
         summary=copilot.answer,
         answer=copilot.answer,
         evidence=evidence,
@@ -877,14 +878,23 @@ def _build_assistant_chat_response(
     )
 
 
-def _assistant_tool_permissions() -> list[str]:
-    return [
+def _assistant_tool_permissions(
+    completion_messages: list[dict[str, Any]] | None = None,
+) -> list[str]:
+    permissions = [
         "assistant.context",
         "ontology.current",
         "ontology.concepts",
         "ontology.concept_detail",
         "ontology.query(read_only)",
     ]
+    if not completion_messages:
+        return permissions
+
+    for tool_name in _assistant_loaded_skill_tools(completion_messages):
+        if tool_name not in permissions:
+            permissions.append(tool_name)
+    return permissions
 
 
 def _workbench_tool_permissions() -> list[str]:
@@ -901,6 +911,33 @@ def _workbench_tool_permissions() -> list[str]:
         "root_cause.assist.setup",
         "root_cause.assist.interpret",
     ]
+
+
+def _assistant_loaded_skill_tools(
+    completion_messages: list[dict[str, Any]],
+) -> list[str]:
+    loaded_tools: list[str] = []
+    for message in completion_messages:
+        if not isinstance(message, dict) or message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        if parsed.get("tool") != "load_skill" or parsed.get("error"):
+            continue
+        allowed_tools = parsed.get("allowed_tools")
+        if not isinstance(allowed_tools, list):
+            continue
+        for tool_name in allowed_tools:
+            if isinstance(tool_name, str) and tool_name not in loaded_tools:
+                loaded_tools.append(tool_name)
+    return loaded_tools
 
 
 def _iter_answer_chunks(answer: str, chunk_size: int = 120) -> Iterator[str]:
@@ -1360,7 +1397,25 @@ def _build_copilot_evidence_and_caveats(
     caveats: list[str] = []
 
     if copilot.tool_result is not None:
-        if copilot.tool_result.error:
+        if copilot.tool_result.tool == "load_skill":
+            if copilot.tool_result.error:
+                caveats.append(
+                    "Assistant skill activation failed; response may rely on the "
+                    "base assistant context only."
+                )
+            else:
+                skill_name = copilot.tool_result.skill_name or "unknown"
+                enabled_tools = (
+                    ", ".join(copilot.tool_result.allowed_tools)
+                    or "no additional tools"
+                )
+                evidence.append(
+                    AiEvidenceItem(
+                        label="Assistant skill loaded",
+                        detail=f"{skill_name} enabled {enabled_tools}.",
+                    )
+                )
+        elif copilot.tool_result.error:
             caveats.append(
                 "Tool execution failed; response may rely on incomplete ontology context."
             )
