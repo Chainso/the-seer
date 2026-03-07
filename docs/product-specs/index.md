@@ -15,6 +15,12 @@ Catalog user-facing product specs.
 7. `history-inspector-phase-3a.md` - completed
 8. `action-orchestration-backend-service.md` - completed
 
+## Draft Specs
+
+1. `ai-investigation-workbench.md` - draft
+2. `managed-agentic-workflows.md` - draft
+3. `managed-agent-controls-and-approvals.md` - draft (`Managed Agent Runtime Controls`)
+
 ## Usage
 
 1. Keep specs focused on user behavior and acceptance criteria.

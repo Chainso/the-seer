@@ -1,519 +1,438 @@
 # Seer Product Vision and Strategy
 
 **Status:** Canonical product source of truth  
-**Date:** 2026-03-01
+**Date:** 2026-03-07
 
 ---
 
-## 1. Product Vision
+## 1. Product Definition
 
-Seer is an AI-native operating intelligence platform that helps businesses understand how work actually happens and improve outcomes.
+Seer is an ontology-grounded AI operations platform.
 
-Seer combines:
-- ontology-grounded business meaning,
-- complete event and object history,
-- process mining and analytics,
-- and conversational insight workflows.
+Seer helps a business do two things:
 
-The product goal is speed to usable process intelligence, not platform complexity.
+1. investigate how the business is operating right now using AI, and
+2. run managed AI agents that can inspect business history and execute approved capabilities.
+
+In plain language:
+
+1. Prophet defines the business vocabulary and capability model.
+2. Seer stores operational history as events, objects, and relationships over time.
+3. AI uses that ontology and history to investigate what is happening.
+4. Managed agents use that same ontology and history to decide what to do next and invoke approved actions.
+
+The product goal is not "more dashboards" or "more workflow plumbing."
+
+The product goal is to give businesses an AI-native operating layer that can understand the business model, inspect evidence, and safely take action.
 
 ---
 
-## 2. Product Scope
+## 2. What Seer Is And Is Not
 
-## 2.1 In Scope
+## 2.1 What Seer Is
+
+1. An AI-first investigation product for understanding business operations.
+2. A managed runtime for ontology-defined actions and workflows.
+3. A product that uses complete operational history as evidence.
+4. A product where analytics exist to improve investigation quality and execution quality.
+
+## 2.2 What Seer Is Not
+
+1. Not an ontology authoring product.
+2. Not a generic low-code workflow compiler.
+3. Not primarily a process-mining diagram tool.
+4. Not a separate action-registry platform detached from the ontology.
+
+---
+
+## 3. Core Product Model
+
+Seer has four product layers.
+
+## 3.1 Ontology Layer
+
+The ontology is the business meaning layer and the capability catalog.
+
+It defines:
+
+1. business objects,
+2. business events,
+3. lifecycle states and transitions,
+4. executable actions and workflows,
+5. typed inputs and produced events,
+6. and Seer-specific execution concepts layered on top of Prophet.
+
+## 3.2 Evidence Layer
+
+Seer stores complete operational history so AI can reason from evidence rather than from static metadata alone.
+
+The evidence layer includes:
+
+1. immutable event history,
+2. immutable object snapshots over time,
+3. normalized event-object relationships,
+4. and analytical artifacts derived from that history.
+
+## 3.3 Investigation Layer
+
+Investigation is AI-first.
+
+Users should primarily ask questions in business language such as:
+
+1. what is causing delayed fulfillment,
+2. which customers are at risk,
+3. what changed this week,
+4. or what should we do next.
+
+Seer should decide how to investigate:
+
+1. inspect ontology context,
+2. query history,
+3. compare cohorts,
+4. run process-mining or root-cause tools when useful,
+5. and return evidence, caveats, and recommended next actions.
+
+## 3.4 Execution Layer
+
+Execution is action-first.
+
+Managed agentic workflows are treated as executable ontology-defined workflows/actions.
+
+From the rest of the platform's point of view:
+
+1. atomic actions are executable capabilities,
+2. agentic workflows are also executable capabilities,
+3. both live in the ontology,
+4. and Seer provides the runtime that can execute them safely.
+
+---
+
+## 4. Product Surfaces
+
+## 4.1 AI Investigation
+
+This is the primary user-facing product surface.
+
+The user starts with a business question, not a diagram configuration form.
+
+Seer should:
+
+1. understand the question in ontology terms,
+2. inspect relevant operational evidence,
+3. choose the right analytical tools,
+4. explain findings in plain language,
+5. show evidence and caveats,
+6. and suggest or invoke next actions when allowed.
+
+## 4.2 Managed Agents
+
+Users should be able to register managed AI agents that pursue an operational objective over time.
+
+Examples:
+
+1. recover at-risk orders before SLA breach,
+2. triage overdue invoices,
+3. watch for procurement exceptions,
+4. or monitor low-stock risk and initiate replenishment.
+
+The managed agent is not compiled into a rigid workflow graph.
+
+The definition is the ontology-defined workflow capability plus its operating instruction and runtime guardrails inside Seer.
+
+## 4.3 Expert Drill-Down
+
+Process mining, RCA, history inspection, and ontology exploration still matter.
+
+They remain available as:
+
+1. tools the AI investigator can call,
+2. tools managed agents can call when permitted,
+3. and expert drill-down surfaces for verification and deeper analysis.
+
+They are important product modules, but they are no longer the primary product identity.
+
+---
+
+## 5. Product Scope
+
+## 5.1 In Scope
 
 1. Read-only ontology exploration in UI.
-2. Ontology ingestion from Prophet local ontology output.
-3. SHACL validation against Prophet base metamodel.
+2. Ontology ingestion from Prophet local ontology output and Seer ontology extensions.
+3. SHACL validation against the Prophet base metamodel and Seer extension contracts.
 4. Upsert of ontology definitions into Fuseki.
-5. Event/object history persistence in ClickHouse.
-6. Action orchestration backend service with ontology-validated submit, pull-based claim/lease delivery, and at-least-once lifecycle completion semantics.
-7. Process mining workflows in Python with `pm4py`.
-8. AI-assisted analytics and discovery workflows.
-9. Ontology-driven field/state display consistency through one shared UI display policy.
+5. Event, object, and relationship history persistence in ClickHouse.
+6. Managed action orchestration and agent runtime control-plane state in PostgreSQL.
+7. AI-first investigation workflows.
+8. Ontology-defined executable actions and managed workflow execution.
+9. Evidence-backed analytical tooling such as process mining and RCA.
+10. Shared UI for evidence, caveats, runtime guardrails, and execution visibility.
 
-## 2.2 Out of Scope (Current Phase)
+## 5.2 Out Of Scope (Current Phase)
 
 1. Ontology authoring in Seer UI.
-2. Multi-tenant data-layer complexity.
-3. Broker-first/global replay orchestration platforms and schema/version compatibility governance.
-4. Governance and trust-center feature suites.
+2. A separate action catalog outside the ontology.
+3. Workflow compilation into fixed DAG/spec artifacts as the canonical execution model.
+4. Multi-tenant data-layer complexity.
+5. Governance and trust-center feature suites.
+6. Broker-first/global replay orchestration platforms and schema/version compatibility governance.
 
 ---
 
-## 3. Platform Architecture
+## 6. Platform Stack
 
-## 3.1 Stack
+## 6.1 Canonical Stack
 
 - **Backend:** Python
 - **Frontend:** React + Next.js
 - **Ontology store:** Apache Jena Fuseki
 - **Ontology query integration:** RDFLib + SPARQL
 - **History store:** ClickHouse
-- **Action orchestration control-plane store:** PostgreSQL
+- **Action and agent control-plane store:** PostgreSQL
 - **Local runtime:** Docker Compose
 - **Repository model:** Monorepo
 
-## 3.2 High-Level Topology
+## 6.2 High-Level Topology
 
 ```mermaid
 flowchart LR
   U["User"] --> FE["Seer Next.js App"]
   FE --> API["Seer Python API"]
-  FE --> AI["AI Interaction Layer"]
-  AI --> API
 
-  API --> ONT["Ontology Service\n(RDFLib + SPARQL)"]
+  API --> ONT["Ontology Service\n(Prophet + Seer extension)"]
   API --> HIS["History + Analytics Service\n(ClickHouse + pm4py)"]
-  API --> ACT["Action Orchestration Service\n(Submit + Claim + Lifecycle)"]
+  API --> AI["AI Investigation + Agent Runtime"]
+  API --> ACT["Action / Agent Control Plane"]
 
   ONT --> FUSEKI["Fuseki"]
   HIS --> CH["ClickHouse"]
   ACT --> PG["PostgreSQL"]
 
-  EXT["Event Producers"] --> ING["Ingestion API"]
-  ING --> CH
+  EXT["Event Producers / Executors"] --> API
 ```
-
-## 3.3 Monorepo Layout Intent
-
-The monorepo should keep all platform parts in one repository, including:
-- `docker/`
-- `seer-backend/`
-- `seer-ui/`
-
-Shared packages/docs can be added as needed, but backend, frontend, and runtime infra live together here.
 
 ---
 
-## 4. Ontology Strategy
+## 7. Ontology Strategy
 
-## 4.1 Source of Truth for Authoring
+## 7.1 Source Of Truth For Authoring
 
-Ontology authoring is config-as-code in Prophet.
+Ontology authoring remains config-as-code in Prophet.
 
-Seer UI is explicitly non-authoring for ontology management.
+Seer consumes ontology releases; Seer UI is not a general ontology authoring environment.
 
-## 4.2 Seer Ontology Responsibilities
+## 7.2 Seer Ontology Responsibilities
 
-1. Accept a Prophet local ontology projection (`gen/turtle/ontology.ttl`).
-2. Validate with SHACL against Prophet base metamodel (`prophet.ttl`).
-3. Upsert ontology definitions into Fuseki named graphs.
-4. Expose read/query APIs for UI and AI context.
+Seer must:
 
-## 4.3 Ontology Upsert Identity Contract
+1. ingest Prophet-generated local ontology projections,
+2. validate them,
+3. upsert them into Fuseki,
+4. expose them to UI and AI,
+5. and use them as the executable capability catalog.
+
+## 7.3 Seer Ontology Extension
+
+Seer extends Prophet with a Seer execution ontology.
+
+That extension should define the concepts needed for managed AI execution, including:
+
+1. managed agentic workflow shape,
+2. runtime guardrail metadata,
+3. execution-safety semantics,
+4. allowed evidence/tool access,
+5. and runtime outcome semantics.
+
+The extension should build on Prophet `Action` and `Workflow` primitives rather than creating a disconnected execution model.
+
+## 7.4 Ontology Identity Contract
 
 Ontology upsert identity is RDF URI based.
 
 Rules:
+
 1. Concept identity is the subject IRI.
 2. Property identity is `(subject IRI, predicate IRI, object value/IRI)` triple identity.
 3. Upsert unit is a named graph release.
 4. Re-ingest of the same release replaces graph contents atomically for that release graph.
-5. "Current" graph pointer is switched only after successful SHACL validation.
+5. The current graph pointer switches only after successful validation.
 
-This gives deterministic ontology state without requiring UI authoring workflows.
-
-## 4.4 Ontology UI Boundary
+## 7.5 Ontology UI Boundary
 
 UI supports:
-- ontology graph exploration,
-- ontology search and concept inspection,
-- ontology context in analytics and AI responses.
-- graph-oriented concept discovery sourced from backend-filtered user ontology concepts only.
 
-Ontology explorer constraints:
-- concept lists and search results must exclude Prophet base concepts.
-- graph visualization must be limited to object/action/event/trigger concepts and their relationships.
-- property and custom-type concepts are not shown in ontology graph navigation views.
-- user-visible field/state label decisions in inspector flows must be ontology-first through a shared resolver contract.
+1. ontology graph exploration,
+2. ontology search and concept inspection,
+3. ontology context in investigation and execution surfaces,
+4. and concept discovery sourced from backend-filtered user ontology concepts only.
 
 UI does not support:
-- ontology creation/editing,
-- ontology publish workflows,
-- ontology mutation actions.
+
+1. ontology creation/editing,
+2. ontology publish workflows,
+3. or ad hoc ontology mutation.
 
 ---
 
-## 5. Data Model (Current Product Shape)
+## 8. Data And Runtime Model
 
-Seer uses two storage planes for product behavior:
+## 8.1 Evidence Plane
 
-1. immutable process intelligence history in ClickHouse, and
-2. action orchestration control-plane state in PostgreSQL.
+Seer uses immutable operational history as the core evidence plane.
 
-History core tables:
-- `event_history`
-- `object_history`
-- `event_object_links`
+Canonical history tables:
 
-## 5.1 `event_history`
+1. `event_history`
+2. `object_history`
+3. `event_object_links`
 
-Purpose: immutable event log.
+This model exists so AI and analytics can:
 
-Required fields:
-- `event_id` UUID
-- `occurred_at` DateTime
-- `event_type` String
-- `source` String
-- `payload` JSON
+1. reconstruct object timelines,
+2. reconstruct process behavior,
+3. inspect state at event time,
+4. and traverse relationships across objects via shared events.
 
-Optional fields:
-- `trace_id` String
-- `attributes` JSON/map
-- `ingested_at` DateTime
+## 8.2 Control Plane
 
-Rules:
-- `event_id` is UUID.
-- Event rows are append-only.
+Seer uses PostgreSQL as the control plane for actions and managed agents.
 
-## 5.1.1 Event Time Semantics
+Canonical control-plane tables:
 
-Default event-time field for user-facing analytics is `occurred_at`.
+1. `actions`
+2. `action_attempts`
+3. `instances`
+4. `action_dead_letters`
 
-`ingested_at` is operational metadata and is not the primary analytics timeline field.
+This plane tracks:
 
-## 5.2 `object_history`
-
-Purpose: immutable snapshots of objects as they appear in event context.
-
-Required fields:
-- `object_history_id` UUID
-- `object_type` String
-- `object_ref` JSON/object key map (raw)
-- `object_ref_canonical` String (deterministic canonical form)
-- `object_ref_hash` UInt64 or FixedString hash (derived from canonical form)
-- `object_payload` JSON
-- `recorded_at` DateTime
-
-Optional fields:
-- `source_event_id` UUID
-
-Rules:
-- `object_history_id` is UUID.
-- Every snapshot row is immutable.
-- Snapshot granularity for this phase is full object snapshot at event time, not delta.
-
-## 5.3 `event_object_links`
-
-Purpose: connect events to specific object history snapshots and object refs.
-
-Required fields:
-- `event_id` UUID
-- `object_history_id` UUID
-- `object_type` String
-- `object_ref` JSON/object key map (raw)
-- `object_ref_canonical` String
-- `object_ref_hash` UInt64 or FixedString hash
-
-Optional fields:
-- `relation_role` String
-- `linked_at` DateTime
-
-Rules:
-- Each row links an event to a specific object snapshot (`object_history_id`).
-- Attributes-at-event-time joins should use `object_history_id`.
-- `event_object_links.object_type` must equal the referenced `object_history.object_type`.
-- Cross-event object identity traversal should use `(object_type, object_ref_hash)` and validate with `object_ref_canonical`.
-
-## 5.4 Object Ref Normalization Strategy
-
-Composite keys are expected and supported.
-
-Normalization approach:
-1. Preserve raw `object_ref` JSON.
-2. Build deterministic canonical representation (`object_ref_canonical`) with sorted keys and normalized value formatting.
-3. Build `object_ref_hash` from canonical representation for efficient joins/indexing.
-
-This avoids losing fidelity while enabling performant joins.
-
-## 5.5 Why This Shape
-
-This model gives:
-- event-first process reconstruction,
-- object-first timeline reconstruction,
-- direct traversal from an object to co-participating objects via shared events,
-- and a clean substrate for object-centric process mining.
-
-## 5.6 Action Orchestration Control-Plane Tables
-
-Purpose: durable backend lifecycle tracking for submitted actions and executor delivery semantics.
-
-Canonical tables:
-- `actions`
-- `action_attempts`
-- `instances`
-- `action_dead_letters`
-
-Rules:
-- every submitted action gets a backend-generated UUID `action_id`,
-- each action persists `ontology_release_id` and `validation_contract_hash` from submit-time validation,
-- action lifecycle is pull/lease-based with at-least-once completion semantics,
-- retryable max-attempt exhaustion transitions to `dead_letter`.
+1. execution ownership,
+2. retries and failures,
+3. execution lifecycle visibility,
+4. and the safe runtime state of managed execution.
 
 ---
 
-## 6. Ingestion Model (Pragmatic)
+## 9. AI Investigation Strategy
 
-## 6.1 Input Contract
+## 9.1 Default Interaction Model
 
-Seer can ingest Prophet wire-envelope events.
+The default investigation experience starts with a question, not with manual analytics setup.
 
-Primary fields used in this phase:
-- `event_id` (UUID)
-- `occurred_at`
-- `event_type`
-- `source`
-- `payload`
-- optional `trace_id`
-- optional `attributes`
-- optional `updated_objects`
+The user should be able to ask:
 
-`updated_objects` is used to produce `object_history` snapshots and `event_object_links` rows.
+1. what is happening,
+2. why it is happening,
+3. what changed,
+4. what will likely happen next,
+5. and what action should be taken.
 
-## 6.2 Processing Flow
+## 9.2 Investigation Responsibilities
 
-1. Parse input event.
-2. Validate required fields and UUID shape for `event_id`.
-3. Reject duplicate `event_id`.
-4. Persist row to `event_history`.
-5. Extract object snapshots (from `updated_objects` and/or payload-mapped refs).
-6. Write snapshot rows to `object_history` with UUID history IDs.
-7. Write linkage rows to `event_object_links` with event UUID + object history UUID + normalized object refs.
+The AI investigator should be able to:
 
-## 6.3 SHACL Usage
+1. interpret the question using ontology concepts,
+2. inspect relevant object and event history,
+3. run structured analytical tools when needed,
+4. synthesize findings,
+5. cite evidence,
+6. state caveats,
+7. and hand off into expert drill-down surfaces when helpful.
 
-SHACL is mandatory for ontology validation against the Prophet base metamodel.
+## 9.3 Role Of Process Mining And RCA
 
-SHACL is not required for the event ingestion path in this phase.
+Process mining and RCA remain important, but their role changes.
 
----
+They are:
 
-## 7. Analytics and Process Mining Strategy
+1. analytical tools that improve AI investigation quality,
+2. expert validation surfaces,
+3. and reusable reasoning tools for managed agents.
 
-## 7.1 Core Engine
-
-Use `pm4py` as the primary process mining library.
-
-Python is chosen partly to use `pm4py` directly in the analytics service.
-
-## 7.2 Data Access Pattern
-
-Analytics pipeline should read Arrow-backed dataframes from ClickHouse and pass them into Python analysis flows.
-
-Target pattern:
-1. Programmatic SQL in Python against ClickHouse.
-2. Arrow-backed dataframe retrieval.
-3. Lightweight transformation to `pm4py` input structures.
-4. Process mining output returned to UI + AI layer.
-
-No external public analytics dataset contract is required yet.
-
-## 7.3 Primary Mining Method (Now)
-
-Focus exclusively on object-centric Petri nets in this phase.
-
-No requirement to support the full matrix of mining techniques yet.
-
-## 7.4 Analysis Anchor
-
-Every analysis run must explicitly define:
-1. anchor object type,
-2. time window,
-3. traversal depth (for RCA paths),
-4. outcome definition (for RCA).
-
-The outcome definition is user-driven per run (direct user input or AI-agent-assisted input in UI), and can change over time as new events arrive.
+They are not the product's primary entry point.
 
 ---
 
-## 8. Root Cause Analysis Strategy (Current)
+## 10. Managed Agent Strategy
 
-The root-cause workflow is centered on recursive attribute lifting from related objects.
+## 10.1 Managed Agent Definition
 
-## 8.1 Problem Shape
+A managed agent is a Seer-run executable workflow that is defined in the ontology and operates over business evidence inside Seer's runtime.
 
-Given a target object type and outcome (for example delay/failure), identify which attributes or combinations from related objects are most associated with that outcome.
+The agent should be able to:
 
-Outcome logic is not fixed globally in this phase; it is configured at analysis time by the user/UI agent.
+1. inspect object and event history,
+2. call allowed analytical tools,
+3. invoke approved ontology-defined actions,
+4. make adaptive decisions based on live evidence,
+5. and report outcomes.
 
-## 8.2 Pipeline Shape
+## 10.2 What Is Persisted
 
-Use a two-stage pipeline:
-1. neighborhood extraction,
-2. feature ranking.
+Seer should persist:
 
-## 8.3 Neighborhood Extraction (Pluggable)
+1. the ontology-defined workflow/action identity,
+2. the operating instruction,
+3. runtime guardrails and execution limits,
+4. trusted-mode operating settings for the current phase,
+5. run history and audit evidence,
+6. and outcome tracking.
 
-The extraction engine is pluggable.
+Seer should not require compilation into a rigid workflow graph as the canonical model.
 
-Supported implementation options:
-1. iterative SQL joins (default for MVP),
-2. recursive SQL patterns,
-3. in-memory traversal after SQL seed extraction.
+## 10.3 Safe Runtime Principles
 
-Extraction flow:
-1. Start from a seed object cohort.
-2. Collect linked events.
-3. Collect co-participating object snapshots.
-4. Lift attributes across depth.
-5. Produce an analysis table keyed by seed object instance.
+The hard problem for Seer is safe execution, not workflow graph generation.
 
-## 8.4 Ranking Methods in Scope
+The runtime must provide:
 
-1. WRAcc for subgroup scoring.
-2. Multi-attribute subgroup expansion (beam-style search).
-3. Mutual information for high-cardinality features.
+1. bounded tool and action access,
+2. runtime limits and stop conditions,
+3. data access scoping,
+4. idempotent action semantics,
+5. retry and failure handling,
+6. and auditability.
 
----
+## 10.4 Agents As Actions
 
-## 9. Insight Result Contract (What It Is)
+From the rest of the system's point of view, a managed agentic workflow is just another executable action/workflow capability.
 
-The insight result contract is the response shape for an insight shown in UI and AI outputs.
+That keeps the model clean:
 
-It is not an ontology object model and not a persistence schema.  
-It is a product-facing result structure for analytics findings.
-
-Recommended fields:
-- `insight_id`
-- `title`
-- `hypothesis`
-- `target_object_type`
-- `outcome_definition`
-- `coverage`
-- `baseline_rate`
-- `segment_rate`
-- `delta`
-- `score` (for example WRAcc)
-- `evidence` (trace samples, aggregates, query refs)
-- `recommended_actions`
-
-Purpose:
-- standardize how insights are rendered,
-- standardize what AI can reference,
-- standardize what gets exported or shared.
+1. atomic processes are actions,
+2. higher-order managed agents are also actions,
+3. the ontology remains the single executable catalog,
+4. and Seer remains the runtime, not a separate ontology-independent workflow authoring system.
 
 ---
 
-## 10. AI Product Strategy by Module
+## 11. Product Experience Principles
 
-## 10.1 Ontology Copilot (First AI Workflow)
-
-This is the first shipped AI workflow.
-
-Core product surface:
-- conversational understanding of ontology concepts,
-- ontology graph and concept traversal,
-- ontology to process-context explanation.
-
-AI architecture for this workflow:
-1. System context includes Prophet base metamodel + current local ontology graph.
-2. Tooling is read-only SPARQL execution.
-3. Responses include concept URIs and query-backed evidence where applicable.
-
-Why this first:
-- ontology is relatively static,
-- lower risk than live operational RCA,
-- strong immediate user value for understanding domain semantics.
-
-## 10.1.1 AI Response Policy (Current Phase)
-
-Evidence and caveat structure is required for analytical claims.
-
-General ontology Q&A and informational retrieval do not require full analytical-evidence packaging.
-
-## 10.2 Ingestion Monitor
-
-Core product surface:
-- basic ingestion health,
-- event throughput view,
-- event parsing failure summary.
-
-AI usage:
-- summarize ingestion anomalies,
-- cluster common failure patterns,
-- suggest concrete fixes to producers.
-
-## 10.3 Process Explorer
-
-Core product surface:
-- object-centric process map,
-- timeline exploration,
-- object/event drill-down.
-
-AI usage:
-- generate guided exploration paths,
-- narrate why specific paths dominate,
-- suggest follow-up filters/comparisons.
-
-## 10.4 Root Cause Lab
-
-Core product surface:
-- configure target object/outcome,
-- set recursion depth for attribute lifting,
-- run subgroup/ranking analysis,
-- inspect ranked hypotheses.
-
-AI usage:
-- translate natural-language hypothesis into analysis configuration,
-- summarize top candidate causes,
-- propose next diagnostic slices.
-
-## 10.5 Insights Dashboard
-
-Core product surface:
-- ranked insights feed,
-- KPI trend cards,
-- saved investigation views.
-
-AI usage:
-- daily/weekly narrative summaries,
-- change detection narratives,
-- action-priority recommendations.
+1. Start from user intent in business language.
+2. Keep the ontology as the shared meaning and capability layer.
+3. Prefer evidence-backed explanation over black-box AI answers.
+4. Treat process mining and RCA as power tools, not mandatory first-step UX.
+5. Make execution safe, observable, and interruptible.
+6. Explain concepts in plain language before implementation detail.
 
 ---
 
-## 11. MVP Definition
+## 12. Immediate Priorities
 
-MVP is complete when users can:
-1. Ingest Prophet local ontology Turtle files, validate with SHACL, and upsert to Fuseki.
-2. Converse with the ontology copilot using read-only SPARQL-backed responses.
-3. Ingest event data with UUID event IDs.
-4. Persist object history with UUID history IDs.
-5. Persist event-object links tying each event UUID to specific object history UUIDs and normalized object refs.
-6. Run object-centric Petri net analysis via `pm4py` using Arrow-backed ClickHouse extracts.
-7. Run the pluggable neighborhood-extraction root-cause flow and view ranked insight results.
+1. Document the new product model clearly across vision, design, architecture, and specs.
+2. Define the Seer ontology extension for managed agent execution.
+3. Design the safe agent runtime and trusted-mode guardrail model.
+4. Define AI-first investigation product behavior before more analytics-surface expansion.
+5. Align action orchestration with the managed-agent runtime rather than treating them as separate product tracks.
 
 ---
 
-## 12. Delivery Roadmap
+## 13. Product Commitment
 
-Detailed MVP execution roadmap is maintained in:
+Seer will deliver an AI-native operating layer centered on:
 
-`docs/exec-plans/completed/mvp-roadmap-2026.md`
-
-This vision document defines strategy and product direction.
-The roadmap document defines execution phases, acceptance gates, and release criteria.
-
----
-
-## 13. Immediate Priorities
-
-1. Finalize ClickHouse schemas for the 3 core tables with UUID fields and object-ref normalization columns.
-2. Implement ontology upsert identity behavior in Fuseki using URI-based rules.
-3. Implement ingestion mapping from `updated_objects` to history + links.
-4. Build Arrow-backed extraction paths for analytics.
-5. Implement first object-centric Petri net flow in `pm4py`.
-6. Implement pluggable neighborhood extraction for root-cause analysis with iterative SQL as first backend.
-7. Ship read-only ontology explorer + ontology copilot as the first AI workflow.
-
----
-
-## 14. Product Commitment
-
-Seer will deliver practical, fast process intelligence centered on:
-- Prophet-based ontology ingestion and validation,
-- complete event/object/link history with UUID identities,
-- object-centric process mining in Python,
-- and AI-assisted investigation workflows.
+1. Prophet-grounded business meaning,
+2. complete operational history,
+3. AI-first investigation,
+4. ontology-defined executable capabilities,
+5. and managed agents that can reason over evidence and invoke approved actions safely.

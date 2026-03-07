@@ -1,10 +1,15 @@
 # DESIGN
 
-This document is the top-level design map.
+This document is the top-level design map for Seer.
 
-## Purpose
+It sits between product strategy and implementation architecture.
 
-Capture design-level decisions that sit between product vision and concrete architecture.
+For a new reader, the shortest useful summary is:
+
+1. Prophet defines the business world and capability catalog.
+2. Seer stores operational evidence over time.
+3. AI is the default investigation interface.
+4. Managed agents execute ontology-defined workflows inside a safe runtime.
 
 ## Canonical References
 
@@ -15,20 +20,18 @@ Capture design-level decisions that sit between product vision and concrete arch
 
 ## Current Design Themes
 
-1. Ontology is consumed in Seer as read-only semantic context (authoring in Prophet).
-2. Event/object/link history is first-class and immutable.
-3. UUID-based identities are required for event and object history records.
-4. Action orchestration uses a pull/lease execution model with ontology-validated submit contracts and at-least-once lifecycle guarantees.
-5. Object-centric process mining is implemented in Python with `pm4py`.
-6. RCA uses a pluggable extraction layer plus ranking methods.
-7. AI UX uses a shared backend gateway with module-scoped permissions and policy-aware evidence/caveat rendering.
-8. Ontology concept discovery for explorer workflows is backend-filtered to user-graph concepts and graph-safe categories only.
-9. User-visible field/state display in inspector flows is centralized in a shared ontology display layer (ontology-first, consistent fallbacks).
-10. Interactive agent conversations in Seer UI are implemented with `assistant-ui` as the standard frontend conversation/runtime framework across assistant surfaces.
+1. Ontology is consumed in Seer as read-only semantic context and executable capability catalog; authoring remains in Prophet.
+2. Seer extends Prophet with execution concepts for managed AI workflows rather than inventing a disconnected action model.
+3. Event, object, and relationship history are first-class and immutable evidence for both investigation and execution.
+4. AI investigation is the primary user-facing analytics experience; process mining and RCA are tools and drill-down surfaces, not the default entry point.
+5. Managed agentic workflows are ontology-defined workflows/actions executed by Seer in a bounded runtime rather than compiled into rigid workflow specs.
+6. Safe execution is a core design problem: runtime guardrails, budgets, auditability, and idempotent action semantics must be explicit even before platform authz is designed.
+7. User-visible evidence and caveats are required for analytical and agent-driven conclusions.
+8. The ontology remains the single capability catalog; Seer should not introduce a separate action registry concept.
+9. User-visible field/state display in inspector and investigation flows remains centralized in a shared ontology display layer.
+10. Interactive agent conversations in Seer UI use `assistant-ui` as the standard frontend conversation/runtime framework across assistant surfaces.
 11. Seer UI components are built on Radix UI primitives as the standard accessibility and interaction foundation for reusable frontend components.
-12. The shared Seer shell is responsive by default: desktop uses a persistent navigation rail, while narrow/mobile widths use a dismissible drawer pattern that preserves full-width content readability and keeps navigation overlays above secondary shell affordances.
-13. Successful analytics runs must create an obvious completion state at the current viewport and provide a direct path into the primary result surface rather than relying on users to discover off-screen output.
-14. URL-backed analysis state uses a strict allowlist of shareable query params; included state is normalized to safe defaults and treated as the source of truth for the visible investigation context.
+12. The shared Seer shell is responsive by default, but shell affordances should stay subordinate to the primary investigation and managed-agent experiences.
 
 ## Design Docs Index
 
