@@ -84,6 +84,7 @@ Current post-MVP execution state:
 
 - `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/ai-investigation-workbench-execution.md` (all phases complete; product/spec ratification, validation, and archive transition finished on 2026-03-07)
 - `completed`: `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md` (product reframing and draft-spec phase closed on 2026-03-07; follow-on execution/runtime planning intentionally deferred)
 - `completed`: `docs/exec-plans/completed/responsive-shell-and-mobile-navigation.md` (responsive shell, drawer lifecycle hardening, and mobile shell validation ratified on 2026-03-07)
 - `completed`: `docs/exec-plans/completed/analytics-run-results-discoverability.md` (analytics completion summaries and result-reveal behavior ratified on 2026-03-07)

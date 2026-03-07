@@ -1,7 +1,7 @@
 # AI Investigation Workbench
 
-**Status:** draft  
-**Owner plan:** `docs/exec-plans/active/ai-investigation-workbench-execution.md`  
+**Status:** completed  
+**Owner plan:** `docs/exec-plans/completed/ai-investigation-workbench-execution.md`  
 **Last updated:** 2026-03-07
 
 ---
@@ -81,27 +81,30 @@ The workbench may use:
    - run process mining,
    - run RCA,
    - inspect current agent or action state.
-7. Seer returns a structured answer with:
+7. Seer returns a markdown-first investigation answer with:
    - concise narrative summary,
-   - evidence cards,
-   - explicit caveats,
-   - suggested next actions,
-   - links into expert drill-down surfaces when useful.
+   - semantic evidence, caveat, next-action, follow-up, and linked-surface regions when supported,
+   - explicit drill-down links into expert surfaces,
+   - and lightweight clarification controls when missing scope needs a rerun.
 8. User can continue the conversation, refine the question, or launch a follow-up action/agent flow.
 
 ## Investigation Response Contract
 
-Every investigation answer should try to include:
+Delivered workbench answers are markdown-first rather than a rigid field-by-field schema.
 
-1. `answer`
-2. `why_it_matters`
-3. `evidence`
-4. `caveats`
-5. `recommended_next_actions`
-6. `follow_up_questions`
-7. `linked_surfaces`
+The stable V1 contract is:
 
-The workbench should optimize for explanation quality over raw verbosity.
+1. Narrative markdown answer content.
+2. Optional semantic blocks:
+   - `:::evidence`
+   - `:::caveat`
+   - `:::next-action`
+   - `:::follow-up`
+   - `:::linked-surface`
+3. Typed linked-surface metadata that mirrors rendered drill-down targets so deep links remain dependable.
+4. Clarifying turns that reuse the same thread and render follow-up/caveat semantics without forcing a wizard-specific payload.
+
+Plain markdown remains a valid fallback when only part of the semantic block set is present.
 
 ## Evidence UX Expectations
 
@@ -173,12 +176,12 @@ The investigation AI should:
 
 ## Out Of Scope For This Spec
 
-1. Final route naming and exact page layout.
+1. Additional route aliases and detailed page-layout variants beyond the delivered `/assistant` workbench surface.
 2. Final prompt/runtime implementation.
 3. Final auth and multi-tenant policy model.
 4. Final authz and approval flows for execution-triggering recommendations.
 
-## Open Questions
+## Follow-On Questions
 
 1. When should the workbench ask clarifying questions versus making a best-effort investigation directly?
 2. How much of the internal investigation plan should be visible to the user?

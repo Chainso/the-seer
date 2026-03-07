@@ -1,10 +1,10 @@
 # Post-MVP Exec Plan: AI Investigation Workbench Execution
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 12  
 **Agent slot:** AI-WORKBENCH-1  
 **Predecessor:** `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md`  
-**Successor:** TBD  
+**Successor:** none  
 **Last updated:** 2026-03-07
 
 ---
@@ -191,7 +191,7 @@ Primary files:
 2. `seer-backend/src/seer_backend/ai/gateway.py`
 3. `seer-backend/tests/test_ai_phase5.py`
 4. New backend module(s) under `seer-backend/src/seer_backend/ai/` if extraction is warranted
-5. `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+5. `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
 
 Expected implementation:
 
@@ -241,7 +241,7 @@ Primary files:
 2. New backend helper module(s) for semantic markdown composition/parsing as needed
 3. `seer-backend/tests/test_ai_phase5.py`
 4. `docs/design-docs/` addition only if the implementation reveals a reusable semantic-markdown contract worth preserving
-5. `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+5. `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
 
 Expected implementation:
 
@@ -287,7 +287,7 @@ Primary files:
 4. `seer-ui/app/components/assistant/use-shared-assistant-runtime.ts`
 5. New workbench rendering utilities/components under `seer-ui/app/components/assistant/` or `seer-ui/app/components/workbench/`
 6. `seer-ui/tests/*.test.mjs` as needed
-7. `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+7. `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
 
 Expected implementation:
 
@@ -334,7 +334,7 @@ Primary files:
 3. `seer-ui/app/components/assistant/assistant-workspace.tsx`
 4. New workbench page/surface components
 5. Nearby layout/nav files if route labeling or affordances change
-6. `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+6. `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
 
 Expected implementation:
 
@@ -387,7 +387,7 @@ Primary files:
 2. Workbench frontend files from Phases 3-4
 3. Relevant inspector link/URL helper files under `seer-ui/app/lib/` or `seer-ui/app/components/inspector/`
 4. `docs/product-specs/ai-investigation-workbench.md`
-5. `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+5. `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
 
 Expected implementation:
 
@@ -443,7 +443,7 @@ Primary files:
 4. `docs/product-specs/index.md`
 5. `docs/product-specs/ai-investigation-workbench.md`
 6. `docs/exec-plans/active/index.md`
-7. `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+7. `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
 8. `docs/exec-plans/completed/README.md`
 9. `docs/exec-plans/tech-debt-tracker.md` if needed
 
@@ -474,7 +474,7 @@ Worker handoff requirements:
 1. Read first:
    - this plan
    - touched canonical docs/specs/indexes
-2. Do not archive the plan until controller verification passes.
+2. Archive the plan only after controller verification passes.
 3. Commit subject:
    - `Ratify AI investigation workbench docs and validation`
 
@@ -492,6 +492,15 @@ Worker handoff requirements:
 8. Recommendations remain clearly separate from established facts and from autonomous execution.
 9. Validation passes or only documented pre-existing baseline failures remain.
 10. Active/completed/spec indexes remain accurate throughout execution.
+
+## Phase 6 Acceptance Evidence
+
+1. `cd seer-ui && npm run lint` -> pass.
+2. `cd seer-ui && npm run test:contracts` -> expected non-regression failure remains isolated to pre-existing `tests/insights.contract.test.mjs`.
+3. `cd seer-ui && npm run build` -> pass.
+4. `seer-backend/.venv/bin/pytest seer-backend/tests/test_ai_phase5.py -q` -> pass (`15 passed`).
+5. `seer-backend/.venv/bin/ruff check seer-backend/src/seer_backend/api/ai.py seer-backend/src/seer_backend/ai seer-backend/tests/test_ai_phase5.py` -> pass.
+6. `ARCHITECTURE.md`, `DESIGN.md`, and `docs/exec-plans/tech-debt-tracker.md` required no change because the delivered workbench behavior already matched the canonical architecture/design rules and introduced no new accepted residual debt.
 
 ## Validation Strategy
 
@@ -511,7 +520,7 @@ Milestone validation:
 1. `docs/product-specs/ai-investigation-workbench.md`
 2. `docs/product-specs/index.md`
 3. `docs/exec-plans/active/index.md`
-4. `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+4. `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
 5. `ARCHITECTURE.md` if surface/runtime boundaries materially change
 6. `DESIGN.md` or `docs/design-docs/*` only if reusable semantic-markdown rules need canonical capture
 7. `docs/exec-plans/tech-debt-tracker.md` if deferrals remain after ratification
@@ -544,6 +553,17 @@ Milestone validation:
 10. 2026-03-07: Phase 3 routes the dedicated `/assistant` page through workbench stream mode while intentionally deferring the full copy/layout rewrite to Phase 4.
 11. 2026-03-07: Phase 4 keeps the shared assistant surface component but allows the dedicated `/assistant` page variant to diverge aggressively in copy, layout, and investigation-status treatment.
 12. 2026-03-07: Phase 5 deep links should prefer real scoped expert surfaces; where Seer cannot safely infer a specific live action-status target, the handoff should land on ontology action capabilities and explicitly say that live status still requires manual verification.
+13. 2026-03-07: Phase 6 ratification confirmed no additional `ARCHITECTURE.md`, `DESIGN.md`, or tech-debt updates were needed because the delivered workbench behavior stayed within already-ratified product/design/architecture boundaries.
+
+## Completion Summary
+
+1. Delivered the AI Investigation Workbench as Seer's `/assistant` experience with dedicated streaming, semantic markdown rendering, clarifying turns, and expert-surface handoffs.
+2. Ratified the shipped behavior in canonical product docs by promoting `docs/product-specs/ai-investigation-workbench.md` from draft to completed state and aligning the spec with the markdown-first response contract.
+3. Closed the execution-plan lifecycle by updating active/completed indexes, recording final Phase 6 validation evidence, and archiving this plan under `docs/exec-plans/completed/`.
+
+## Known Issues and Deferrals
+
+1. No new workbench-specific debt entries were added. Remaining validation noise is unchanged from the baseline ledger: the pre-existing frontend contract failure in `seer-ui/tests/insights.contract.test.mjs` remains outside this phase's scope.
 
 ## Progress Log
 
@@ -586,6 +606,11 @@ Milestone validation:
    - added a lightweight clarification strip on `/assistant` for anchor-object selection, recent time-window presets, and scoped reruns
    - strengthened recommendation/caveat treatment so suggestions read distinctly from findings and caveats stay prominent before acting
    - validation passed: `seer-backend/.venv/bin/pytest seer-backend/tests/test_ai_phase5.py -q`, `cd seer-ui && npm run build`, `cd seer-ui && npm run test:contracts` with only the pre-existing `tests/insights.contract.test.mjs` failure remaining, plus browser QA against `http://127.0.0.1:3000/assistant?q=Investigate%20order%20delay%20risk` using a mocked scoped rerun because the local backend returned an invalid OpenAI API key on real scoped investigation requests
+11. 2026-03-07: Completed Phase 6 ratification and archive transition:
+   - promoted `docs/product-specs/ai-investigation-workbench.md` from draft to completed and aligned the spec with the delivered markdown-first semantic-block contract
+   - updated `docs/product-specs/index.md`, `docs/exec-plans/active/index.md`, and `docs/exec-plans/completed/README.md` so active/completed coverage reflects the shipped workbench
+   - reran final frontend/backend validation; only the pre-existing `seer-ui/tests/insights.contract.test.mjs` contract failure remained
+   - archived this plan to `docs/exec-plans/completed/ai-investigation-workbench-execution.md` with Phase 6 marked complete
 
 ## Progress Tracking
 
@@ -595,13 +620,13 @@ Milestone validation:
 - [x] Phase 3 complete
 - [x] Phase 4 complete
 - [x] Phase 5 complete
-- [ ] Phase 6 complete
+- [x] Phase 6 complete
 
 Current execution state:
 
-1. Plan opened and in progress.
-2. Baseline, backend contract, backend semantic-markdown, frontend renderer foundation, dedicated `/assistant` workbench surface, and expert handoff/clarification phases complete.
-3. Next controller action: execute Phase 6 hardening, docs, and completion transition.
+1. All six phases are complete.
+2. Final validation matched the baseline ledger except for the pre-existing frontend `tests/insights.contract.test.mjs` failure.
+3. This plan is archived under `docs/exec-plans/completed/`.
 
 ## Controller Handoff Packet: Phase 1
 
@@ -609,7 +634,7 @@ Work-so-far summary:
 
 1. Current base commit before workbench implementation: `fa45315` (`Switch OpenAI runtime defaults to opencode big-pickle`)
 2. Controller-opened planning/docs changes are present in:
-   - `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+   - `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
    - `docs/exec-plans/active/index.md`
    - `docs/product-specs/index.md`
    - `docs/product-specs/ai-investigation-workbench.md`
@@ -630,7 +655,7 @@ Work-so-far summary:
 Initial lookup (required):
 
 1. `docs/product-specs/ai-investigation-workbench.md`
-2. `docs/exec-plans/active/ai-investigation-workbench-execution.md`
+2. `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
 3. `seer-backend/src/seer_backend/api/ai.py`
 4. `seer-backend/src/seer_backend/ai/gateway.py`
 5. `seer-backend/tests/test_ai_phase5.py`

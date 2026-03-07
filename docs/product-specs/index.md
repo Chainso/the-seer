@@ -21,18 +21,17 @@ Catalog user-facing product specs and make implementation state obvious.
 6. `ui-experience-replatform-phase-f-hardening-rollout.md` - completed
 7. `history-inspector-phase-3a.md` - completed
 8. `action-orchestration-backend-service.md` - completed
+9. `ai-investigation-workbench.md` - completed
 
 ## Draft Specs
 
-1. `ai-investigation-workbench.md` - draft (`not implemented yet`)
-2. `managed-agentic-workflows.md` - draft (`not implemented yet`)
-3. `managed-agent-controls-and-approvals.md` - draft (`Managed Agent Runtime Controls`, `not implemented yet`)
+1. `managed-agentic-workflows.md` - draft (`not implemented yet`)
+2. `managed-agent-controls-and-approvals.md` - draft (`Managed Agent Runtime Controls`, `not implemented yet`)
 
 ## Current Implementation Gaps
 
-1. `ai-investigation-workbench.md`
-2. `managed-agentic-workflows.md`
-3. `managed-agent-controls-and-approvals.md`
+1. `managed-agentic-workflows.md`
+2. `managed-agent-controls-and-approvals.md`
 
 Current active execution coverage:
 
