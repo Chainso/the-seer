@@ -14,6 +14,7 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 6. `docs/exec-plans/active/`
 7. `docs/exec-plans/completed/`
 8. `docs/exec-plans/tech-debt-tracker.md`
+9. `prophet/prophet.ttl`
 
 ## Operating Model
 
