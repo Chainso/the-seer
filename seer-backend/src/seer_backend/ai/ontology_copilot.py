@@ -1339,7 +1339,8 @@ def _execute_create_ontology_graph_artifact_call(
                 return CopilotToolResult(
                     tool=tool_call.tool,
                     error=(
-                        "tool validation failed: visible_concept_uris must contain non-empty strings"
+                        "tool validation failed: visible_concept_uris must contain "
+                        "non-empty strings"
                     ),
                 )
             uri = item.strip()

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
@@ -39,12 +39,12 @@ interface NavSidebarProps {
 export function NavSidebar({ variant = 'desktop', onNavigate }: NavSidebarProps) {
   const pathname = usePathname();
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
   const isDark = mounted ? resolvedTheme === 'dark' : false;
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const toggleTheme = () => {
     setTheme(isDark ? 'light' : 'dark');

@@ -84,6 +84,7 @@ Current post-MVP execution state:
 
 - `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/backend-frontend-lint-build-stability-2026-03-08.md` (archived on 2026-03-08 after restoring canonical backend/frontend lint and build health; backend Ruff passed after wrapping an overlong ontology copilot validation string, and frontend ESLint passed after replacing the sidebar mount effect with a `useSyncExternalStore` mounted-state pattern)
 - `completed`: `docs/exec-plans/completed/assistant-canvas-shared-display-surfaces.md` (archived on 2026-03-08 after extracting shared RCA, object-history, and ontology display surfaces so assistant canvas and expert pages now reuse the same displayed investigation UI while keeping host-specific orchestration separate)
 - `completed`: `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md` (archived on 2026-03-07 after ratifying `/assistant` as the canonical conversational assistant surface with dynamic skill loading, artifact-backed canvas presentation, and OC-DFG canvas rendering)
 - `completed`: `docs/exec-plans/completed/ai-investigation-workbench-execution.md` (first workbench delivery archived on 2026-03-07; product/spec ratification completed, and a broader `/assistant` redesign track opened the same day after confirming contract and UI regressions)

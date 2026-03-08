@@ -38,3 +38,5 @@ Each completed plan should preserve:
 26. `ai-first-investigation-and-managed-agents.md` - completed (2026-03-07)
 27. `ai-investigation-workbench-execution.md` - completed (2026-03-07)
 28. `assistant-conversation-canvas-and-skills.md` - completed (2026-03-07)
+29. `assistant-canvas-shared-display-surfaces.md` - completed (2026-03-08)
+30. `backend-frontend-lint-build-stability-2026-03-08.md` - completed (2026-03-08)
