@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
 import { Network, Sparkles, Sun, Moon, Database, Bot } from 'lucide-react';
-
-const THEME_STORAGE_KEY = 'theme';
-const THEME_CHANGE_EVENT = 'seer-theme-change';
 
 const navigation = [
   {
@@ -38,52 +36,18 @@ interface NavSidebarProps {
   onNavigate?: () => void;
 }
 
-function getThemeSnapshot(): boolean {
-  if (typeof window === 'undefined') {
-    return true;
-  }
-  const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-  return storedTheme ? storedTheme === 'dark' : true;
-}
-
-function subscribeToTheme(onStoreChange: () => void): () => void {
-  if (typeof window === 'undefined') {
-    return () => undefined;
-  }
-
-  const handleStorage = (event: StorageEvent) => {
-    if (event.key && event.key !== THEME_STORAGE_KEY) {
-      return;
-    }
-    onStoreChange();
-  };
-  const handleThemeChange = () => {
-    onStoreChange();
-  };
-
-  window.addEventListener('storage', handleStorage);
-  window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
-
-  return () => {
-    window.removeEventListener('storage', handleStorage);
-    window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
-  };
-}
-
 export function NavSidebar({ variant = 'desktop', onNavigate }: NavSidebarProps) {
   const pathname = usePathname();
-  const isDark = useSyncExternalStore(subscribeToTheme, getThemeSnapshot, () => true);
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  const isDark = mounted ? resolvedTheme === 'dark' : false;
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark);
-    localStorage.setItem(THEME_STORAGE_KEY, isDark ? 'dark' : 'light');
-  }, [isDark]);
+    setMounted(true);
+  }, []);
 
   const toggleTheme = () => {
-    const nextTheme = !isDark;
-    document.documentElement.classList.toggle('dark', nextTheme);
-    localStorage.setItem(THEME_STORAGE_KEY, nextTheme ? 'dark' : 'light');
-    window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+    setTheme(isDark ? 'light' : 'dark');
   };
 
   const containerClassName =
