@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 from seer_backend.analytics import service as process_service_module
 from seer_backend.analytics.errors import ProcessMiningDependencyUnavailableError
-from seer_backend.analytics.repository import InMemoryProcessMiningRepository
+from seer_backend.analytics.models import ProcessMiningRequest
+from seer_backend.analytics.repository import (
+    ClickHouseProcessMiningRepository,
+    InMemoryProcessMiningRepository,
+)
 from seer_backend.analytics.service import OcpnMiningWrapper, ProcessMiningService
 from seer_backend.history.repository import InMemoryHistoryRepository
 from seer_backend.history.service import HistoryService
@@ -393,6 +399,71 @@ def test_ocdfg_mining_returns_ui_payload_and_trace_handles() -> None:
     drilldown_body = drilldown.json()
     assert drilldown_body["matched_count"] >= 1
     assert drilldown_body["traces"]
+
+
+def test_clickhouse_ocdfg_extraction_preserves_schema_for_empty_dataframe_results() -> None:
+    from chdb import datastore as pd
+
+    class StubClickHouseProcessMiningRepository(ClickHouseProcessMiningRepository):
+        async def _select_rows(self, query: object) -> list[dict[str, int]]:
+            del query
+            return next(count_responses)
+
+        async def _select_dataframe(self, query: object) -> object:
+            del query
+            return next(dataframe_responses)
+
+    payload = ProcessMiningRequest(
+        anchor_object_type=_ORDER_URI,
+        start_at=datetime(2026, 2, 22, 9, 0, tzinfo=UTC),
+        end_at=datetime(2026, 2, 22, 11, 0, tzinfo=UTC),
+    )
+
+    count_responses = iter([[{"cnt": 1}], [{"cnt": 0}]])
+    dataframe_responses = iter(
+        [
+            pd.DataFrame(
+                [
+                    {
+                        "ocel_eid": "evt-1",
+                        "ocel_activity": "order.created",
+                        "ocel_timestamp": "2026-02-22T10:00:00Z",
+                    }
+                ]
+            ).convert_dtypes(dtype_backend="pyarrow"),
+            pd.DataFrame([]).convert_dtypes(dtype_backend="pyarrow"),
+            pd.DataFrame([]).convert_dtypes(dtype_backend="pyarrow"),
+        ]
+    )
+    repository = StubClickHouseProcessMiningRepository(
+        host="localhost",
+        port=8123,
+        database="seer",
+        user="default",
+        password="",
+        timeout_seconds=1.0,
+        migrations_dir=Path("/tmp"),
+    )
+
+    frames = asyncio.run(
+        repository.extract_ocdfg_frames(
+            payload,
+            max_events=5_000,
+            max_relations=40_000,
+        )
+    )
+
+    assert list(frames.events.columns) == ["ocel:eid", "ocel:activity", "ocel:timestamp"]
+    assert list(frames.relations.columns) == [
+        "ocel:eid",
+        "ocel:activity",
+        "ocel:timestamp",
+        "ocel:type",
+        "ocel:oid",
+    ]
+    assert list(frames.objects.columns) == ["ocel:type", "ocel:oid"]
+    assert frames.relations.empty
+    assert frames.objects.empty
 
 
 def test_ocdfg_mining_is_deterministic_for_same_snapshot() -> None:

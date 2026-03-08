@@ -326,14 +326,26 @@ class ClickHouseProcessMiningRepository:
         relation_frame = await self._select_dataframe(relations_stmt)
         object_frame = await self._select_dataframe(objects_stmt)
 
-        event_frame = event_frame.rename(
+        event_frame = _normalize_ocdfg_source_frame(
+            event_frame,
+            required_columns=["ocel_eid", "ocel_activity", "ocel_timestamp"],
+        ).rename(
             columns={
                 "ocel_eid": "ocel:eid",
                 "ocel_activity": "ocel:activity",
                 "ocel_timestamp": "ocel:timestamp",
             }
         )
-        relation_frame = relation_frame.rename(
+        relation_frame = _normalize_ocdfg_source_frame(
+            relation_frame,
+            required_columns=[
+                "ocel_eid",
+                "ocel_activity",
+                "ocel_timestamp",
+                "ocel_type",
+                "object_ref_hash",
+            ],
+        ).rename(
             columns={
                 "ocel_eid": "ocel:eid",
                 "ocel_activity": "ocel:activity",
@@ -347,7 +359,10 @@ class ClickHouseProcessMiningRepository:
             + relation_frame["object_ref_hash"].astype(str)
         )
         relation_frame = relation_frame.drop(columns=["object_ref_hash"])
-        object_frame = object_frame.rename(
+        object_frame = _normalize_ocdfg_source_frame(
+            object_frame,
+            required_columns=["ocel_type", "object_ref_hash"],
+        ).rename(
             columns={
                 "ocel_type": "ocel:type",
             }
@@ -704,6 +719,36 @@ def _to_arrow_dataframe(rows: list[dict[str, Any]], *, columns: list[str]) -> An
     pd = _load_pandas()
     frame = pd.DataFrame(rows, columns=columns)
     return frame.convert_dtypes(dtype_backend="pyarrow")
+
+
+def _normalize_ocdfg_source_frame(frame: Any, *, required_columns: list[str]) -> Any:
+    if frame is None or not hasattr(frame, "columns"):
+        raise ProcessMiningError("OC-DFG extraction returned non-dataframe payload")
+
+    normalized = frame.copy(deep=True)
+    columns = {str(name): name for name in normalized.columns}
+    rename_map: dict[Any, str] = {}
+    for column_name, original_name in columns.items():
+        if "." not in column_name:
+            continue
+        unqualified_name = column_name.rsplit(".", 1)[-1]
+        if unqualified_name in required_columns and unqualified_name not in columns:
+            rename_map[original_name] = unqualified_name
+    if rename_map:
+        normalized = normalized.rename(columns=rename_map)
+
+    normalized_column_names = {str(column) for column in normalized.columns}
+    missing_columns = [name for name in required_columns if name not in normalized_column_names]
+    if not missing_columns:
+        return normalized
+
+    if getattr(normalized, "empty", False):
+        return _to_arrow_dataframe([], columns=required_columns)
+
+    raise ProcessMiningError(
+        "OC-DFG extraction payload is missing required columns: "
+        + ", ".join(sorted(missing_columns))
+    )
 
 
 def _load_pandas() -> Any:
