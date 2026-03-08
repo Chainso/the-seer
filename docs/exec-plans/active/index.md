@@ -65,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. none
+1. `managed-agent-runtime-and-agentic-workflows.md` - in_progress (`follow-on runtime-design and implementation plan for Seer ontology extension, generic action control-plane reuse, ClickHouse transcript persistence, lineage/provenance contracts, and agentic workflow execution UI/API surfaces`)
 
 ## Post-MVP Status Tracking
 
@@ -82,7 +82,7 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: none
+- `in_progress`: `docs/exec-plans/active/managed-agent-runtime-and-agentic-workflows.md` (opened on 2026-03-08 to define the Seer ontology extension, generic action orchestration integration, ClickHouse transcript storage, execution lineage/provenance fields, and agentic workflow execution UI/API contracts)
 - `blocked`: none
 - `completed`: `docs/exec-plans/completed/backend-frontend-lint-build-stability-2026-03-08.md` (archived on 2026-03-08 after restoring canonical backend/frontend lint and build health; backend Ruff passed after wrapping an overlong ontology copilot validation string, and frontend ESLint passed after replacing the sidebar mount effect with a `useSyncExternalStore` mounted-state pattern)
 - `completed`: `docs/exec-plans/completed/assistant-canvas-shared-display-surfaces.md` (archived on 2026-03-08 after extracting shared RCA, object-history, and ontology display surfaces so assistant canvas and expert pages now reuse the same displayed investigation UI while keeping host-specific orchestration separate)
