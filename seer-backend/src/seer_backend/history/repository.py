@@ -48,6 +48,7 @@ _EVENT_HISTORY = table(
     column("payload"),
     column("trace_id"),
     column("attributes"),
+    column("produced_by_execution_id"),
     column("ingested_at"),
 )
 _OBJECT_HISTORY = table(
@@ -213,6 +214,11 @@ class ClickHouseHistoryRepository:
                         if record.attributes is not None
                         else None
                     ),
+                    "produced_by_execution_id": (
+                        str(record.produced_by_execution_id)
+                        if record.produced_by_execution_id is not None
+                        else None
+                    ),
                     "ingested_at": _to_clickhouse_datetime(record.ingested_at),
                 }
             ],
@@ -292,6 +298,7 @@ class ClickHouseHistoryRepository:
                 event_history.c.payload,
                 event_history.c.trace_id,
                 event_history.c.attributes,
+                event_history.c.produced_by_execution_id,
                 event_history.c.ingested_at,
             )
             .select_from(event_history)
@@ -480,6 +487,7 @@ class ClickHouseHistoryRepository:
                 events.c.trace_id.label("trace_id"),
                 events.c.payload.label("payload"),
                 events.c.attributes.label("attributes"),
+                events.c.produced_by_execution_id.label("produced_by_execution_id"),
                 objects.c.recorded_at.label("recorded_at"),
                 objects.c.object_payload.label("object_payload"),
             )
@@ -532,6 +540,7 @@ class ClickHouseHistoryRepository:
                 events.c.occurred_at.label("occurred_at"),
                 events.c.event_type.label("event_type"),
                 events.c.source.label("source"),
+                events.c.produced_by_execution_id.label("produced_by_execution_id"),
                 objects.c.object_payload.label("object_payload"),
                 objects.c.recorded_at.label("recorded_at"),
             )
@@ -754,6 +763,9 @@ class InMemoryHistoryRepository:
                     trace_id=event.trace_id if event else None,
                     payload=event.payload if event else None,
                     attributes=event.attributes if event else None,
+                    produced_by_execution_id=(
+                        event.produced_by_execution_id if event else None
+                    ),
                     relation_role=link.relation_role,
                     linked_at=link.linked_at,
                     object_history_id=link.object_history_id,
@@ -808,6 +820,9 @@ class InMemoryHistoryRepository:
                     occurred_at=event.occurred_at if event else None,
                     event_type=event.event_type if event else None,
                     source=event.source if event else None,
+                    produced_by_execution_id=(
+                        event.produced_by_execution_id if event else None
+                    ),
                     object_payload=object_row.object_payload if object_row else None,
                     recorded_at=object_row.recorded_at if object_row else None,
                 )
@@ -832,6 +847,7 @@ def _event_row_from_clickhouse(row: dict[str, Any]) -> EventHistoryRecord:
         payload=_load_json_object(row.get("payload")),
         trace_id=_to_optional_string(row.get("trace_id")),
         attributes=_load_json_object(row.get("attributes"), default=None),
+        produced_by_execution_id=_to_optional_uuid(row.get("produced_by_execution_id")),
         ingested_at=_parse_clickhouse_datetime(str(row["ingested_at"])),
     )
 
@@ -881,6 +897,14 @@ def _object_event_row_from_clickhouse(row: dict[str, Any]) -> ObjectEventRecord:
             _row_value(row, "attributes", "e.attributes", default=None),
             default=None,
         ),
+        produced_by_execution_id=_to_optional_uuid(
+            _row_value(
+                row,
+                "produced_by_execution_id",
+                "e.produced_by_execution_id",
+                default=None,
+            )
+        ),
         relation_role=_to_optional_string(
             _row_value(row, "relation_role", "l.relation_role", default=None)
         ),
@@ -925,6 +949,14 @@ def _relation_row_from_clickhouse(row: dict[str, Any]) -> EventObjectRelationRec
             _row_value(row, "event_type", "e.event_type", default=None)
         ),
         source=_to_optional_string(_row_value(row, "source", "e.source", default=None)),
+        produced_by_execution_id=_to_optional_uuid(
+            _row_value(
+                row,
+                "produced_by_execution_id",
+                "e.produced_by_execution_id",
+                default=None,
+            )
+        ),
         object_payload=_load_json_object(
             _row_value(row, "object_payload", "o.object_payload", default=None),
             default=None,

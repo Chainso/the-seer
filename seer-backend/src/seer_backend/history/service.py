@@ -59,6 +59,7 @@ class HistoryService:
             payload=payload.payload,
             trace_id=payload.trace_id,
             attributes=payload.attributes,
+            produced_by_execution_id=payload.produced_by_execution_id,
             ingested_at=ingested_at,
         )
 
@@ -141,6 +142,7 @@ class HistoryService:
                     payload=row.payload,
                     trace_id=row.trace_id,
                     attributes=row.attributes,
+                    produced_by_execution_id=row.produced_by_execution_id,
                     ingested_at=row.ingested_at,
                 )
                 for row in rows
@@ -248,6 +250,7 @@ class HistoryService:
                     trace_id=row.trace_id,
                     payload=row.payload,
                     attributes=row.attributes,
+                    produced_by_execution_id=row.produced_by_execution_id,
                     relation_role=row.relation_role,
                     linked_at=row.linked_at,
                     object_history_id=row.object_history_id,
@@ -291,6 +294,7 @@ class HistoryService:
                     occurred_at=row.occurred_at,
                     event_type=row.event_type,
                     source=row.source,
+                    produced_by_execution_id=row.produced_by_execution_id,
                     object_payload=row.object_payload,
                     recorded_at=row.recorded_at,
                 )

@@ -53,6 +53,7 @@ class EventIngestRequest(BaseModel):
     trace_id: str | None = Field(default=None, max_length=200)
     schema_version: str | None = Field(default=None, max_length=120)
     attributes: JsonObject | None = None
+    produced_by_execution_id: UUID | None = None
     updated_objects: list[UpdatedObjectPayload] | None = None
 
     @field_validator("event_type")
@@ -84,6 +85,7 @@ class EventHistoryItem(BaseModel):
     payload: JsonObject
     trace_id: str | None = None
     attributes: JsonObject | None = None
+    produced_by_execution_id: UUID | None = None
     ingested_at: datetime
 
 
@@ -133,6 +135,7 @@ class ObjectEventItem(BaseModel):
     trace_id: str | None = None
     payload: JsonObject | None = None
     attributes: JsonObject | None = None
+    produced_by_execution_id: UUID | None = None
     relation_role: str | None = None
     linked_at: datetime
     object_history_id: UUID
@@ -160,6 +163,7 @@ class EventObjectRelationItem(BaseModel):
     occurred_at: datetime | None = None
     event_type: str | None = None
     source: str | None = None
+    produced_by_execution_id: UUID | None = None
     object_payload: JsonObject | None = None
     recorded_at: datetime | None = None
 
@@ -197,6 +201,7 @@ class EventHistoryRecord:
     payload: JsonObject
     trace_id: str | None
     attributes: JsonObject | None
+    produced_by_execution_id: UUID | None
     ingested_at: datetime
 
 
@@ -237,6 +242,7 @@ class EventObjectRelationRecord:
     occurred_at: datetime | None
     event_type: str | None
     source: str | None
+    produced_by_execution_id: UUID | None
     object_payload: JsonObject | None
     recorded_at: datetime | None
 
@@ -262,6 +268,7 @@ class ObjectEventRecord:
     trace_id: str | None
     payload: JsonObject | None
     attributes: JsonObject | None
+    produced_by_execution_id: UUID | None
     relation_role: str | None
     linked_at: datetime
     object_history_id: UUID

@@ -758,6 +758,7 @@ Expected when implementation lands:
 11. 2026-03-08: Backend modularization should introduce `agent_orchestration` for LLM-backed agent execution while retaining `actions` as the generic action execution/orchestration domain.
 12. 2026-03-08: The Seer ontology extension will live in `prophet/seer.ttl` and be loaded automatically alongside `prophet/prophet.ttl` by backend ontology validation/bootstrap paths.
 13. 2026-03-08: `action_kind` classification is derived from ontology subtype relationships with precedence `agentic_workflow` > `process` > `workflow`, so custom Prophet subclasses still map cleanly into the generic action control plane.
+14. 2026-03-08: Phase 3 transcript sequencing is backend-assigned per `(execution_id, attempt_no)` at append time, while resume remains attempt-scoped and transcript reads may still span all attempts for audit/debug views.
 
 ## Progress Log
 
@@ -770,16 +771,20 @@ Expected when implementation lands:
 7. 2026-03-08: Phase 2 is opened for worker execution with controller-gated requirements to read this entire plan first, use the `execute-phase` skill, update this plan while working, run scoped validation, and create a phase commit.
 8. 2026-03-08: Phase 2 implementation landed in the generic action control plane: `ActionKind` (`process`, `workflow`, `agentic_workflow`), optional `parent_execution_id`, `running` replacing `leased` as the canonical in-flight state, and ontology-driven submit-time classification derived from action type metadata.
 9. 2026-03-08: Phase 2 validation completed successfully: `cd seer-backend && uv run ruff check src tests` passed, targeted `uv run pytest -q tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_concurrency.py tests/test_actions_repository.py tests/test_actions_status_api.py tests/test_ontology_phase1.py` passed (`52 passed, 3 warnings`), and full `uv run pytest -q` passed (`129 passed, 6 warnings`).
+10. 2026-03-08: Phase 3 implementation landed backend-only primitives under `seer_backend/agent_orchestration`: append-only transcript models/repository/service, ordered resume-state reconstruction from persisted `completion_messages`, ClickHouse transcript migration, and optional `produced_by_execution_id` carried through history ingest/timeline/object-event/relation models.
+11. 2026-03-08: Phase 3 focused validation passed before the full backend gate: `cd seer-backend && uv run ruff check src tests` passed and targeted `uv run pytest -q tests/test_agent_orchestration_phase3.py tests/test_history_phase2.py` passed (`16 passed, 1 warning`).
+12. 2026-03-08: Phase 3 final backend validation completed successfully: `cd seer-backend && uv run ruff check src tests` passed and full `uv run pytest -q` passed (`133 passed, 6 warnings`).
 
 ## Progress Tracking
 
 - [x] Phase 1 architecture lock opened in docs
 - [x] Phase 2 ontology extension + action control-plane evolution
-- [ ] Phase 3 transcript persistence + resume + provenance
+- [x] Phase 3 transcript persistence + resume + provenance
 - [ ] Phase 4 agentic workflow execution APIs + UI surfaces
 - [ ] Phase 5 canonical docs/spec ratification
 
 Current execution state:
 
 1. `completed`: Phase 2 ontology extension + action control-plane evolution.
-2. `ready_for_handoff`: Phase 3 transcript persistence + runtime resume + produced-event provenance is the next implementation phase.
+2. `completed`: Phase 3 transcript persistence + runtime resume + produced-event provenance.
+3. `ready_for_handoff`: Phase 4 agentic workflow execution APIs + UI surfaces is the next implementation phase.

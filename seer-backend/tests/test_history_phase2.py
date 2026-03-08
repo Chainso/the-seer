@@ -185,6 +185,59 @@ def test_duplicate_event_id_is_rejected_with_conflict() -> None:
     assert len(timeline.json()["items"]) == 1
 
 
+def test_event_provenance_round_trips_when_produced_by_execution_is_present() -> None:
+    client = build_client()
+    event_id = str(uuid4())
+    produced_by_execution_id = str(uuid4())
+
+    response = _ingest_event(
+        client,
+        {
+            "event_id": event_id,
+            "occurred_at": "2026-02-22T13:15:00Z",
+            "event_type": "invoice.follow_up_sent",
+            "source": "seer",
+            "payload": {"invoice": "INV-7"},
+            "produced_by_execution_id": produced_by_execution_id,
+            "updated_objects": [
+                {
+                    "object_type": "Invoice",
+                    "object_ref": {"tenant": "acme", "invoice_id": "INV-7"},
+                    "object": {"object_type": "Invoice", "status": "follow-up-sent"},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+    )
+
+    linked_object = response["linked_objects"][0]
+
+    timeline = client.get(
+        "/api/v1/history/events",
+        params={
+            "start_at": "2026-02-22T00:00:00Z",
+            "end_at": "2026-02-23T00:00:00Z",
+            "event_type": _to_uri_identifier("invoice.follow_up_sent"),
+        },
+    )
+    assert timeline.status_code == 200, timeline.text
+    assert timeline.json()["items"][0]["produced_by_execution_id"] == produced_by_execution_id
+
+    object_events = client.get(
+        "/api/v1/history/objects/events",
+        params={
+            "object_type": _to_uri_identifier("Invoice"),
+            "object_ref_hash": linked_object["object_ref_hash"],
+        },
+    )
+    assert object_events.status_code == 200, object_events.text
+    assert object_events.json()["items"][0]["produced_by_execution_id"] == produced_by_execution_id
+
+    relations = client.get("/api/v1/history/relations", params={"event_id": event_id})
+    assert relations.status_code == 200, relations.text
+    assert relations.json()["items"][0]["produced_by_execution_id"] == produced_by_execution_id
+
+
 def test_ingest_rejects_invalid_event_uuid() -> None:
     client = build_client()
 
