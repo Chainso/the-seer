@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: Agentic Workflow Execution UI Polish
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 13  
 **Agent slot:** AGENT-RUNTIME-UI-2  
 **Predecessor:** `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`  
@@ -110,7 +110,7 @@ Review / coherence:
 
 Immediate:
 
-1. `docs/exec-plans/active/agentic-workflow-execution-ui-polish.md`
+1. `docs/exec-plans/completed/agentic-workflow-execution-ui-polish.md`
 2. `docs/exec-plans/active/index.md`
 
 Expected if behavior shifts materially:
@@ -189,15 +189,16 @@ Exit criteria:
 1. 2026-03-08: Opened the follow-on execution UI polish plan after review of the delivered workflow run surfaces showed the remaining gap was presentation/interaction quality rather than runtime contract correctness.
 2. 2026-03-08: Frontend baseline validation before Phase 2 is clean enough to proceed: `cd seer-ui && npm run lint` passed, `cd seer-ui && npm run build` passed, and `cd seer-ui && npm run test:contracts` passed (`10 passed`).
 3. 2026-03-08: Reworked the execution list into direct browseable inspector cards, reshaped the detail page around a summary-first execution chain, and converted transcript/event rendering toward inspector-style cards with supporting-detail disclosure for raw payloads and identifiers.
+4. 2026-03-08: Ratified the delivered UI polish as doc-consistent with the managed-agent runtime controls spec, marked this plan complete, and archived it from `docs/exec-plans/active/` to `docs/exec-plans/completed/` without rerunning frontend validation because this closure phase is docs-only and reuses the clean Phase 2 ledger above.
 
 ## Progress Tracking
 
 - [x] Phase 1 plan lock + baseline validation
 - [x] Phase 2 execution surface polish
-- [ ] Phase 3 final ratification + archive
+- [x] Phase 3 final ratification + archive
 
 Current execution state:
 
 1. `completed`: Phase 1 plan lock + baseline validation.
 2. `completed`: Phase 2 execution surface polish.
-3. `pending`: Phase 3 final ratification + archive follows after the polish phase lands.
+3. `completed`: Phase 3 final ratification + archive.
