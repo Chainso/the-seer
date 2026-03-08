@@ -1108,6 +1108,59 @@ def test_ai_assistant_chat_root_cause_skill_unlocks_run_tool_and_persists_result
     assert tool_messages[1]["result"]["run"]["insights"]
 
 
+def test_ai_assistant_chat_root_cause_validation_error_includes_path_and_input() -> None:
+    client = build_skill_runtime_client(
+        _LoadSkillThenUseToolRuntime(
+            skill_name="root-cause",
+            function_name="root_cause_run",
+            tool_arguments={
+                "anchor_object_type": _ORDER_URI,
+                "start_at": "2026-02-22T07:00:00Z",
+                "end_at": "2026-02-22T11:00:00Z",
+                "outcome": {},
+            },
+            final_answer=(
+                "The RCA tool call failed, so I need to clarify the missing "
+                "outcome field."
+            ),
+        )
+    )
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "Run root cause analysis on overdue invoices."},
+            ],
+            "thread_id": "thread-root-cause-skill-validation-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    final_event = next(
+        payload for event, payload in _parse_sse_events(response.text) if event == "final"
+    )
+    tool_messages = [
+        json.loads(message["content"])
+        for message in final_event["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    root_cause_result = next(
+        item for item in tool_messages if item["tool"] == "root_cause_run"
+    )
+    assert (
+        root_cause_result["error"]
+        == "tool validation failed at outcome.event_type: Field required. "
+        'Received arguments: {"anchor_object_type": "urn:seer:test:order", '
+        '"end_at": "2026-02-22T11:00:00Z", "outcome": {}, '
+        '"start_at": "2026-02-22T07:00:00Z"}. '
+        "Expected top-level fields: anchor_object_type, start_at, end_at, outcome. "
+        'Outcome shape: {"event_type":"<event-type-uri>",'
+        '"kind":"event_type","object_type":"<optional-object-type-uri>"}.'
+    )
+
+
 def test_ai_assistant_chat_object_store_skill_unlocks_search_tool_and_persists_result() -> None:
     client = build_skill_runtime_client(
         _LoadSkillThenUseToolRuntime(

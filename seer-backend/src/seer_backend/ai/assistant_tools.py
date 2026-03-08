@@ -227,8 +227,56 @@ class AssistantDomainToolAdapter:
                         "start_at": {"type": "string", "format": "date-time"},
                         "end_at": {"type": "string", "format": "date-time"},
                         "depth": {"type": "integer", "minimum": 1, "maximum": 3},
-                        "outcome": {"type": "object"},
-                        "filters": {"type": "array", "items": {"type": "object"}},
+                        "outcome": {
+                            "type": "object",
+                            "properties": {
+                                "kind": {
+                                    "type": "string",
+                                    "enum": ["event_type"],
+                                    "description": "Outcome kind. Use event_type.",
+                                },
+                                "event_type": {
+                                    "type": "string",
+                                    "description": (
+                                        "Undesirable outcome event type URI, for example "
+                                        "urn:seer:test:order.delayed."
+                                    ),
+                                },
+                                "object_type": {
+                                    "type": "string",
+                                    "description": (
+                                        "Optional object type URI when the outcome should "
+                                        "be scoped to one object family."
+                                    ),
+                                },
+                            },
+                            "required": ["event_type"],
+                            "additionalProperties": False,
+                        },
+                        "filters": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "field": {"type": "string"},
+                                    "op": {
+                                        "type": "string",
+                                        "enum": [
+                                            "eq",
+                                            "ne",
+                                            "contains",
+                                            "gt",
+                                            "gte",
+                                            "lt",
+                                            "lte",
+                                        ],
+                                    },
+                                    "value": {"type": "string"},
+                                },
+                                "required": ["field", "value"],
+                                "additionalProperties": False,
+                            },
+                        },
                         "beam_width": {"type": "integer", "minimum": 1, "maximum": 50},
                         "max_rule_length": {"type": "integer", "minimum": 1, "maximum": 3},
                         "min_coverage_ratio": {
@@ -569,7 +617,11 @@ class AssistantDomainToolAdapter:
         except ValidationError as exc:
             return self._error(
                 definition=definition,
-                message=f"tool validation failed: {exc.errors()[0]['msg']}",
+                message=_format_validation_error(
+                    definition=definition,
+                    tool_arguments=tool_call.arguments,
+                    exc=exc,
+                ),
             )
         except (
             ProcessMiningValidationError,
@@ -594,7 +646,6 @@ class AssistantDomainToolAdapter:
             definition=definition,
             message=f"tool execution failed: no handler for assistant tool {tool_call.tool!r}",
         )
-
     async def _execute_process_mine(
         self,
         request: _ProcessMineToolRequest,
@@ -749,3 +800,57 @@ class AssistantDomainToolAdapter:
         normalized_type = artifact_type.replace("_", "-")
         normalized_tool = definition.function_name.replace("_", "-")
         return f"{normalized_type}-{normalized_tool}-{digest}"
+
+
+def _format_validation_error(
+    *,
+    definition: AssistantToolDefinition,
+    tool_arguments: dict[str, Any],
+    exc: ValidationError,
+) -> str:
+    first_error = exc.errors()[0] if exc.errors() else {}
+    location = ".".join(str(part) for part in first_error.get("loc", ())) or "<root>"
+    message = str(first_error.get("msg", "validation error"))
+    received_arguments = json.dumps(tool_arguments, ensure_ascii=True, sort_keys=True)
+    expected_hint = _expected_schema_hint(definition.parameters)
+    return (
+        f"tool validation failed at {location}: {message}. "
+        f"Received arguments: {received_arguments}. {expected_hint}"
+    )
+
+
+def _expected_schema_hint(parameters: dict[str, Any]) -> str:
+    required_fields = parameters.get("required")
+    required_list = (
+        [str(item) for item in required_fields if isinstance(item, str)]
+        if isinstance(required_fields, list)
+        else []
+    )
+    top_level_hint = (
+        "Expected top-level fields: " + ", ".join(required_list) + "."
+        if required_list
+        else "Expected arguments to match the declared tool schema."
+    )
+
+    properties = parameters.get("properties")
+    if not isinstance(properties, dict):
+        return top_level_hint
+
+    outcome_schema = properties.get("outcome")
+    if not isinstance(outcome_schema, dict):
+        return top_level_hint
+
+    outcome_required = outcome_schema.get("required")
+    outcome_required_list = (
+        [str(item) for item in outcome_required if isinstance(item, str)]
+        if isinstance(outcome_required, list)
+        else []
+    )
+    if not outcome_required_list:
+        return top_level_hint
+
+    outcome_hint = (
+        "Outcome shape: "
+        '{"event_type":"<event-type-uri>","kind":"event_type","object_type":"<optional-object-type-uri>"}.'
+    )
+    return f"{top_level_hint} {outcome_hint}"
