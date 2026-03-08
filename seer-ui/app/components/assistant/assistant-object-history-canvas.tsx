@@ -130,7 +130,7 @@ export function AssistantObjectHistoryCanvas({
 
   if (!anchorIdentity) {
     return (
-      <div className="p-5" data-assistant-object-history-canvas>
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto p-5" data-assistant-object-history-canvas>
         <Card className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
           The history artifact is missing a concrete object identity, so the assistant cannot load the shared history display yet.
         </Card>
@@ -139,7 +139,7 @@ export function AssistantObjectHistoryCanvas({
   }
 
   return (
-    <div className="p-5" data-assistant-object-history-canvas>
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-5" data-assistant-object-history-canvas>
       <ObjectHistoryDisplaySurface
         objectTypeLabel={displayData.objectTypeLabel}
         anchorSummary={displayData.displayAnchorSummary}

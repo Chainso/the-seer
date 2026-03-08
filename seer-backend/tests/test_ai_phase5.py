@@ -480,6 +480,11 @@ class _CreateOntologyArtifactAndPresentCanvasRuntime(CopilotModelRuntime):
                     arguments={
                         "focus_concept_uri": _ORDER_URI,
                         "initial_tab": "objects",
+                        "visible_concept_uris": [
+                            _ORDER_URI,
+                            "urn:seer:test:state_pending",
+                            "urn:seer:test:state_approved",
+                        ],
                         "title": "Order ontology",
                     },
                     call_id="call_ontology_artifact_1",
@@ -1529,6 +1534,11 @@ def test_ai_assistant_chat_persists_ontology_artifact_and_canvas_tool_results() 
     assert ontology_result["artifact"]["title"] == "Order ontology"
     assert ontology_result["artifact"]["data"]["focus_concept_uri"] == _ORDER_URI
     assert ontology_result["artifact"]["data"]["initial_tab"] == "objects"
+    assert ontology_result["artifact"]["data"]["visible_concept_uris"] == [
+        _ORDER_URI,
+        "urn:seer:test:state_pending",
+        "urn:seer:test:state_approved",
+    ]
 
     canvas_result = next(
         item for item in tool_messages if item["tool"] == "present_canvas_artifact"

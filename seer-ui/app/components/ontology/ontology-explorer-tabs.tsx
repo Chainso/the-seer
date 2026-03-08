@@ -18,6 +18,8 @@ interface OntologyExplorerTabsProps {
   initialTab?: string;
   onTabChange?: (tab: string) => void;
   initialConceptUri?: string | null;
+  visibleConceptUris?: string[] | null;
+  initialFocusNeighborhoodOnly?: boolean;
 }
 
 type ExplorerTab = 'overview' | 'objects' | 'actions' | 'events' | 'triggers';
@@ -153,10 +155,15 @@ function buildVisibleGraph(
   graphData: OntologyGraph,
   labels: Set<string>,
   query: string,
-  displayNameForNode: (node: OntologyNode) => string
+  displayNameForNode: (node: OntologyNode) => string,
+  visibleConceptUris?: Set<string> | null
 ): OntologyGraph {
   const baseNodes = graphData.nodes.filter(
-    (node) => labels.has(node.label) && isAuthoringConceptNode(node) && !isStandardTypeNode(node)
+    (node) =>
+      labels.has(node.label) &&
+      isAuthoringConceptNode(node) &&
+      !isStandardTypeNode(node) &&
+      (!visibleConceptUris || visibleConceptUris.has(node.uri))
   );
   if (!query.trim()) {
     const baseUris = new Set(baseNodes.map((node) => node.uri));
@@ -402,6 +409,8 @@ export function OntologyExplorerTabs({
   initialTab,
   onTabChange,
   initialConceptUri,
+  visibleConceptUris,
+  initialFocusNeighborhoodOnly = false,
 }: OntologyExplorerTabsProps) {
   const [internalTab, setInternalTab] = useState<ExplorerTab>(
     initialTab && initialTab in TAB_CONFIG ? (initialTab as ExplorerTab) : 'overview'
@@ -414,7 +423,9 @@ export function OntologyExplorerTabs({
     automation: true,
     reference: true,
   });
-  const [focusNeighborhoodOnly, setFocusNeighborhoodOnly] = useState(false);
+  const [focusNeighborhoodOnly, setFocusNeighborhoodOnly] = useState(
+    initialFocusNeighborhoodOnly
+  );
 
   const currentTab = (activeTab || internalTab || 'overview') as ExplorerTab;
   const tabConfig = TAB_CONFIG[currentTab] || TAB_CONFIG.overview;
@@ -422,7 +433,7 @@ export function OntologyExplorerTabs({
   const handleTabChange = (value: string) => {
     setQuery('');
     setSelectedUri(null);
-    setFocusNeighborhoodOnly(true);
+    setFocusNeighborhoodOnly(initialFocusNeighborhoodOnly);
     setRelationshipFilters({
       structure: true,
       lifecycle: true,
@@ -468,10 +479,23 @@ export function OntologyExplorerTabs({
       },
     [displayNameForNode, nodeByUri, ontologyDisplayResolver]
   );
+  const visibleConceptUriSet = useMemo(() => {
+    if (!Array.isArray(visibleConceptUris) || visibleConceptUris.length === 0) {
+      return null;
+    }
+
+    return new Set(
+      visibleConceptUris.filter((uri): uri is string => typeof uri === 'string' && uri.length > 0)
+    );
+  }, [visibleConceptUris]);
+  const scopedBaseGraph = useMemo(
+    () => buildVisibleGraph(graphData, allowedLabels, '', displayNameForNode, visibleConceptUriSet),
+    [graphData, allowedLabels, displayNameForNode, visibleConceptUriSet]
+  );
 
   const scopedGraph = useMemo(
-    () => buildVisibleGraph(graphData, allowedLabels, query, displayNameForNode),
-    [graphData, allowedLabels, query, displayNameForNode]
+    () => buildVisibleGraph(graphData, allowedLabels, query, displayNameForNode, visibleConceptUriSet),
+    [graphData, allowedLabels, query, displayNameForNode, visibleConceptUriSet]
   );
 
   const relationshipScopeCounts = useMemo(() => {
@@ -488,9 +512,7 @@ export function OntologyExplorerTabs({
   }, [scopedGraph.edges]);
 
   const sortedCatalog = useMemo(() => {
-    const nodes = graphData.nodes.filter(
-      (node) => allowedLabels.has(node.label) && isAuthoringConceptNode(node) && !isStandardTypeNode(node)
-    );
+    const nodes = scopedBaseGraph.nodes;
     const queryLower = query.trim().toLowerCase();
     const filtered = queryLower.length > 0
       ? nodes.filter((node) => toSearchText(node, displayNameForNode(node)).includes(queryLower))
@@ -498,7 +520,7 @@ export function OntologyExplorerTabs({
     return filtered
       .slice()
       .sort((a, b) => displayNameForNode(a).localeCompare(displayNameForNode(b)));
-  }, [graphData.nodes, allowedLabels, query, displayNameForNode]);
+  }, [scopedBaseGraph.nodes, query, displayNameForNode]);
 
   const deepLinkedUri =
     initialConceptUri && scopedGraph.nodes.some((node) => node.uri === initialConceptUri)

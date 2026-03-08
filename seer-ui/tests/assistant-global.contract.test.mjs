@@ -84,6 +84,7 @@ test("assistant workspace consumes canvas state in the page shell", () => {
   assert.match(workspace, /data-assistant-page-canvas/);
   assert.match(workspace, /AssistantCanvasPanel/);
   assert.match(workspace, /activeCanvasState/);
+  assert.match(workspace, /overflow-y-auto transition-\[width,opacity,border-color\]/);
   assert.match(workspace, /w-\[min\(44rem,50vw\)\]/);
   assert.match(workspace, /2xl:w-\[min\(56rem,56vw\)\]/);
   assert.doesNotMatch(workspace, /WorkbenchClarificationPanel/);
@@ -97,6 +98,8 @@ test("assistant canvas panel renders real OC-DFG graphs for ocdfg artifacts", ()
   assert.match(canvasPanel, /toOcdfgGraphFromContract/);
   assert.match(canvasPanel, /data-assistant-ocdfg-canvas/);
   assert.match(canvasPanel, /artifact\.artifact_type !== 'ocdfg'/);
+  assert.match(canvasPanel, /artifact\.data\.result && typeof artifact\.data\.result === 'object'/);
+  assert.match(canvasPanel, /: artifact\.data;/);
 });
 
 test("assistant canvas panel dispatches ontology graph artifacts to the shared ontology host", () => {
@@ -105,12 +108,21 @@ test("assistant canvas panel dispatches ontology graph artifacts to the shared o
   const canvasState = read("app/lib/assistant-canvas-state.ts");
 
   assert.match(canvasPanel, /AssistantOntologyCanvas/);
+  assert.match(canvasPanel, /visible_concept_uris/);
   assert.match(canvasPanel, /data-assistant-ontology-canvas-panel/);
   assert.match(canvasPanel, /artifact\.artifact_type !== 'ontology-graph'/);
   assert.match(ontologyCanvas, /OntologyExplorerTabs/);
+  assert.match(ontologyCanvas, /deriveFocusNeighborhoodUris/);
+  assert.match(ontologyCanvas, /visibleConceptUris=\{scopedVisibleConceptUris\}/);
+  assert.match(ontologyCanvas, /initialFocusNeighborhoodOnly=\{!scopedVisibleConceptUris && Boolean\(focusConceptUri\)\}/);
   assert.match(ontologyCanvas, /useOntologyGraphContext/);
   assert.match(ontologyCanvas, /data-assistant-ontology-canvas/);
   assert.match(canvasState, /'ontology-graph'/);
+});
+
+test("assistant RCA canvas keeps its own scroll container", () => {
+  const rcaCanvas = read("app/components/assistant/assistant-root-cause-canvas.tsx");
+  assert.match(rcaCanvas, /flex h-full min-h-0 flex-col overflow-y-auto p-5/);
 });
 
 test("assistant canvas state derives from persisted completion messages", () => {

@@ -122,7 +122,7 @@ export function AssistantRootCauseCanvas({ run }: AssistantRootCauseCanvasProps)
   }, [run.baseline_rate, run.insights]);
 
   return (
-    <div className="p-5" data-assistant-rca-canvas>
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-5" data-assistant-rca-canvas>
       <RootCauseResultsSurface
         run={run}
         selectedInsightId={selectedInsightId}

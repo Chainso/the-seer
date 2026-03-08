@@ -68,12 +68,10 @@ function parseOcdfgContract(artifact: AssistantArtifact): OcdfgMiningResponseCon
     return null;
   }
 
-  const result = artifact.data.result;
-  if (!result || typeof result !== 'object') {
-    return null;
-  }
-
-  const typedResult = result as Record<string, unknown>;
+  const typedResult =
+    artifact.data.result && typeof artifact.data.result === 'object'
+      ? (artifact.data.result as Record<string, unknown>)
+      : artifact.data;
   if (typedResult.analysis_kind !== 'ocdfg') {
     return null;
   }
@@ -151,10 +149,20 @@ function parseObjectTimelineSnapshots(artifact: AssistantArtifact): LatestObject
 
 function parseOntologyGraphArtifact(
   artifact: AssistantArtifact
-): { focusConceptUri: string | null; initialTab: string | null } | null {
+): {
+  focusConceptUri: string | null;
+  initialTab: string | null;
+  visibleConceptUris: string[] | null;
+} | null {
   if (artifact.artifact_type !== 'ontology-graph') {
     return null;
   }
+
+  const visibleConceptUris = Array.isArray(artifact.data.visible_concept_uris)
+    ? artifact.data.visible_concept_uris.filter(
+        (uri): uri is string => typeof uri === 'string' && uri.length > 0
+      )
+    : null;
 
   return {
     focusConceptUri:
@@ -163,6 +171,8 @@ function parseOntologyGraphArtifact(
         : null,
     initialTab:
       typeof artifact.data.initial_tab === 'string' ? artifact.data.initial_tab : null,
+    visibleConceptUris:
+      visibleConceptUris && visibleConceptUris.length > 0 ? visibleConceptUris : null,
   };
 }
 
@@ -355,6 +365,7 @@ export function AssistantCanvasPanel({
         <AssistantOntologyCanvas
           focusConceptUri={ontologyGraphArtifact.focusConceptUri}
           initialTab={ontologyGraphArtifact.initialTab}
+          visibleConceptUris={ontologyGraphArtifact.visibleConceptUris}
         />
       </section>
     );

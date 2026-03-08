@@ -302,12 +302,19 @@ test("ontology page host and assistant canvas host share the explorer display su
   assert.match(pageSource, /onTabChange=\{handleTabChange\}/);
 
   assert.match(assistantHostSource, /OntologyExplorerTabs/);
-  assert.match(assistantHostSource, /key=\{`\$\{initialTab \|\| "overview"\}:\$\{focusConceptUri \|\| "all"\}`\}/);
+  assert.match(assistantHostSource, /deriveFocusNeighborhoodUris/);
+  assert.match(assistantHostSource, /scopedVisibleConceptUris\?\.join\("\|"\) \|\| "auto"/);
   assert.match(assistantHostSource, /initialTab=\{initialTab \|\| undefined\}/);
   assert.match(assistantHostSource, /initialConceptUri=\{focusConceptUri \|\| undefined\}/);
+  assert.match(assistantHostSource, /visibleConceptUris=\{scopedVisibleConceptUris\}/);
+  assert.match(assistantHostSource, /initialFocusNeighborhoodOnly=\{!scopedVisibleConceptUris && Boolean\(focusConceptUri\)\}/);
 
   assert.match(explorerSource, /initialTab\?: string/);
+  assert.match(explorerSource, /visibleConceptUris\?: string\[] \| null/);
+  assert.match(explorerSource, /initialFocusNeighborhoodOnly\?: boolean/);
   assert.match(explorerSource, /useState<ExplorerTab>\(\s*initialTab && initialTab in TAB_CONFIG/);
+  assert.match(explorerSource, /const \[focusNeighborhoodOnly, setFocusNeighborhoodOnly\] = useState\(\s*initialFocusNeighborhoodOnly/);
+  assert.match(explorerSource, /visibleConceptUris\.filter/);
 });
 
 test("history details panel keeps object-local lifecycle naming in plain/default mode", () => {

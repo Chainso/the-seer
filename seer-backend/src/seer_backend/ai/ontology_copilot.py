@@ -318,6 +318,15 @@ _CREATE_ONTOLOGY_GRAPH_ARTIFACT_TOOL_SCHEMA = {
                     "enum": ["overview", "objects", "actions", "events", "triggers"],
                     "description": "Optional ontology explorer tab to open first.",
                 },
+                "visible_concept_uris": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Optional explicit concept subset to keep visible in the shared "
+                        "ontology explorer. Use this when the canvas should show a bounded "
+                        "subgraph rather than the entire tab."
+                    ),
+                },
                 "title": {
                     "type": "string",
                     "description": "Optional artifact title override for the canvas.",
@@ -1317,6 +1326,26 @@ def _execute_create_ontology_graph_artifact_call(
             ),
         )
 
+    visible_concept_uris = arguments.get("visible_concept_uris")
+    normalized_visible_uris: list[str] = []
+    if visible_concept_uris is not None:
+        if not isinstance(visible_concept_uris, list):
+            return CopilotToolResult(
+                tool=tool_call.tool,
+                error="tool validation failed: visible_concept_uris must be an array of URIs",
+            )
+        for item in visible_concept_uris:
+            if not isinstance(item, str) or not item.strip():
+                return CopilotToolResult(
+                    tool=tool_call.tool,
+                    error=(
+                        "tool validation failed: visible_concept_uris must contain non-empty strings"
+                    ),
+                )
+            uri = item.strip()
+            if uri not in normalized_visible_uris:
+                normalized_visible_uris.append(uri)
+
     title = arguments.get("title")
     summary = arguments.get("summary")
     normalized_focus_uri = focus_concept_uri.strip()
@@ -1335,6 +1364,7 @@ def _execute_create_ontology_graph_artifact_call(
     artifact_id = _build_ontology_graph_artifact_id(
         normalized_focus_uri,
         initial_tab if isinstance(initial_tab, str) else None,
+        tuple(normalized_visible_uris),
     )
 
     return CopilotToolResult(
@@ -1351,6 +1381,11 @@ def _execute_create_ontology_graph_artifact_call(
                     if isinstance(initial_tab, str)
                     else {}
                 ),
+                **(
+                    {"visible_concept_uris": normalized_visible_uris}
+                    if normalized_visible_uris
+                    else {}
+                ),
             },
         ),
         summary=f"Created ontology graph artifact {artifact_title}.",
@@ -1362,8 +1397,11 @@ def _execute_create_ontology_graph_artifact_call(
 def _build_ontology_graph_artifact_id(
     focus_concept_uri: str,
     initial_tab: str | None,
+    visible_concept_uris: tuple[str, ...] = (),
 ) -> str:
-    digest_source = f"{focus_concept_uri}|{initial_tab or ''}"
+    digest_source = "|".join(
+        [focus_concept_uri, initial_tab or "", *visible_concept_uris]
+    )
     digest = hashlib.sha256(digest_source.encode("utf-8")).hexdigest()[:16]
     return f"ontology_graph_{digest}"
 
