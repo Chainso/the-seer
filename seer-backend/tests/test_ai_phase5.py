@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 
+import seer_backend.ai.gateway as ai_gateway
 from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
 from seer_backend.ai.gateway import GuidedInvestigationRequest
 from seer_backend.ai.ontology_copilot import (
@@ -1598,6 +1599,75 @@ def test_ai_assistant_chat_sanitizes_tool_call_ids_but_keeps_tool_history() -> N
     completion_messages = final_event["completion_messages"]
     assert completion_messages[1]["tool_calls"][0]["id"] == normalized_id
     assert completion_messages[2]["tool_call_id"] == normalized_id
+
+
+def test_ai_assistant_chat_includes_current_datetime_on_initial_turn(
+    monkeypatch,
+) -> None:
+    fixed_now = datetime(2026, 3, 8, 9, 30, tzinfo=UTC)
+    monkeypatch.setattr(ai_gateway, "_utc_now", lambda: fixed_now)
+
+    class CapturingCopilot:
+        def __init__(self) -> None:
+            self.captured_question: str | None = None
+
+        async def answer(
+            self,
+            question: str,
+            conversation: list[CopilotConversationMessage] | None = None,
+            completion_conversation: list[dict[str, object]] | None = None,
+            assistant_tool_adapter: object | None = None,
+        ) -> CopilotChatResponse:
+            del conversation, completion_conversation, assistant_tool_adapter
+            self.captured_question = question
+            return CopilotChatResponse(
+                mode="direct_answer",
+                answer="Initial-turn datetime captured.",
+                evidence=[],
+                current_release_id="phase5-test-release",
+                tool_call=None,
+                tool_result=None,
+                completion_messages_delta=[
+                    {"role": "assistant", "content": "Initial-turn datetime captured."}
+                ],
+            )
+
+        async def answer_stream(
+            self,
+            question: str,
+            conversation: list[CopilotConversationMessage] | None = None,
+            completion_conversation: list[dict[str, object]] | None = None,
+            assistant_tool_adapter: object | None = None,
+        ) -> AsyncIterator[CopilotAnswerStreamEvent]:
+            response = await self.answer(
+                question,
+                conversation=conversation,
+                completion_conversation=completion_conversation,
+                assistant_tool_adapter=assistant_tool_adapter,
+            )
+            yield CopilotAssistantDeltaEvent(text=response.answer)
+            yield CopilotAnswerFinalEvent(response=response)
+
+    copilot = CapturingCopilot()
+    client = build_client_with_copilot(copilot)
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {"role": "user", "content": "Help me understand this ontology."},
+            ],
+            "thread_id": "thread-initial-datetime-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert copilot.captured_question == (
+        "Context for this request:\n"
+        "- conversation_start_time_utc=2026-03-08T09:30:00Z\n\n"
+        "User request:\n"
+        "Help me understand this ontology."
+    )
 
 
 def test_ai_assistant_chat_rejects_completion_messages_without_user_turn() -> None:

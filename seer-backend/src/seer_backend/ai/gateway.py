@@ -1524,14 +1524,19 @@ def _to_copilot_turn(
     )
     if not question:
         raise ValueError("last user completion message must include text content")
+    context_lines: list[str] = []
+    if last_user_index == 0:
+        context_lines.append(
+            f"conversation_start_time_utc={_to_query_datetime(_utc_now())}"
+        )
     if context is not None:
-        context_lines = _context_lines(context)
-        if context_lines:
-            question = (
-                "Context for this request:\n"
-                + "\n".join(f"- {line}" for line in context_lines)
-                + f"\n\nUser request:\n{question}"
-            )
+        context_lines.extend(_context_lines(context))
+    if context_lines:
+        question = (
+            "Context for this request:\n"
+            + "\n".join(f"- {line}" for line in context_lines)
+            + f"\n\nUser request:\n{question}"
+        )
 
     return (
         question,
@@ -1655,6 +1660,10 @@ def _preview_text(value: Any, limit: int = 160) -> str:
 
 def _duration_ms(started_at: float) -> int:
     return int((perf_counter() - started_at) * 1000)
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
 
 
 def _context_lines(context: AiAssistantContext) -> list[str]:
