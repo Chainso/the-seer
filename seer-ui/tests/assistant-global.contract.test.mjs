@@ -85,8 +85,8 @@ test("assistant workspace consumes canvas state in the page shell", () => {
   assert.match(workspace, /AssistantCanvasPanel/);
   assert.match(workspace, /activeCanvasState/);
   assert.match(workspace, /overflow-y-auto transition-\[width,opacity,border-color\]/);
-  assert.match(workspace, /w-\[min\(44rem,50vw\)\]/);
-  assert.match(workspace, /2xl:w-\[min\(56rem,56vw\)\]/);
+  assert.match(workspace, /w-\[min\(48rem,54vw\)\]/);
+  assert.match(workspace, /2xl:w-\[min\(60rem,60vw\)\]/);
   assert.doesNotMatch(workspace, /WorkbenchClarificationPanel/);
   assert.doesNotMatch(workspace, /AI Investigation Workbench/);
   assert.doesNotMatch(workspace, /Primary Investigation Surface/);

@@ -440,7 +440,7 @@ export function AssistantWorkspace({
                 data-assistant-page-canvas
                 className={`hidden min-h-0 min-w-0 flex-col overflow-y-auto transition-[width,opacity,border-color] duration-300 ease-out xl:flex ${
                   canvasVisible
-                    ? 'w-[min(44rem,50vw)] border-l border-border/70 opacity-100 2xl:w-[min(56rem,56vw)]'
+                    ? 'w-[min(48rem,54vw)] border-l border-border/70 opacity-100 2xl:w-[min(60rem,60vw)]'
                     : 'w-0 border-l border-transparent opacity-0'
                 }`}
               >
