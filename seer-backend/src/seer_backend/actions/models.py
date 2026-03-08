@@ -13,12 +13,17 @@ JsonObject = dict[str, Any]
 
 class ActionStatus(StrEnum):
     QUEUED = "queued"
-    LEASED = "leased"
     RUNNING = "running"
     COMPLETED = "completed"
     RETRY_WAIT = "retry_wait"
     FAILED_TERMINAL = "failed_terminal"
     DEAD_LETTER = "dead_letter"
+
+
+class ActionKind(StrEnum):
+    PROCESS = "process"
+    WORKFLOW = "workflow"
+    AGENTIC_WORKFLOW = "agentic_workflow"
 
 
 class AttemptOutcome(StrEnum):
@@ -41,6 +46,8 @@ class ActionCreate:
     ontology_release_id: str
     validation_contract_hash: str
     action_id: UUID = field(default_factory=uuid4)
+    parent_execution_id: UUID | None = None
+    action_kind: ActionKind = ActionKind.WORKFLOW
     priority: int = 0
     idempotency_key: str | None = None
     max_attempts: int = 3
@@ -59,6 +66,8 @@ class ActionRecord:
     action_id: UUID
     user_id: str
     action_uri: str
+    action_kind: ActionKind
+    parent_execution_id: UUID | None
     input_payload: JsonObject
     status: ActionStatus
     priority: int

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from seer_backend.actions.errors import ActionDependencyUnavailableError
-from seer_backend.actions.models import ActionCreate, ActionStatus, AttemptOutcome
+from seer_backend.actions.models import ActionCreate, ActionKind, ActionStatus, AttemptOutcome
 from seer_backend.actions.repository import InMemoryActionsRepository, PostgresActionsRepository
 from seer_backend.actions.service import ActionsService, UnavailableActionsService
 
@@ -49,8 +49,50 @@ def test_actions_create_and_get_round_trip() -> None:
     assert loaded is not None
     assert loaded.action_id == created.action_id
     assert loaded.status == ActionStatus.QUEUED
+    assert loaded.action_kind == ActionKind.WORKFLOW
+    assert loaded.parent_execution_id is None
     assert loaded.attempt_count == 0
     assert loaded.lease_owner_instance_id is None
+
+
+def test_actions_create_and_get_round_trip_preserves_parent_execution() -> None:
+    repository = InMemoryActionsRepository()
+    service = ActionsService(repository=repository)
+    submitted_at = datetime(2026, 3, 1, 10, 5, tzinfo=UTC)
+    parent = _run_async(
+        service.create_action(
+            ActionCreate(
+                user_id="user-lineage-1",
+                action_uri="urn:seer:test:agent.parent",
+                action_kind=ActionKind.AGENTIC_WORKFLOW,
+                input_payload={"invoice_id": "INV-1"},
+                ontology_release_id="rel-2026-03-01",
+                validation_contract_hash="contract-hash-parent",
+                submitted_at=submitted_at,
+                next_visible_at=submitted_at,
+            )
+        )
+    )
+    child = _run_async(
+        service.create_action(
+            ActionCreate(
+                user_id="user-lineage-1",
+                action_uri="urn:seer:test:action.child",
+                action_kind=ActionKind.PROCESS,
+                parent_execution_id=parent.action_id,
+                input_payload={"invoice_id": "INV-1"},
+                ontology_release_id="rel-2026-03-01",
+                validation_contract_hash="contract-hash-child",
+                submitted_at=submitted_at,
+                next_visible_at=submitted_at,
+            )
+        )
+    )
+    loaded = _run_async(service.get_action(child.action_id))
+
+    assert loaded is not None
+    assert loaded.action_kind == ActionKind.PROCESS
+    assert loaded.parent_execution_id == parent.action_id
 
 
 def test_sweeper_reclaims_expired_lease_to_retry_wait_and_marks_attempt_outcome() -> None:

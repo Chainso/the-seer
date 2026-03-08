@@ -63,7 +63,7 @@ def test_parallel_claim_contention_does_not_duplicate_single_lease() -> None:
 
     stored = repository.get_action(created.action_id)
     assert stored is not None
-    assert stored.status == ActionStatus.LEASED
+    assert stored.status == ActionStatus.RUNNING
     assert stored.attempt_count == 1
     assert stored.lease_owner_instance_id is not None
 
@@ -130,5 +130,5 @@ def test_parallel_claims_respect_priority_then_fifo_under_contention() -> None:
     claimed = [row for batch in results for row in batch]
     assert len(claimed) == 3
     assert {row.action_id for row in claimed} == expected_top_ids
-    assert all(row.status == ActionStatus.LEASED for row in claimed)
+    assert all(row.status == ActionStatus.RUNNING for row in claimed)
     assert all(row.attempt_count == 1 for row in claimed)

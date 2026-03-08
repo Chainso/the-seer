@@ -38,6 +38,7 @@ from seer_backend.actions.errors import (
 from seer_backend.actions.models import (
     ActionAttemptRecord,
     ActionCreate,
+    ActionKind,
     ActionRecord,
     ActionStatus,
     AttemptOutcome,
@@ -54,6 +55,13 @@ actions_table = Table(
     Column("action_id", postgresql.UUID(as_uuid=True), primary_key=True),
     Column("user_id", String(255), nullable=False),
     Column("action_uri", Text, nullable=False),
+    Column("action_kind", String(64), nullable=False),
+    Column(
+        "parent_execution_id",
+        postgresql.UUID(as_uuid=True),
+        ForeignKey("actions.action_id"),
+        nullable=True,
+    ),
     Column("input_payload", postgresql.JSONB(astext_type=Text()), nullable=False),
     Column("status", String(32), nullable=False),
     Column("priority", postgresql.INTEGER, nullable=False),
@@ -244,6 +252,8 @@ class PostgresActionsRepository:
             "action_id": action.action_id,
             "user_id": action.user_id,
             "action_uri": action.action_uri,
+            "action_kind": action.action_kind.value,
+            "parent_execution_id": action.parent_execution_id,
             "input_payload": action.input_payload,
             "status": ActionStatus.QUEUED.value,
             "priority": int(action.priority),
@@ -442,7 +452,7 @@ class PostgresActionsRepository:
                     update(actions_table)
                     .where(actions_table.c.action_id.in_(action_ids))
                     .values(
-                        status=ActionStatus.LEASED.value,
+                        status=ActionStatus.RUNNING.value,
                         lease_owner_instance_id=instance_id,
                         lease_expires_at=lease_expires_at,
                         attempt_count=actions_table.c.attempt_count + 1,
@@ -467,7 +477,7 @@ class PostgresActionsRepository:
                 ]
                 connection.execute(insert(action_attempts_table), attempt_rows)
 
-                leased_rows = (
+                running_rows = (
                     connection.execute(
                         select(*actions_table.c).where(actions_table.c.action_id.in_(action_ids))
                     )
@@ -477,9 +487,9 @@ class PostgresActionsRepository:
         except SQLAlchemyError as exc:
             raise ActionRepositoryError(f"Postgres claim actions failed: {exc}") from exc
 
-        leased = [_action_from_row(row) for row in leased_rows]
-        leased.sort(key=lambda row: (-row.priority, row.submitted_at, str(row.action_id)))
-        return leased
+        running = [_action_from_row(row) for row in running_rows]
+        running.sort(key=lambda row: (-row.priority, row.submitted_at, str(row.action_id)))
+        return running
 
     def heartbeat_instance(
         self,
@@ -730,7 +740,7 @@ class PostgresActionsRepository:
                         .where(
                             and_(
                                 actions_table.c.status.in_(
-                                    (ActionStatus.LEASED.value, ActionStatus.RUNNING.value)
+                                    (ActionStatus.RUNNING.value,)
                                 ),
                                 actions_table.c.lease_expires_at.is_not(None),
                                 actions_table.c.lease_expires_at <= now_utc,
@@ -1005,6 +1015,8 @@ class InMemoryActionsRepository:
                 action_id=action.action_id,
                 user_id=action.user_id,
                 action_uri=action.action_uri,
+                action_kind=action.action_kind,
+                parent_execution_id=action.parent_execution_id,
                 input_payload=dict(action.input_payload),
                 status=ActionStatus.QUEUED,
                 priority=int(action.priority),
@@ -1120,10 +1132,10 @@ class InMemoryActionsRepository:
             eligible.sort(key=lambda row: (-row.priority, row.submitted_at, str(row.action_id)))
             selected = eligible[:max_actions]
 
-            leased: list[ActionRecord] = []
+            running: list[ActionRecord] = []
             for action in selected:
                 action.attempt_count += 1
-                action.status = ActionStatus.LEASED
+                action.status = ActionStatus.RUNNING
                 action.lease_owner_instance_id = instance_id
                 action.lease_expires_at = lease_expires_at
                 action.updated_at = now_utc
@@ -1141,8 +1153,8 @@ class InMemoryActionsRepository:
                         error_detail=None,
                     )
                 )
-                leased.append(_clone_action(action))
-            return leased
+                running.append(_clone_action(action))
+            return running
 
     def heartbeat_instance(
         self,
@@ -1305,7 +1317,7 @@ class InMemoryActionsRepository:
                 candidates = [
                     action
                     for action in self._actions.values()
-                    if action.status in {ActionStatus.LEASED, ActionStatus.RUNNING}
+                    if action.status == ActionStatus.RUNNING
                     and action.lease_expires_at is not None
                     and action.lease_expires_at <= now_utc
                 ]
@@ -1392,7 +1404,7 @@ def _assert_owned_active_lease(
     instance_id: str,
     now_utc: datetime,
 ) -> None:
-    if action.status not in {ActionStatus.LEASED, ActionStatus.RUNNING}:
+    if action.status != ActionStatus.RUNNING:
         raise ActionConflictError(
             code="action_not_in_progress",
             message=(
@@ -1444,6 +1456,12 @@ def _action_from_row(row: Mapping[str, object] | RowMapping) -> ActionRecord:
         action_id=UUID(str(row["action_id"])),
         user_id=str(row["user_id"]),
         action_uri=str(row["action_uri"]),
+        action_kind=ActionKind(str(row["action_kind"])),
+        parent_execution_id=(
+            UUID(str(row["parent_execution_id"]))
+            if row["parent_execution_id"] is not None
+            else None
+        ),
         input_payload=_load_json(row["input_payload"]),
         status=ActionStatus(str(row["status"])),
         priority=int(row["priority"]),

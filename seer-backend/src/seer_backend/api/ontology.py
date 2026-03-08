@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -106,7 +105,7 @@ def build_ontology_services(
             timeout_seconds=settings.openai_timeout_seconds,
         )
 
-    base_ontology_turtle = _load_text_if_available(settings.prophet_metamodel_path)
+    base_ontology_turtle = validator.base_turtle
     copilot_service = OntologyCopilotService(
         ontology_service,
         model_runtime=fallback_runtime,
@@ -230,13 +229,6 @@ async def copilot_chat(payload: CopilotChatRequest, request: Request) -> Copilot
 
 def _http_error(status_code: int, detail: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail=detail)
-
-
-def _load_text_if_available(path_value: str) -> str:
-    try:
-        return Path(path_value).read_text(encoding="utf-8")
-    except OSError:
-        return ""
 
 
 def inject_ontology_services(app: Any, settings: Settings) -> None:

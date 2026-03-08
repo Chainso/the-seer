@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 pytest.importorskip("rdflib")
 pytest.importorskip("pyshacl")
 
-from seer_backend.actions.models import ActionCreate, ActionStatus
+from seer_backend.actions.models import ActionCreate, ActionKind, ActionStatus
 from seer_backend.actions.repository import InMemoryActionsRepository
 from seer_backend.actions.service import ActionsService, UnavailableActionsService
 from seer_backend.config.settings import Settings
@@ -88,6 +88,8 @@ def test_claim_excludes_other_instances_during_active_lease() -> None:
     second_body = second.json()
     assert first_body["claimed_count"] == 1
     assert first_body["actions"][0]["lease_owner_instance_id"] == "instance-a"
+    assert first_body["actions"][0]["action_kind"] == ActionKind.WORKFLOW.value
+    assert first_body["actions"][0]["parent_execution_id"] is None
     assert second_body["claimed_count"] == 0
     assert second_body["actions"] == []
 
@@ -146,7 +148,7 @@ def test_claim_reclaims_after_lease_expiry_once_sweeper_reconciles() -> None:
     assert len(third) == 1
     assert third[0].lease_owner_instance_id == "instance-b"
     assert current is not None
-    assert current.status == ActionStatus.LEASED
+    assert current.status == ActionStatus.RUNNING
     assert current.attempt_count == 2
 
 

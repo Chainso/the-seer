@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+SEER_ONTOLOGY_NAMESPACE = "http://seer.platform/ontology#"
+SEER_AGENTIC_WORKFLOW_IRI = f"{SEER_ONTOLOGY_NAMESPACE}AgenticWorkflow"
+
 BASE_GRAPH_IRI = "urn:seer:ontology:base:prophet"
 META_GRAPH_IRI = "urn:seer:ontology:meta"
 META_CURRENT_SUBJECT_IRI = "urn:seer:ontology:meta:current"

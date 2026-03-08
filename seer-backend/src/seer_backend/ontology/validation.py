@@ -20,7 +20,7 @@ except ImportError:  # pragma: no cover - covered via dependency availability ch
 
 
 class ShaclValidator:
-    """Runs SHACL validation of local ontology Turtle against Prophet base metamodel."""
+    """Runs SHACL validation of local ontology Turtle against Prophet plus Seer base ontology."""
 
     def __init__(self, metamodel_path: str) -> None:
         if pyshacl_validate is None or Graph is None or Namespace is None or RDF is None:
@@ -30,6 +30,9 @@ class ShaclValidator:
         self.metamodel_path = str(Path(metamodel_path).resolve())
         self._base_graph = Graph()
         self._base_graph.parse(self.metamodel_path, format="turtle")
+        extension_path = Path(self.metamodel_path).with_name("seer.ttl")
+        if extension_path.exists():
+            self._base_graph.parse(str(extension_path), format="turtle")
         serialized = self._base_graph.serialize(format="turtle")
         self._base_turtle = (
             serialized.decode("utf-8")

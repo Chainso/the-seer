@@ -41,8 +41,19 @@ VALID_FIXTURE = (
     / "turtle"
     / "ontology.ttl"
 )
+SUPPORT_FIXTURE = (
+    REPO_ROOT
+    / "prophet"
+    / "examples"
+    / "turtle"
+    / "prophet_example_turtle_minimal"
+    / "gen"
+    / "turtle"
+    / "ontology.ttl"
+)
 INVALID_FIXTURE = Path(__file__).resolve().parent / "fixtures" / "ontology_invalid_missing_name.ttl"
 PROPHET_METAMODEL = REPO_ROOT / "prophet" / "prophet.ttl"
+TRIAGE_ACTION_URI = "http://prophet.platform/local/support_local#act_triage_ticket"
 ASSISTANT_SKILLS_ROOT = (
     REPO_ROOT / "seer-backend" / "src" / "seer_backend" / "ai" / "assistant_skills"
 )
@@ -109,6 +120,19 @@ def _invalid_turtle() -> str:
     return INVALID_FIXTURE.read_text(encoding="utf-8")
 
 
+def _agentic_workflow_turtle() -> str:
+    source = SUPPORT_FIXTURE.read_text(encoding="utf-8")
+    return "\n".join(
+        [
+            "@prefix seer: <http://seer.platform/ontology#> .",
+            source.replace(
+                "support_local:act_triage_ticket a prophet:Process ;",
+                "support_local:act_triage_ticket a seer:AgenticWorkflow ;",
+            ),
+        ]
+    )
+
+
 def _ingest_success(client: TestClient, release_id: str) -> None:
     response = client.post(
         "/api/v1/ontology/ingest",
@@ -173,6 +197,43 @@ def test_openai_runtime_uses_chat_completions_json_contract() -> None:
         "load_skill",
     }
     assert kwargs["messages"] == [{"role": "user", "content": "Explain Ticket"}]
+
+
+def test_ontology_ingest_and_query_include_seer_agentic_workflow_extension() -> None:
+    client = build_client(
+        CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="ok",
+            evidence=[],
+            tool_call=None,
+        )
+    )
+
+    ingest = client.post(
+        "/api/v1/ontology/ingest",
+        json={"release_id": "rel-agentic-1", "turtle": _agentic_workflow_turtle()},
+    )
+    assert ingest.status_code == 200, ingest.text
+
+    query = client.post(
+        "/api/v1/ontology/query",
+        json={
+            "query": f"""
+PREFIX prophet: <http://prophet.platform/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX seer: <http://seer.platform/ontology#>
+ASK {{
+  <{TRIAGE_ACTION_URI}> a seer:AgenticWorkflow .
+  seer:AgenticWorkflow rdfs:subClassOf prophet:Workflow .
+}}
+""".strip()
+        },
+    )
+
+    assert query.status_code == 200, query.text
+    body = query.json()
+    assert body["query_type"] == "ASK"
+    assert body["ask_result"] is True
 
 
 def test_openai_runtime_accepts_full_chat_completions_endpoint(

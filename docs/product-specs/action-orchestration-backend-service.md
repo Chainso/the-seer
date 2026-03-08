@@ -2,7 +2,7 @@
 
 **Status:** completed  
 **Owner phase:** `docs/exec-plans/completed/action-orchestration-backend-service.md`  
-**Last updated:** 2026-03-01
+**Last updated:** 2026-03-08
 
 ---
 
@@ -41,15 +41,15 @@ This spec covers:
 ## Canonical Lifecycle
 
 1. `queued`
-2. `leased`
+2. `running`
 3. `retry_wait`
 4. `completed`
 5. `failed_terminal`
 6. `dead_letter`
 
 Notes:
-1. `running` remains a reserved status value in API contracts for future executor start-ack flows.
-2. Current backend lifecycle transitions do not require an explicit `running` callback.
+1. Claiming work transitions an action directly into `running`; no separate executor start-ack callback exists.
+2. Lease ownership metadata remains distinct from status semantics and still gates lifecycle callbacks.
 
 ## Primary Flows
 
@@ -58,7 +58,7 @@ Notes:
 1. Client calls `POST /api/v1/actions/submit` with `user_id`, `action_uri`, `payload`, optional `idempotency_key`, and optional `priority`.
 2. Backend validates the action contract against the current ontology release.
 3. Backend validates payload shape/cardinality/type against ontology-derived input metadata.
-4. On success, backend enqueues action with backend-generated UUID `action_id`, status `queued`, pinned `ontology_release_id`, and deterministic `validation_contract_hash`.
+4. On success, backend enqueues action with backend-generated UUID `action_id`, status `queued`, ontology-derived `action_kind`, pinned `ontology_release_id`, and deterministic `validation_contract_hash`.
 5. If `(user_id, idempotency_key)` already exists, backend returns the existing action with `dedupe_hit=true`.
 
 ## Claim Flow
@@ -67,7 +67,7 @@ Notes:
 2. Backend heartbeats/upserts the instance before claiming.
 3. Backend returns up to `min(capacity, max_actions)` eligible actions.
 4. Claim ordering is deterministic: `priority DESC`, then FIFO by `submitted_at`, then `action_id`.
-5. Claimed actions are leased to the caller instance with `lease_expires_at` and incremented `attempt_count`.
+5. Claimed actions transition to `running`, are leased to the caller instance with `lease_expires_at`, and increment `attempt_count`.
 6. Draining instances (`status=draining`) receive zero new claims.
 
 ## Instance Heartbeat Flow
@@ -94,6 +94,7 @@ Notes:
    - `snapshot` as initial state,
    - `update` when tracked status token changes,
    - `terminal` once terminal state is reached.
+4. Action status payloads expose `action_kind` and optional `parent_execution_id` so generic actions can represent workflow/process classification and parent-child execution lineage.
 
 ## API Usage Playbook (Client Contract)
 

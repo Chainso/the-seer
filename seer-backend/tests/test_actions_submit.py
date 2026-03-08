@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 pytest.importorskip("rdflib")
 pytest.importorskip("pyshacl")
 
+from seer_backend.actions.models import ActionKind
 from seer_backend.actions.repository import InMemoryActionsRepository
 from seer_backend.actions.service import ActionsService, UnavailableActionsService
 from seer_backend.config.settings import Settings
@@ -71,6 +72,7 @@ def test_submit_enqueues_action_with_ontology_release_and_contract_hash() -> Non
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "queued"
+    assert body["action_kind"] == ActionKind.PROCESS.value
     assert body["dedupe_hit"] is False
     assert body["ontology_release_id"] == "rel-2026-03-01"
 
@@ -78,6 +80,7 @@ def test_submit_enqueues_action_with_ontology_release_and_contract_hash() -> Non
     stored = repository.get_action(action_id)
     assert stored is not None
     assert stored.action_uri == TRIAGE_ACTION_URI
+    assert stored.action_kind == ActionKind.PROCESS
     assert stored.ontology_release_id == "rel-2026-03-01"
     assert len(stored.validation_contract_hash) == 64
 
@@ -133,6 +136,45 @@ def test_submit_idempotency_key_returns_stable_dedupe_response() -> None:
     assert first_body["action_id"] == second_body["action_id"]
     assert first_body["dedupe_hit"] is False
     assert second_body["dedupe_hit"] is True
+    assert first_body["action_kind"] == ActionKind.PROCESS.value
+    assert second_body["action_kind"] == ActionKind.PROCESS.value
+
+
+def test_submit_classifies_agentic_workflow_from_seer_ontology_extension() -> None:
+    client, repository = _build_submit_client()
+    source_turtle = VALID_FIXTURE.read_text(encoding="utf-8")
+    agentic_turtle = "\n".join(
+        [
+            "@prefix seer: <http://seer.platform/ontology#> .",
+            source_turtle.replace(
+                "support_local:act_triage_ticket a prophet:Process ;",
+                "support_local:act_triage_ticket a seer:AgenticWorkflow ;",
+            ),
+        ]
+    )
+
+    ingest = client.post(
+        "/api/v1/ontology/ingest",
+        json={"release_id": "rel-2026-03-02", "turtle": agentic_turtle},
+    )
+    assert ingest.status_code == 200, ingest.text
+
+    response = client.post(
+        "/api/v1/actions/submit",
+        json={
+            "user_id": "user-1",
+            "action_uri": TRIAGE_ACTION_URI,
+            "payload": {"ticket": {"tenant": "acme", "ticket_id": "T-104"}},
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["action_kind"] == ActionKind.AGENTIC_WORKFLOW.value
+
+    stored = repository.get_action(UUID(body["action_id"]))
+    assert stored is not None
+    assert stored.action_kind == ActionKind.AGENTIC_WORKFLOW
 
 
 def test_submit_maps_dependency_unavailable_to_503() -> None:

@@ -2,6 +2,8 @@ CREATE TABLE IF NOT EXISTS actions (
     action_id UUID PRIMARY KEY,
     user_id TEXT NOT NULL,
     action_uri TEXT NOT NULL,
+    action_kind TEXT NOT NULL,
+    parent_execution_id UUID NULL REFERENCES actions(action_id),
     input_payload JSONB NOT NULL,
     status TEXT NOT NULL,
     priority INTEGER NOT NULL DEFAULT 0,
@@ -28,6 +30,9 @@ CREATE INDEX IF NOT EXISTS idx_actions_lease_expires
 
 CREATE INDEX IF NOT EXISTS idx_actions_submitted_at
     ON actions (submitted_at);
+
+CREATE INDEX IF NOT EXISTS idx_actions_parent_execution
+    ON actions (parent_execution_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_actions_user_idempotency
     ON actions (user_id, idempotency_key)

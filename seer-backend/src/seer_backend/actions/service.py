@@ -20,6 +20,7 @@ from seer_backend.actions.errors import (
 )
 from seer_backend.actions.models import (
     ActionCreate,
+    ActionKind,
     ActionRecord,
     ActionStatus,
     ActionSubmitResult,
@@ -32,13 +33,16 @@ from seer_backend.actions.repository import (
     PostgresActionsRepository,
 )
 from seer_backend.config.settings import Settings
+from seer_backend.ontology.constants import SEER_AGENTIC_WORKFLOW_IRI
 from seer_backend.ontology.models import OntologyCurrentResponse, OntologySparqlQueryResponse
 
 _ACTION_CONTRACT_QUERY_TEMPLATE = """
 PREFIX prophet: <http://prophet.platform/ontology#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX seer: <http://seer.platform/ontology#>
 SELECT DISTINCT
   ?actionType
+  ?actionKind
   ?input
   ?property
   ?fieldKey
@@ -52,6 +56,15 @@ WHERE {{
           prophet:acceptsInput ?input ;
           prophet:producesEvent ?producedEvent .
   ?actionType rdfs:subClassOf* prophet:Action .
+
+  OPTIONAL {{
+    VALUES (?actionKind ?kindType) {{
+      ("agentic_workflow" seer:AgenticWorkflow)
+      ("process" prophet:Process)
+      ("workflow" prophet:Workflow)
+    }}
+    FILTER EXISTS {{ ?actionType rdfs:subClassOf* ?kindType . }}
+  }}
 
   OPTIONAL {{
     ?input prophet:hasProperty ?property .
@@ -101,6 +114,7 @@ class _ResolvedActionContract:
     ontology_release_id: str
     action_uri: str
     input_iri: str
+    action_kind: ActionKind
     action_type_iris: tuple[str, ...]
     fields: tuple[_ActionInputFieldContract, ...]
 
@@ -167,6 +181,7 @@ class _OntologyValidationAdapter:
 
         input_iri = ""
         action_types: set[str] = set()
+        action_kind_tokens: set[str] = set()
         fields_by_key: dict[str, _ActionInputFieldContract] = {}
 
         for row in rows:
@@ -177,6 +192,10 @@ class _OntologyValidationAdapter:
             action_type = row.get("actionType", "").strip()
             if action_type:
                 action_types.add(action_type)
+
+            action_kind = row.get("actionKind", "").strip()
+            if action_kind:
+                action_kind_tokens.add(action_kind)
 
             field_key = row.get("fieldKey", "").strip()
             if not field_key:
@@ -204,6 +223,11 @@ class _OntologyValidationAdapter:
             ontology_release_id=current.release_id,
             action_uri=action_uri,
             input_iri=input_iri or action_uri,
+            action_kind=_resolve_action_kind(
+                action_kind_tokens=action_kind_tokens,
+                action_type_iris=action_types,
+                action_uri=action_uri,
+            ),
             action_type_iris=tuple(sorted(action_types)),
             fields=ordered_fields,
         )
@@ -437,6 +461,7 @@ class ActionsService:
             ActionCreate(
                 user_id=user_id,
                 action_uri=action_uri,
+                action_kind=contract.action_kind,
                 input_payload=dict(payload),
                 ontology_release_id=contract.ontology_release_id,
                 validation_contract_hash=_hash_contract(contract),
@@ -753,10 +778,38 @@ def _local_name(iri: str | None) -> str:
     return iri
 
 
+def _resolve_action_kind(
+    *,
+    action_kind_tokens: set[str],
+    action_type_iris: set[str],
+    action_uri: str,
+) -> ActionKind:
+    if "agentic_workflow" in action_kind_tokens or SEER_AGENTIC_WORKFLOW_IRI in action_type_iris:
+        return ActionKind.AGENTIC_WORKFLOW
+    if "process" in action_kind_tokens:
+        return ActionKind.PROCESS
+    if "workflow" in action_kind_tokens:
+        return ActionKind.WORKFLOW
+    raise ActionValidationError(
+        f"Action URI '{action_uri}' did not resolve to a supported executable kind",
+        issues=[
+            ActionValidationIssue(
+                code="unsupported_action_capability",
+                field="action_uri",
+                message=(
+                    "Action URI resolved to an executable action, but it was not classified as "
+                    "a process, workflow, or agentic workflow."
+                ),
+            )
+        ],
+    )
+
+
 def _hash_contract(contract: _ResolvedActionContract) -> str:
     contract_representation = {
         "action_uri": contract.action_uri,
         "input_iri": contract.input_iri,
+        "action_kind": contract.action_kind.value,
         "action_type_iris": list(contract.action_type_iris),
         "fields": [
             {

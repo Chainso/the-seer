@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 pytest.importorskip("rdflib")
 pytest.importorskip("pyshacl")
 
-from seer_backend.actions.models import ActionCreate, ActionStatus
+from seer_backend.actions.models import ActionCreate, ActionKind, ActionStatus
 from seer_backend.actions.repository import InMemoryActionsRepository
 from seer_backend.actions.service import ActionsService, UnavailableActionsService
 from seer_backend.config.settings import Settings
@@ -92,6 +92,8 @@ def test_get_action_by_id_returns_status_payload() -> None:
     assert body["action_id"] == str(action_id)
     assert body["user_id"] == "user-status-1"
     assert body["action_uri"] == "urn:seer:test:status.single"
+    assert body["action_kind"] == ActionKind.WORKFLOW.value
+    assert body["parent_execution_id"] is None
     assert body["payload"] == {"ticket_id": "T-301"}
     assert body["status"] == "queued"
     assert body["attempt_count"] == 0
@@ -182,6 +184,7 @@ def test_list_actions_supports_filtering_pagination_and_time_window() -> None:
     assert oldest_id != completed_id
     assert completed_body["total"] == 1
     assert completed_body["actions"][0]["status"] == "completed"
+    assert completed_body["actions"][0]["action_kind"] == ActionKind.WORKFLOW.value
     assert completed_body["actions"][0]["action_id"] == str(completed_id)
     assert time_window_body["total"] == 1
     assert time_window_body["actions"][0]["action_id"] == str(completed_id)

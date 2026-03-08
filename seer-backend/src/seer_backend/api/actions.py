@@ -67,6 +67,7 @@ class ActionSubmitValidationDetail(BaseModel):
 class ActionSubmitResponse(BaseModel):
     action_id: UUID
     status: Literal["queued"] = "queued"
+    action_kind: Literal["process", "workflow", "agentic_workflow"]
     ontology_release_id: str
     dedupe_hit: bool
 
@@ -81,6 +82,8 @@ class ActionClaimRequest(BaseModel):
 class ClaimedAction(BaseModel):
     action_id: UUID
     action_uri: str
+    action_kind: Literal["process", "workflow", "agentic_workflow"]
+    parent_execution_id: UUID | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     ontology_release_id: str
     attempt_no: int
@@ -149,10 +152,11 @@ class ActionStatusResponse(BaseModel):
     action_id: UUID
     user_id: str
     action_uri: str
+    action_kind: Literal["process", "workflow", "agentic_workflow"]
+    parent_execution_id: UUID | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     status: Literal[
         "queued",
-        "leased",
         "running",
         "completed",
         "retry_wait",
@@ -211,6 +215,7 @@ async def submit_action(
     return ActionSubmitResponse(
         action_id=result.action.action_id,
         status="queued",
+        action_kind=result.action.action_kind.value,
         ontology_release_id=result.action.ontology_release_id,
         dedupe_hit=result.dedupe_hit,
     )
@@ -245,6 +250,8 @@ async def claim_actions(
         ClaimedAction(
             action_id=row.action_id,
             action_uri=row.action_uri,
+            action_kind=row.action_kind.value,
+            parent_execution_id=row.parent_execution_id,
             payload=row.input_payload,
             ontology_release_id=row.ontology_release_id,
             attempt_no=row.attempt_count,
@@ -545,6 +552,8 @@ def _status_response(action: ActionRecord) -> ActionStatusResponse:
         action_id=action.action_id,
         user_id=action.user_id,
         action_uri=action.action_uri,
+        action_kind=action.action_kind.value,
+        parent_execution_id=action.parent_execution_id,
         payload=action.input_payload,
         status=action.status.value,
         priority=action.priority,

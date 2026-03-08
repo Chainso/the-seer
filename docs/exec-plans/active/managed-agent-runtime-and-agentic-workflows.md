@@ -756,6 +756,8 @@ Expected when implementation lands:
 9. 2026-03-08: Workflow execution list/detail UI should reuse history-surface filtering/drill-in patterns where possible.
 10. 2026-03-08: Managed-agent runtime should not inherit the full assistant skill catalog; it should reuse `load_skill` with a curated visible catalog limited to deep ontology, object store, and object history, and use `load_action` to expose ontology actions as callable tools.
 11. 2026-03-08: Backend modularization should introduce `agent_orchestration` for LLM-backed agent execution while retaining `actions` as the generic action execution/orchestration domain.
+12. 2026-03-08: The Seer ontology extension will live in `prophet/seer.ttl` and be loaded automatically alongside `prophet/prophet.ttl` by backend ontology validation/bootstrap paths.
+13. 2026-03-08: `action_kind` classification is derived from ontology subtype relationships with precedence `agentic_workflow` > `process` > `workflow`, so custom Prophet subclasses still map cleanly into the generic action control plane.
 
 ## Progress Log
 
@@ -764,16 +766,20 @@ Expected when implementation lands:
 3. 2026-03-08: Locked the initial architecture direction around Seer ontology extension + generic action control plane + ClickHouse transcript history + execution lineage/provenance fields.
 4. 2026-03-08: Added explicit managed-agent runtime tool policy: reuse `load_skill` with a curated deep-ontology/object-store/object-history catalog plus `load_action` for dynamically exposing ontology actions as callable tools.
 5. 2026-03-08: Locked backend module split: `agent_orchestration` owns LLM calls/transcript/runtime behavior; `actions` owns generic action execution lifecycle and child ontology action execution.
+6. 2026-03-08: Baseline validation ledger before Phase 2 is clean enough to proceed: `cd seer-backend && uv run ruff check src tests` passed, `cd seer-backend && uv run pytest -q` passed (`126 passed, 6 FastAPI deprecation warnings`), `cd seer-ui && npm run lint` passed, and `cd seer-ui && npm run build` passed.
+7. 2026-03-08: Phase 2 is opened for worker execution with controller-gated requirements to read this entire plan first, use the `execute-phase` skill, update this plan while working, run scoped validation, and create a phase commit.
+8. 2026-03-08: Phase 2 implementation landed in the generic action control plane: `ActionKind` (`process`, `workflow`, `agentic_workflow`), optional `parent_execution_id`, `running` replacing `leased` as the canonical in-flight state, and ontology-driven submit-time classification derived from action type metadata.
+9. 2026-03-08: Phase 2 validation completed successfully: `cd seer-backend && uv run ruff check src tests` passed, targeted `uv run pytest -q tests/test_actions_submit.py tests/test_actions_claim.py tests/test_actions_concurrency.py tests/test_actions_repository.py tests/test_actions_status_api.py tests/test_ontology_phase1.py` passed (`52 passed, 3 warnings`), and full `uv run pytest -q` passed (`129 passed, 6 warnings`).
 
 ## Progress Tracking
 
 - [x] Phase 1 architecture lock opened in docs
-- [ ] Phase 2 ontology extension + action control-plane evolution
+- [x] Phase 2 ontology extension + action control-plane evolution
 - [ ] Phase 3 transcript persistence + resume + provenance
 - [ ] Phase 4 agentic workflow execution APIs + UI surfaces
 - [ ] Phase 5 canonical docs/spec ratification
 
 Current execution state:
 
-1. `in_progress`: Phase 1 architecture lock and plan ratification.
-2. No implementation phases have started yet.
+1. `completed`: Phase 2 ontology extension + action control-plane evolution.
+2. `ready_for_handoff`: Phase 3 transcript persistence + runtime resume + produced-event provenance is the next implementation phase.
