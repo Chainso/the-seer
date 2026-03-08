@@ -152,6 +152,103 @@ class _ProcessMineToolRequest(BaseModel):
         return model.model_validate(payload)
 
 
+_RCA_FILTER_CONDITION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "field": {"type": "string"},
+        "op": {
+            "type": "string",
+            "enum": ["eq", "ne", "contains", "gt", "gte", "lt", "lte"],
+        },
+        "value": {"type": "string"},
+    },
+    "required": ["field", "value"],
+    "additionalProperties": False,
+}
+
+_INSIGHT_CONDITION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "feature": {"type": "string"},
+        "op": {"type": "string", "enum": ["eq"]},
+        "value": {"type": "string"},
+    },
+    "required": ["feature", "op", "value"],
+    "additionalProperties": False,
+}
+
+_INSIGHT_SCORE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "wracc": {"type": "number"},
+        "mutual_information": {"type": ["number", "null"]},
+        "coverage": {"type": "number"},
+        "support": {"type": "integer"},
+        "positives": {"type": "integer"},
+        "subgroup_rate": {"type": "number"},
+        "baseline_rate": {"type": "number"},
+        "lift": {"type": "number"},
+    },
+    "required": [
+        "wracc",
+        "coverage",
+        "support",
+        "positives",
+        "subgroup_rate",
+        "baseline_rate",
+        "lift",
+    ],
+    "additionalProperties": False,
+}
+
+_INSIGHT_EVIDENCE_SUMMARY_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "matched_anchor_count": {"type": "integer"},
+        "matched_positive_count": {"type": "integer"},
+        "sample_anchor_keys": {"type": "array", "items": {"type": "string"}},
+        "top_event_types": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["matched_anchor_count", "matched_positive_count"],
+    "additionalProperties": False,
+}
+
+_INSIGHT_RESULT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "insight_id": {"type": "string"},
+        "rank": {"type": "integer"},
+        "title": {"type": "string"},
+        "conditions": {"type": "array", "items": _INSIGHT_CONDITION_SCHEMA},
+        "score": _INSIGHT_SCORE_SCHEMA,
+        "evidence_handle": {"type": "string"},
+        "evidence": _INSIGHT_EVIDENCE_SUMMARY_SCHEMA,
+        "caveat": {"type": "string"},
+    },
+    "required": [
+        "insight_id",
+        "rank",
+        "title",
+        "score",
+        "evidence_handle",
+        "evidence",
+        "caveat",
+    ],
+    "additionalProperties": False,
+}
+
+_OBJECT_PROPERTY_FILTER_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "key": {"type": "string"},
+        "op": {"type": "string", "enum": ["eq", "contains", "gt", "gte", "lt", "lte"]},
+        "value": {"type": "string"},
+    },
+    "required": ["key", "op", "value"],
+    "additionalProperties": False,
+}
+
+
 class AssistantDomainToolAdapter:
     """Maps unlocked assistant skills to backend service tool handlers."""
 
@@ -255,27 +352,7 @@ class AssistantDomainToolAdapter:
                         },
                         "filters": {
                             "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "field": {"type": "string"},
-                                    "op": {
-                                        "type": "string",
-                                        "enum": [
-                                            "eq",
-                                            "ne",
-                                            "contains",
-                                            "gt",
-                                            "gte",
-                                            "lt",
-                                            "lte",
-                                        ],
-                                    },
-                                    "value": {"type": "string"},
-                                },
-                                "required": ["field", "value"],
-                                "additionalProperties": False,
-                            },
+                            "items": _RCA_FILTER_CONDITION_SCHEMA,
                         },
                         "beam_width": {"type": "integer", "minimum": 1, "maximum": 50},
                         "max_rule_length": {"type": "integer", "minimum": 1, "maximum": 3},
@@ -339,7 +416,7 @@ class AssistantDomainToolAdapter:
                             "minimum": 0,
                             "maximum": 1,
                         },
-                        "insights": {"type": "array", "items": {"type": "object"}},
+                        "insights": {"type": "array", "items": _INSIGHT_RESULT_SCHEMA},
                     },
                     "required": ["baseline_rate", "insights"],
                     "additionalProperties": False,
@@ -378,6 +455,10 @@ class AssistantDomainToolAdapter:
                         "size": {"type": "integer", "minimum": 1, "maximum": 200},
                     },
                     "required": ["object_type"],
+                    "anyOf": [
+                        {"required": ["object_ref_hash"]},
+                        {"required": ["object_ref_canonical"]},
+                    ],
                     "additionalProperties": False,
                 },
             ),
@@ -393,6 +474,10 @@ class AssistantDomainToolAdapter:
                         "object_ref_hash": {"type": "integer", "minimum": 0},
                         "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
                     },
+                    "anyOf": [
+                        {"required": ["event_id"]},
+                        {"required": ["object_type", "object_ref_hash"]},
+                    ],
                     "additionalProperties": False,
                 },
             ),
@@ -406,7 +491,10 @@ class AssistantDomainToolAdapter:
                         "object_type": {"type": "string"},
                         "page": {"type": "integer", "minimum": 0},
                         "size": {"type": "integer", "minimum": 1, "maximum": 200},
-                        "property_filters": {"type": "array", "items": {"type": "object"}},
+                        "property_filters": {
+                            "type": "array",
+                            "items": _OBJECT_PROPERTY_FILTER_SCHEMA,
+                        },
                     },
                     "additionalProperties": False,
                 },

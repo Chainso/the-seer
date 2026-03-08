@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from fastapi.testclient import TestClient
 
+from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
 from seer_backend.ai.gateway import GuidedInvestigationRequest
 from seer_backend.ai.ontology_copilot import (
     CopilotAnswerFinalEvent,
@@ -21,15 +22,16 @@ from seer_backend.ai.ontology_copilot import (
 )
 from seer_backend.ai.skills import AssistantSkillRegistry
 from seer_backend.analytics.rca_repository import InMemoryRootCauseRepository
-from seer_backend.analytics.rca_service import RootCauseService
+from seer_backend.analytics.rca_service import RootCauseService, UnavailableRootCauseService
 from seer_backend.analytics.repository import InMemoryProcessMiningRepository
 from seer_backend.analytics.service import (
     OcpnMiningWrapper,
     ProcessMiningService,
+    UnavailableProcessMiningService,
 )
 from seer_backend.history.canonicalization import canonicalize_object_ref, xxhash64_uint64
 from seer_backend.history.repository import InMemoryHistoryRepository
-from seer_backend.history.service import HistoryService
+from seer_backend.history.service import HistoryService, UnavailableHistoryService
 from seer_backend.main import create_app
 from seer_backend.ontology.errors import OntologyNotReadyError
 from seer_backend.ontology.models import (
@@ -1159,6 +1161,78 @@ def test_ai_assistant_chat_root_cause_validation_error_includes_path_and_input()
         'Outcome shape: {"event_type":"<event-type-uri>",'
         '"kind":"event_type","object_type":"<optional-object-type-uri>"}.'
     )
+
+
+def test_assistant_domain_tool_schemas_are_fully_specified() -> None:
+    adapter = AssistantDomainToolAdapter(
+        process_service=UnavailableProcessMiningService("unavailable"),
+        root_cause_service=UnavailableRootCauseService("unavailable"),
+        history_service=UnavailableHistoryService("unavailable"),
+    )
+
+    schemas = {
+        schema["function"]["name"]: schema["function"]["parameters"]
+        for schema in adapter.tool_schemas(
+            {
+                "root_cause.run",
+                "root_cause.assist.interpret",
+                "history.object_events",
+                "history.relations",
+                "history.latest_objects",
+            }
+        )
+    }
+
+    root_cause_run = schemas["root_cause_run"]
+    assert root_cause_run["properties"]["outcome"]["properties"]["event_type"]["type"] == "string"
+    assert root_cause_run["properties"]["filters"]["items"]["properties"]["op"]["enum"] == [
+        "eq",
+        "ne",
+        "contains",
+        "gt",
+        "gte",
+        "lt",
+        "lte",
+    ]
+
+    interpret = schemas["root_cause_assist_interpret"]
+    insight_items = interpret["properties"]["insights"]["items"]
+    assert insight_items["properties"]["score"]["properties"]["lift"]["type"] == "number"
+    assert (
+        insight_items["properties"]["evidence"]["properties"]["sample_anchor_keys"]["items"][
+            "type"
+        ]
+        == "string"
+    )
+    assert insight_items["additionalProperties"] is False
+
+    object_events = schemas["history_object_events"]
+    assert object_events["required"] == ["object_type"]
+    assert object_events["anyOf"] == [
+        {"required": ["object_ref_hash"]},
+        {"required": ["object_ref_canonical"]},
+    ]
+
+    relations = schemas["history_relations"]
+    assert relations["anyOf"] == [
+        {"required": ["event_id"]},
+        {"required": ["object_type", "object_ref_hash"]},
+    ]
+
+    latest_objects = schemas["history_latest_objects"]
+    assert latest_objects["properties"]["property_filters"]["items"] == {
+        "type": "object",
+        "properties": {
+            "key": {"type": "string"},
+            "op": {
+                "type": "string",
+                "enum": ["eq", "contains", "gt", "gte", "lt", "lte"],
+            },
+            "value": {"type": "string"},
+        },
+        "required": ["key", "op", "value"],
+        "additionalProperties": False,
+    }
 
 
 def test_ai_assistant_chat_object_store_skill_unlocks_search_tool_and_persists_result() -> None:
