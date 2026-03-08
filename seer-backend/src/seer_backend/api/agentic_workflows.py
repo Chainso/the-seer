@@ -33,6 +33,7 @@ from seer_backend.agent_orchestration.service import (
     UnavailableAgentOrchestrationService,
     is_terminal_status,
 )
+from seer_backend.api.status_codes import HTTP_422_UNPROCESSABLE_CONTENT
 from seer_backend.config.settings import Settings
 
 router = APIRouter(prefix="/agentic-workflows", tags=["agentic-workflows"])
@@ -200,7 +201,7 @@ async def list_agentic_workflow_executions(
         and submitted_after > submitted_before
     ):
         raise _http_error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            HTTP_422_UNPROCESSABLE_CONTENT,
             {
                 "code": "invalid_time_window",
                 "message": "submitted_after must be earlier than or equal to submitted_before.",

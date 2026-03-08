@@ -29,6 +29,10 @@ from seer_backend.analytics.service import (
     UnavailableProcessMiningService,
     validate_guardrails,
 )
+from seer_backend.api.status_codes import (
+    HTTP_413_CONTENT_TOO_LARGE,
+    HTTP_422_UNPROCESSABLE_CONTENT,
+)
 from seer_backend.config.settings import Settings
 
 router = APIRouter(prefix="/process", tags=["process"])
@@ -87,9 +91,9 @@ async def mine_process(
     try:
         return await service.mine(payload)
     except ProcessMiningValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except ProcessMiningLimitExceededError as exc:
-        raise _http_error(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(exc)) from exc
+        raise _http_error(HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
     except ProcessMiningNoDataError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except ProcessMiningDependencyUnavailableError as exc:
@@ -107,9 +111,9 @@ async def mine_ocdfg_process(
     try:
         return await service.mine_ocdfg(payload)
     except ProcessMiningValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except ProcessMiningLimitExceededError as exc:
-        raise _http_error(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(exc)) from exc
+        raise _http_error(HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
     except ProcessMiningNoDataError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except ProcessMiningDependencyUnavailableError as exc:
@@ -128,7 +132,7 @@ async def get_trace_drilldown(
     try:
         return await service.trace_drilldown(handle=handle, limit=limit)
     except ProcessMiningTraceHandleError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except ProcessMiningNoDataError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except ProcessMiningDependencyUnavailableError as exc:

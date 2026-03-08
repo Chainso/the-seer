@@ -30,6 +30,10 @@ from seer_backend.analytics.rca_service import (
     UnavailableRootCauseService,
     validate_rca_guardrails,
 )
+from seer_backend.api.status_codes import (
+    HTTP_413_CONTENT_TOO_LARGE,
+    HTTP_422_UNPROCESSABLE_CONTENT,
+)
 from seer_backend.config.settings import Settings
 
 router = APIRouter(prefix="/root-cause", tags=["root-cause"])
@@ -88,9 +92,9 @@ async def run_root_cause(
     try:
         return await service.run(payload)
     except RootCauseValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except RootCauseLimitExceededError as exc:
-        raise _http_error(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(exc)) from exc
+        raise _http_error(HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
     except RootCauseNoDataError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except RootCauseDependencyUnavailableError as exc:
@@ -109,7 +113,7 @@ async def get_root_cause_evidence(
     try:
         return await service.evidence(handle=handle, limit=limit)
     except RootCauseTraceHandleError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except RootCauseNoDataError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except RootCauseDependencyUnavailableError as exc:
@@ -127,7 +131,7 @@ async def assist_root_cause_setup(
     try:
         return await service.assist_setup(payload)
     except RootCauseValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except RootCauseDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except RootCauseError as exc:
@@ -143,7 +147,7 @@ async def assist_root_cause_interpret(
     try:
         return await service.assist_interpret(payload)
     except RootCauseValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except RootCauseDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except RootCauseError as exc:

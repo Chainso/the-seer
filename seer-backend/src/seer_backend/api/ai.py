@@ -36,6 +36,10 @@ from seer_backend.analytics.errors import (
     RootCauseNoDataError,
     RootCauseValidationError,
 )
+from seer_backend.api.status_codes import (
+    HTTP_413_CONTENT_TOO_LARGE,
+    HTTP_422_UNPROCESSABLE_CONTENT,
+)
 from seer_backend.ontology.errors import (
     OntologyDependencyUnavailableError,
     OntologyError,
@@ -98,9 +102,9 @@ async def interpret_process_run(
     try:
         return await service.process_interpret(payload)
     except ProcessMiningValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except ProcessMiningLimitExceededError as exc:
-        raise _http_error(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(exc)) from exc
+        raise _http_error(HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
     except ProcessMiningNoDataError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except ProcessMiningDependencyUnavailableError as exc:
@@ -118,7 +122,7 @@ async def assist_root_cause_setup(
     try:
         return await service.root_cause_setup(payload)
     except RootCauseValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except RootCauseDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except RootCauseError as exc:
@@ -134,7 +138,7 @@ async def assist_root_cause_interpret(
     try:
         return await service.root_cause_interpret(payload)
     except RootCauseValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except RootCauseDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except RootCauseError as exc:
@@ -156,9 +160,9 @@ async def run_guided_investigation(
     except OntologyError as exc:
         raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     except ProcessMiningValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except ProcessMiningLimitExceededError as exc:
-        raise _http_error(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(exc)) from exc
+        raise _http_error(HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
     except ProcessMiningNoDataError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except ProcessMiningDependencyUnavailableError as exc:
@@ -166,9 +170,9 @@ async def run_guided_investigation(
     except ProcessMiningError as exc:
         raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     except RootCauseValidationError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except RootCauseLimitExceededError as exc:
-        raise _http_error(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(exc)) from exc
+        raise _http_error(HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
     except RootCauseNoDataError as exc:
         raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except RootCauseDependencyUnavailableError as exc:
@@ -204,7 +208,7 @@ def _ai_stream_error(
     fallback_message: str,
 ) -> tuple[int, str, str]:
     if isinstance(exc, ValueError):
-        return status.HTTP_422_UNPROCESSABLE_ENTITY, "validation_error", str(exc)
+        return HTTP_422_UNPROCESSABLE_CONTENT, "validation_error", str(exc)
     if isinstance(exc, OntologyDependencyUnavailableError):
         return status.HTTP_503_SERVICE_UNAVAILABLE, "dependency_unavailable", str(exc)
     if isinstance(exc, OntologyNotReadyError):

@@ -10,6 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 
+from seer_backend.api.status_codes import HTTP_422_UNPROCESSABLE_CONTENT
 from seer_backend.config.settings import Settings
 from seer_backend.history.errors import (
     DuplicateEventError,
@@ -85,7 +86,7 @@ async def ingest_event(payload: EventIngestRequest, request: Request) -> EventIn
     except DuplicateEventError as exc:
         raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
     except ObjectTypeMismatchError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except HistoryDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except HistoryError as exc:
@@ -156,7 +157,7 @@ async def get_latest_objects(
             size=size,
         )
     except ValueError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except HistoryDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except HistoryError as exc:
@@ -178,7 +179,7 @@ async def search_latest_objects(
             size=payload.size,
         )
     except ValueError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except HistoryDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except HistoryError as exc:
@@ -198,7 +199,7 @@ async def get_object_events(
 ) -> ObjectEventsResponse:
     if object_ref_hash is None and object_ref_canonical is None:
         raise _http_error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            HTTP_422_UNPROCESSABLE_CONTENT,
             "object events query requires object_ref_hash or object_ref_canonical",
         )
     service = get_history_service(request)
@@ -228,7 +229,7 @@ async def get_relations(
 ) -> EventObjectRelationsResponse:
     if event_id is None and (object_type is None or object_ref_hash is None):
         raise _http_error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            HTTP_422_UNPROCESSABLE_CONTENT,
             "relations query requires event_id or (object_type + object_ref_hash)",
         )
 

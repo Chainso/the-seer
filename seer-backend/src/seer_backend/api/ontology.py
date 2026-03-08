@@ -13,6 +13,7 @@ from seer_backend.ai.ontology_copilot import (
     OpenAiChatCompletionsRuntime,
 )
 from seer_backend.ai.skills import AssistantSkillRegistry
+from seer_backend.api.status_codes import HTTP_422_UNPROCESSABLE_CONTENT
 from seer_backend.config.settings import Settings
 from seer_backend.ontology.errors import (
     OntologyDependencyUnavailableError,
@@ -139,7 +140,7 @@ async def ingest_ontology(
 
     if result.validation_status == "failed":
         return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=HTTP_422_UNPROCESSABLE_CONTENT,
             content=result.model_dump(),
         )
     return result
@@ -178,7 +179,7 @@ async def concept_detail(
     try:
         return await service.concept_detail(iri=iri)
     except ValueError as exc:
-        raise _http_error(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except OntologyDependencyUnavailableError as exc:
         raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     except OntologyNotReadyError as exc:

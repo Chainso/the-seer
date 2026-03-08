@@ -21,6 +21,7 @@ from seer_backend.actions.errors import (
     ActionValidationError,
 )
 from seer_backend.actions.models import ActionRecord, ActionStatus, InstanceStatus
+from seer_backend.api.status_codes import HTTP_422_UNPROCESSABLE_CONTENT
 from seer_backend.ontology.errors import OntologyDependencyUnavailableError, OntologyError
 from seer_backend.ontology.models import assert_valid_iri
 
@@ -204,7 +205,7 @@ async def submit_action(
         )
     except ActionValidationError as exc:
         raise _http_error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            HTTP_422_UNPROCESSABLE_CONTENT,
             _validation_error_detail(exc),
         ) from exc
     except (ActionDependencyUnavailableError, OntologyDependencyUnavailableError) as exc:
@@ -286,7 +287,7 @@ async def list_actions(
         and submitted_after > submitted_before
     ):
         raise _http_error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            HTTP_422_UNPROCESSABLE_CONTENT,
             {
                 "code": "invalid_time_window",
                 "message": "submitted_after must be earlier than or equal to submitted_before.",
@@ -443,7 +444,7 @@ async def complete_action(
         ) from exc
     except ActionValidationError as exc:
         raise _http_error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            HTTP_422_UNPROCESSABLE_CONTENT,
             _validation_error_detail(exc),
         ) from exc
     except ActionDependencyUnavailableError as exc:
@@ -476,7 +477,7 @@ async def fail_action(
         ) from exc
     except ActionValidationError as exc:
         raise _http_error(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            HTTP_422_UNPROCESSABLE_CONTENT,
             _validation_error_detail(exc),
         ) from exc
     except ActionDependencyUnavailableError as exc:
