@@ -31,7 +31,7 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 
 ## Read Order by Task Type
 
-1. Product scope or priorities: `VISION.md`, then active execution plans.
+1. Product scope or priorities: `VISION.md`, then `prophet/prohet.ttl` then active execution plans.
 2. Technical approach and boundaries: `DESIGN.md`, then `ARCHITECTURE.md`.
 3. Deep design decisions: `docs/design-docs/index.md`, then selected topic docs.
 4. User-facing behavior and acceptance: `docs/product-specs/index.md`, then specific spec.
@@ -109,3 +109,4 @@ These checks should be automated as repository tooling matures:
 1. Skills are loaded from `.agent/skills` (symlink to `.agents/skills`).
 2. Use `plan-and-execute` when a request asks to plan work and execute it end-to-end.
 3. For multi-phase execution, pair `plan-and-execute` with execution-plan docs under `docs/exec-plans/active/`.
+4. When executing a phase in a plan, use the `execute-phase` skill.
