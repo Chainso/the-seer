@@ -206,6 +206,8 @@ function ExecutionRunCard({
   displayActionLabel: (action: AgenticWorkflowActionSummary) => string;
   isCurrent?: boolean;
 }) {
+  const targetHref = !isCurrent && href ? href : null;
+
   const content = (
     <div className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-background/80 p-4 text-left">
       <div className="min-w-0 flex-1 space-y-1">
@@ -216,26 +218,28 @@ function ExecutionRunCard({
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span title={action.action_id}>Run {shortIdentifier(action.action_id, 10)}</span>
           <span>{formatDateTime(action.updated_at)}</span>
+          <span>{action.action_kind}</span>
+          {!targetHref && !isCurrent ? <span>No workflow detail route</span> : null}
         </div>
       </div>
       <div className="flex items-center gap-2">
         <Badge variant="outline" className={`rounded-full ${statusBadgeClass(action.status)}`}>
           {action.status}
         </Badge>
-        {!isCurrent && href ? (
+        {targetHref ? (
           <ArrowRight className="h-4 w-4 text-muted-foreground" />
         ) : null}
       </div>
     </div>
   );
 
-  if (!href || isCurrent) {
+  if (!targetHref) {
     return content;
   }
 
   return (
     <Link
-      href={href}
+      href={targetHref}
       className="block rounded-2xl transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
     >
       {content}
@@ -358,6 +362,8 @@ export function AgenticWorkflowExecutionDetailsPanel({
     query
       ? `/inspector/agentic-workflows/${targetExecutionId}?${query}`
       : `/inspector/agentic-workflows/${targetExecutionId}`;
+  const buildExecutionHrefForAction = (action: AgenticWorkflowActionSummary) =>
+    action.action_kind === "agentic_workflow" ? buildExecutionHref(action.action_id) : undefined;
 
   const currentStatus = detail?.execution.action.status || snapshot?.status;
   const lastOrdinal = snapshot?.last_ordinal || messages[messages.length - 1]?.ordinal || 0;
@@ -622,7 +628,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
                 <ExecutionRunCard
                   eyebrow="Parent run"
                   action={detail.parent_execution}
-                  href={buildExecutionHref(detail.parent_execution.action_id)}
+                  href={buildExecutionHrefForAction(detail.parent_execution)}
                   displayActionLabel={displayActionLabel}
                 />
               ) : (
@@ -644,7 +650,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
                     key={action.action_id}
                     eyebrow="Child run"
                     action={action}
-                    href={buildExecutionHref(action.action_id)}
+                    href={buildExecutionHrefForAction(action)}
                     displayActionLabel={displayActionLabel}
                   />
                 ))
