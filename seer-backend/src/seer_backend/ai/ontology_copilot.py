@@ -26,6 +26,7 @@ from seer_backend.ontology.errors import (
     OntologyReadOnlyViolationError,
 )
 from seer_backend.ontology.models import (
+    CopilotArtifact,
     CopilotCanvasAction,
     CopilotChatResponse,
     CopilotConversationMessage,
@@ -291,6 +292,42 @@ _LOAD_SKILL_TOOL_SCHEMA = {
                 }
             },
             "required": ["skill_name"],
+            "additionalProperties": False,
+        },
+    },
+}
+
+_CREATE_ONTOLOGY_GRAPH_ARTIFACT_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "create_ontology_graph_artifact",
+        "description": (
+            "Create a lightweight ontology explorer artifact for the assistant canvas. "
+            "Use this when the user would benefit from inspecting a focused ontology "
+            "concept neighborhood in the shared ontology graph surface."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "focus_concept_uri": {
+                    "type": "string",
+                    "description": "Full ontology concept URI to focus in the graph explorer.",
+                },
+                "initial_tab": {
+                    "type": "string",
+                    "enum": ["overview", "objects", "actions", "events", "triggers"],
+                    "description": "Optional ontology explorer tab to open first.",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Optional artifact title override for the canvas.",
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Optional short summary for the canvas artifact.",
+                },
+            },
+            "required": ["focus_concept_uri"],
             "additionalProperties": False,
         },
     },
@@ -732,6 +769,8 @@ class OntologyCopilotService:
     ) -> CopilotToolResult:
         if tool_call.tool == "load_skill":
             return self._execute_load_skill_call(tool_call)
+        if tool_call.tool == "create_ontology_graph_artifact":
+            return _execute_create_ontology_graph_artifact_call(tool_call)
         if tool_call.tool in {
             "present_canvas_artifact",
             "update_canvas_artifact",
@@ -1134,6 +1173,7 @@ def _tool_schemas(
     schemas = [
         _SPARQL_READ_ONLY_TOOL_SCHEMA,
         _LOAD_SKILL_TOOL_SCHEMA,
+        _CREATE_ONTOLOGY_GRAPH_ARTIFACT_TOOL_SCHEMA,
         _PRESENT_CANVAS_ARTIFACT_TOOL_SCHEMA,
         _UPDATE_CANVAS_ARTIFACT_TOOL_SCHEMA,
         _CLOSE_CANVAS_TOOL_SCHEMA,
@@ -1251,6 +1291,81 @@ def _execute_canvas_tool_call(
         row_count=1,
         truncated=False,
     )
+
+
+def _execute_create_ontology_graph_artifact_call(
+    tool_call: CopilotToolCall,
+) -> CopilotToolResult:
+    arguments = dict(tool_call.arguments)
+    focus_concept_uri = arguments.get("focus_concept_uri")
+    if not isinstance(focus_concept_uri, str) or not focus_concept_uri.strip():
+        return CopilotToolResult(
+            tool=tool_call.tool,
+            error="tool validation failed: focus_concept_uri is required",
+        )
+
+    initial_tab = arguments.get("initial_tab")
+    if initial_tab is not None and (
+        not isinstance(initial_tab, str)
+        or initial_tab not in {"overview", "objects", "actions", "events", "triggers"}
+    ):
+        return CopilotToolResult(
+            tool=tool_call.tool,
+            error=(
+                "tool validation failed: initial_tab must be one of "
+                "'overview', 'objects', 'actions', 'events', or 'triggers'"
+            ),
+        )
+
+    title = arguments.get("title")
+    summary = arguments.get("summary")
+    normalized_focus_uri = focus_concept_uri.strip()
+    artifact_title = (
+        title.strip()
+        if isinstance(title, str) and title.strip()
+        else "Ontology graph"
+    )
+    artifact_summary = (
+        summary.strip()
+        if isinstance(summary, str) and summary.strip()
+        else (
+            "Inspect the shared ontology explorer with a focused concept neighborhood."
+        )
+    )
+    artifact_id = _build_ontology_graph_artifact_id(
+        normalized_focus_uri,
+        initial_tab if isinstance(initial_tab, str) else None,
+    )
+
+    return CopilotToolResult(
+        tool=tool_call.tool,
+        artifact=CopilotArtifact(
+            artifact_id=artifact_id,
+            artifact_type="ontology-graph",
+            title=artifact_title,
+            summary=artifact_summary,
+            data={
+                "focus_concept_uri": normalized_focus_uri,
+                **(
+                    {"initial_tab": initial_tab}
+                    if isinstance(initial_tab, str)
+                    else {}
+                ),
+            },
+        ),
+        summary=f"Created ontology graph artifact {artifact_title}.",
+        row_count=1,
+        truncated=False,
+    )
+
+
+def _build_ontology_graph_artifact_id(
+    focus_concept_uri: str,
+    initial_tab: str | None,
+) -> str:
+    digest_source = f"{focus_concept_uri}|{initial_tab or ''}"
+    digest = hashlib.sha256(digest_source.encode("utf-8")).hexdigest()[:16]
+    return f"ontology_graph_{digest}"
 
 
 def _artifacts_by_id(

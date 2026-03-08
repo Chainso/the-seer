@@ -178,6 +178,7 @@ CopilotArtifactType = Literal[
     "ocdfg",
     "process",
     "rca",
+    "ontology-graph",
     "object-timeline",
     "table",
 ]

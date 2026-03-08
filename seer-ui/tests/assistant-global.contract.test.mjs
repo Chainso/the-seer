@@ -99,6 +99,20 @@ test("assistant canvas panel renders real OC-DFG graphs for ocdfg artifacts", ()
   assert.match(canvasPanel, /artifact\.artifact_type !== 'ocdfg'/);
 });
 
+test("assistant canvas panel dispatches ontology graph artifacts to the shared ontology host", () => {
+  const canvasPanel = read("app/components/assistant/assistant-canvas-panel.tsx");
+  const ontologyCanvas = read("app/components/assistant/assistant-ontology-canvas.tsx");
+  const canvasState = read("app/lib/assistant-canvas-state.ts");
+
+  assert.match(canvasPanel, /AssistantOntologyCanvas/);
+  assert.match(canvasPanel, /data-assistant-ontology-canvas-panel/);
+  assert.match(canvasPanel, /artifact\.artifact_type !== 'ontology-graph'/);
+  assert.match(ontologyCanvas, /OntologyExplorerTabs/);
+  assert.match(ontologyCanvas, /useOntologyGraphContext/);
+  assert.match(ontologyCanvas, /data-assistant-ontology-canvas/);
+  assert.match(canvasState, /'ontology-graph'/);
+});
+
 test("assistant canvas state derives from persisted completion messages", () => {
   const helper = read("app/lib/assistant-canvas-state.ts");
   assert.match(helper, /deriveCanvasStateFromCompletionMessages/);

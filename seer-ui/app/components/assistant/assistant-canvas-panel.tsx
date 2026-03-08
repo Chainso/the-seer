@@ -7,6 +7,7 @@ import type {
   AssistantArtifactType,
   AssistantCanvasState,
 } from '@/app/lib/assistant-canvas-state';
+import { AssistantOntologyCanvas } from '@/app/components/assistant/assistant-ontology-canvas';
 import { AssistantObjectHistoryCanvas } from '@/app/components/assistant/assistant-object-history-canvas';
 import { AssistantRootCauseCanvas } from '@/app/components/assistant/assistant-root-cause-canvas';
 import { OcdfgGraph as OcdfgGraphView } from '@/app/components/inspector/ocdfg-graph';
@@ -20,6 +21,7 @@ const ARTIFACT_TYPE_LABELS: Record<AssistantArtifactType, string> = {
   ocdfg: 'OC-DFG',
   process: 'Process view',
   rca: 'Root cause',
+  'ontology-graph': 'Ontology graph',
   'object-timeline': 'Object timeline',
   table: 'Table',
 };
@@ -147,6 +149,23 @@ function parseObjectTimelineSnapshots(artifact: AssistantArtifact): LatestObject
   return items as LatestObjectItem[];
 }
 
+function parseOntologyGraphArtifact(
+  artifact: AssistantArtifact
+): { focusConceptUri: string | null; initialTab: string | null } | null {
+  if (artifact.artifact_type !== 'ontology-graph') {
+    return null;
+  }
+
+  return {
+    focusConceptUri:
+      typeof artifact.data.focus_concept_uri === 'string'
+        ? artifact.data.focus_concept_uri
+        : null,
+    initialTab:
+      typeof artifact.data.initial_tab === 'string' ? artifact.data.initial_tab : null,
+  };
+}
+
 export function AssistantCanvasPanel({
   state,
   compact = false,
@@ -163,6 +182,10 @@ export function AssistantCanvasPanel({
   );
   const objectTimelineSnapshots = useMemo(
     () => (artifact ? parseObjectTimelineSnapshots(artifact) : null),
+    [artifact]
+  );
+  const ontologyGraphArtifact = useMemo(
+    () => (artifact ? parseOntologyGraphArtifact(artifact) : null),
     [artifact]
   );
   const ocdfgGraph = useMemo(
@@ -317,6 +340,22 @@ export function AssistantCanvasPanel({
         className={`flex ${compact ? 'h-auto' : 'h-full min-h-0'} flex-col bg-background/96`}
       >
         <AssistantObjectHistoryCanvas timelineSnapshots={objectTimelineSnapshots} />
+      </section>
+    );
+  }
+
+  if (ontologyGraphArtifact) {
+    return (
+      <section
+        data-assistant-canvas-panel
+        data-assistant-ontology-canvas-panel
+        data-artifact-type={visibleArtifact.artifact_type}
+        className={`flex ${compact ? 'h-auto' : 'h-full min-h-0'} flex-col bg-background/96`}
+      >
+        <AssistantOntologyCanvas
+          focusConceptUri={ontologyGraphArtifact.focusConceptUri}
+          initialTab={ontologyGraphArtifact.initialTab}
+        />
       </section>
     );
   }

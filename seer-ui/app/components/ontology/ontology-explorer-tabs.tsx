@@ -15,6 +15,7 @@ import { Search, Network, Activity, ArrowRightLeft } from 'lucide-react';
 interface OntologyExplorerTabsProps {
   graphData: OntologyGraph;
   activeTab?: string;
+  initialTab?: string;
   onTabChange?: (tab: string) => void;
   initialConceptUri?: string | null;
 }
@@ -398,10 +399,13 @@ function limitGraphForPerformance(
 export function OntologyExplorerTabs({
   graphData,
   activeTab,
+  initialTab,
   onTabChange,
   initialConceptUri,
 }: OntologyExplorerTabsProps) {
-  const [internalTab, setInternalTab] = useState<ExplorerTab>('overview');
+  const [internalTab, setInternalTab] = useState<ExplorerTab>(
+    initialTab && initialTab in TAB_CONFIG ? (initialTab as ExplorerTab) : 'overview'
+  );
   const [query, setQuery] = useState('');
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [relationshipFilters, setRelationshipFilters] = useState<RelationshipFilters>({

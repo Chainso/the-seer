@@ -4,6 +4,7 @@ export type AssistantArtifactType =
   | 'ocdfg'
   | 'process'
   | 'rca'
+  | 'ontology-graph'
   | 'object-timeline'
   | 'table';
 

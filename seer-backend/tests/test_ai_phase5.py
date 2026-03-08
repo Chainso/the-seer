@@ -269,6 +269,7 @@ class _LoadSkillThenAnswerRuntime(CopilotModelRuntime):
             tool_names = {tool["function"]["name"] for tool in tools}
             assert "sparql_read_only_query" in tool_names
             assert "load_skill" in tool_names
+            assert "create_ontology_graph_artifact" in tool_names
             assert "present_canvas_artifact" in tool_names
             assert "update_canvas_artifact" in tool_names
             assert "close_canvas" in tool_names
@@ -402,6 +403,7 @@ class _LoadSkillMineAndPresentCanvasRuntime(CopilotModelRuntime):
 
         if self.calls == 1:
             assert "load_skill" in tool_names
+            assert "create_ontology_graph_artifact" in tool_names
             assert "present_canvas_artifact" in tool_names
             return CopilotStructuredOutput(
                 mode="tool_call",
@@ -448,6 +450,62 @@ class _LoadSkillMineAndPresentCanvasRuntime(CopilotModelRuntime):
         return CopilotStructuredOutput(
             mode="direct_answer",
             answer="I ran OC-DFG discovery and opened it in the assistant canvas.",
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _CreateOntologyArtifactAndPresentCanvasRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        self.calls += 1
+        assert tools is not None
+        tool_names = {tool["function"]["name"] for tool in tools}
+
+        if self.calls == 1:
+            assert "create_ontology_graph_artifact" in tool_names
+            assert "present_canvas_artifact" in tool_names
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Preparing a focused ontology explorer artifact.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="create_ontology_graph_artifact",
+                    arguments={
+                        "focus_concept_uri": _ORDER_URI,
+                        "initial_tab": "objects",
+                        "title": "Order ontology",
+                    },
+                    call_id="call_ontology_artifact_1",
+                ),
+            )
+
+        if self.calls == 2:
+            artifact_id = _extract_artifact_id_from_messages(
+                messages,
+                tool_name="create_ontology_graph_artifact",
+            )
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Opening the ontology explorer in canvas.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="present_canvas_artifact",
+                    arguments={"artifact_id": artifact_id},
+                    call_id="call_ontology_canvas_present_1",
+                ),
+            )
+
+        assert self.calls == 3
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="I opened the shared ontology explorer focused on the order model.",
             evidence=[],
             tool_call=None,
         )
@@ -1426,6 +1484,61 @@ def test_ai_assistant_chat_persists_artifact_and_canvas_tool_results() -> None:
     assert (
         canvas_result["canvas_action"]["artifact_id"]
         == process_result["artifact"]["artifact_id"]
+    )
+
+
+def test_ai_assistant_chat_persists_ontology_artifact_and_canvas_tool_results() -> None:
+    client = build_skill_runtime_client(_CreateOntologyArtifactAndPresentCanvasRuntime())
+    seed_fixture_dataset(client)
+
+    response = client.post(
+        "/api/v1/ai/assistant/chat",
+        json={
+            "completion_messages": [
+                {
+                    "role": "user",
+                    "content": "Open the order ontology beside the chat so I can inspect it.",
+                },
+            ],
+            "thread_id": "thread-ontology-canvas-1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    events = _parse_sse_events(response.text)
+    tool_status_events = [payload for event, payload in events if event == "tool_status"]
+    assert [payload["tool"] for payload in tool_status_events] == [
+        "create_ontology_graph_artifact",
+        "create_ontology_graph_artifact",
+        "present_canvas_artifact",
+        "present_canvas_artifact",
+    ]
+
+    final_event = next(payload for event, payload in events if event == "final")
+    assert "assistant.canvas.present" in final_event["tool_permissions"]
+
+    tool_messages = [
+        json.loads(message["content"])
+        for message in final_event["completion_messages"]
+        if message["role"] == "tool"
+    ]
+    ontology_result = next(
+        item for item in tool_messages if item["tool"] == "create_ontology_graph_artifact"
+    )
+    assert ontology_result["artifact"]["artifact_type"] == "ontology-graph"
+    assert ontology_result["artifact"]["title"] == "Order ontology"
+    assert ontology_result["artifact"]["data"]["focus_concept_uri"] == _ORDER_URI
+    assert ontology_result["artifact"]["data"]["initial_tab"] == "objects"
+
+    canvas_result = next(
+        item for item in tool_messages if item["tool"] == "present_canvas_artifact"
+    )
+    assert canvas_result["tool_permission"] == "assistant.canvas.present"
+    assert canvas_result["canvas_action"]["action"] == "present"
+    assert canvas_result["canvas_action"]["target"] == "split-right"
+    assert (
+        canvas_result["canvas_action"]["artifact_id"]
+        == ontology_result["artifact"]["artifact_id"]
     )
 
 

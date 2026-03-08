@@ -292,6 +292,24 @@ test("explorer opts into explicit lifecycle naming in catalog, inspector, and gr
   assert.match(graphSource, /displayNodeName\?\.\(node\)/);
 });
 
+test("ontology page host and assistant canvas host share the explorer display surface", () => {
+  const pageSource = read("app/ontology/[tab]/page.tsx");
+  const assistantHostSource = read("app/components/assistant/assistant-ontology-canvas.tsx");
+  const explorerSource = read("app/components/ontology/ontology-explorer-tabs.tsx");
+
+  assert.match(pageSource, /OntologyExplorerTabs/);
+  assert.match(pageSource, /activeTab=\{activeTab\}/);
+  assert.match(pageSource, /onTabChange=\{handleTabChange\}/);
+
+  assert.match(assistantHostSource, /OntologyExplorerTabs/);
+  assert.match(assistantHostSource, /key=\{`\$\{initialTab \|\| "overview"\}:\$\{focusConceptUri \|\| "all"\}`\}/);
+  assert.match(assistantHostSource, /initialTab=\{initialTab \|\| undefined\}/);
+  assert.match(assistantHostSource, /initialConceptUri=\{focusConceptUri \|\| undefined\}/);
+
+  assert.match(explorerSource, /initialTab\?: string/);
+  assert.match(explorerSource, /useState<ExplorerTab>\(\s*initialTab && initialTab in TAB_CONFIG/);
+});
+
 test("history details panel keeps object-local lifecycle naming in plain/default mode", () => {
   const historySource = read("app/components/inspector/history-panel.tsx");
   const detailsSource = read("app/components/inspector/use-object-history-display-data.ts");

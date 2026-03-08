@@ -183,15 +183,16 @@ Validation:
 
 - [x] Phase 1 complete
 - [x] Phase 2 complete
-- [ ] Phase 3 complete
+- [x] Phase 3 complete
 - [ ] Phase 4 complete
 
 Current execution state:
 
-- `in_progress`: Phase 3 - Ontology shared display surface and artifact support
+- `in_progress`: Phase 4 - Ratification and archive readiness
 - `blocked`: none
 - `completed`: Phase 1 - RCA shared display surface extraction
 - `completed`: Phase 2 - Object History shared display surface extraction
+- `completed`: Phase 3 - Ontology shared display surface and artifact support
 
 ## Phase Progress Notes
 
@@ -232,12 +233,28 @@ Current execution state:
    - `cd seer-ui && npm run lint`
    - `cd seer-ui && npm run build`
 
+### 2026-03-08: Phase 3 Delivery Complete
+
+1. Added a first-class `ontology-graph` assistant artifact type to the backend and frontend canvas contracts.
+2. Added the native `create_ontology_graph_artifact` ontology tool so the assistant can persist lightweight ontology explorer artifacts without embedding the full graph payload.
+3. Reused the existing global ontology graph provider and mounted the shared `OntologyExplorerTabs` surface inside assistant canvas through a thin `AssistantOntologyCanvas` host.
+4. Kept `/ontology/[tab]` as the page-controlled host while making `OntologyExplorerTabs` support assistant-controlled initialization through an `initialTab` prop.
+5. Avoided canvas-only ontology graph UI duplication inside `assistant-canvas-panel.tsx`; the panel now dispatches `ontology-graph` artifacts to the shared ontology host.
+6. Updated contract coverage to assert:
+   - assistant canvas dispatches ontology artifacts to the shared host,
+   - assistant and page hosts both mount `OntologyExplorerTabs`,
+   - and the shared explorer supports assistant-driven initial tab selection.
+7. Validation passed:
+   - `cd seer-ui && node --test tests/assistant-global.contract.test.mjs tests/ontology-display.contract.test.mjs`
+   - `seer-backend/.venv/bin/pytest -q seer-backend/tests/test_ai_phase5.py -k "artifact or canvas or skill"`
+
 ## Decision Log
 
 1. 2026-03-08: The correct reuse boundary is "same display surface, different control surface" rather than full route parity or canvas-only renderers.
 2. 2026-03-08: Assistant canvas will continue to own orchestration/input, while pages keep route/query/setup controls.
 3. 2026-03-08: Domain result presentation should be extracted from expert pages and mounted in assistant canvas, not reimplemented inside `assistant-canvas-panel.tsx`.
 4. 2026-03-08: Phase 1 establishes the extraction pattern as a shared result surface plus thin page/canvas hosts, rather than a shared route container.
+5. 2026-03-08: Ontology canvas artifacts should stay lightweight and reuse the frontend ontology graph provider instead of duplicating graph transport in assistant artifact payloads.
 5. 2026-03-08: Phase 2 confirms the same pattern works for history even when the assistant artifact is only an identity/timeline starter and the assistant host must fetch extra event/relation data.
 
 ## Risks And Mitigations

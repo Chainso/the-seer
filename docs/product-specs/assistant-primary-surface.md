@@ -88,8 +88,9 @@ Current delivered artifact behavior:
 1. `ocdfg` renders with the shipped OC-DFG graph component in the desktop canvas,
 2. `rca` renders with the shared RCA results surface used by `/inspector/insights`,
 3. `object-timeline` renders with the shared object-history display surface used by `/inspector/history/object`,
-4. other artifact families currently use the generic artifact panel,
-5. non-visual artifact fallback remains available even when no specialized renderer exists.
+4. `ontology-graph` renders with the shared ontology explorer display used by `/ontology/[tab]`,
+5. other artifact families currently use the generic artifact panel,
+6. non-visual artifact fallback remains available even when no specialized renderer exists.
 
 ## Acceptance Expectations
 
