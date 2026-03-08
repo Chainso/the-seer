@@ -268,6 +268,9 @@ class ActionsService:
         *,
         user_id: str,
         status: ActionStatus | None = None,
+        action_kind: ActionKind | None = None,
+        action_uri: str | None = None,
+        search: str | None = None,
         page: int = 1,
         size: int = 20,
         submitted_after: datetime | None = None,
@@ -278,10 +281,24 @@ class ActionsService:
             self._repository.list_actions,
             user_id=user_id,
             status=status,
+            action_kind=action_kind,
+            action_uri=action_uri,
+            search=search,
             page=page,
             size=size,
             submitted_after=submitted_after,
             submitted_before=submitted_before,
+        )
+
+    async def list_child_actions(
+        self,
+        *,
+        parent_execution_id: UUID,
+    ) -> list[ActionRecord]:
+        await self.ensure_schema()
+        return await asyncio.to_thread(
+            self._repository.list_child_actions,
+            parent_execution_id=parent_execution_id,
         )
 
     async def get_action_by_idempotency_key(
@@ -498,12 +515,33 @@ class UnavailableActionsService:
         *,
         user_id: str,
         status: ActionStatus | None = None,
+        action_kind: ActionKind | None = None,
+        action_uri: str | None = None,
+        search: str | None = None,
         page: int = 1,
         size: int = 20,
         submitted_after: datetime | None = None,
         submitted_before: datetime | None = None,
     ) -> tuple[list[ActionRecord], int]:
-        del user_id, status, page, size, submitted_after, submitted_before
+        del (
+            user_id,
+            status,
+            action_kind,
+            action_uri,
+            search,
+            page,
+            size,
+            submitted_after,
+            submitted_before,
+        )
+        raise ActionDependencyUnavailableError(self.reason)
+
+    async def list_child_actions(
+        self,
+        *,
+        parent_execution_id: UUID,
+    ) -> list[ActionRecord]:
+        del parent_execution_id
         raise ActionDependencyUnavailableError(self.reason)
 
     async def get_action_by_idempotency_key(

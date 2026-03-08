@@ -9,14 +9,38 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from seer_backend.actions.errors import (
+    ActionDependencyUnavailableError,
+    ActionError,
+)
+from seer_backend.actions.models import ActionKind, ActionRecord, ActionStatus
+from seer_backend.agent_orchestration.errors import (
+    AgentOrchestrationDependencyUnavailableError,
+)
 from seer_backend.agent_orchestration.models import (
+    AgentExecutionActionSummary,
+    AgentExecutionDetail,
+    AgentExecutionEventSummary,
+    AgentExecutionMessage,
+    AgentExecutionMessagesPage,
+    AgentExecutionSummary,
     AgentTranscriptMessage,
     AgentTranscriptMessageRecord,
     AgentTranscriptResumeState,
 )
 from seer_backend.agent_orchestration.repository import AgentTranscriptRepository
+from seer_backend.history.errors import (
+    HistoryDependencyUnavailableError,
+    HistoryError,
+)
+from seer_backend.history.models import EventHistoryItem
 
 _TOOL_CALL_ID_MAX_LENGTH = 120
+_TERMINAL_ACTION_STATUSES = {
+    ActionStatus.COMPLETED,
+    ActionStatus.FAILED_TERMINAL,
+    ActionStatus.DEAD_LETTER,
+}
 
 
 class AgentTranscriptService:
@@ -114,6 +138,180 @@ class AgentTranscriptService:
             self._schema_ready = True
 
 
+class AgentOrchestrationService:
+    """Query surface for agentic workflow execution list/detail/message views."""
+
+    def __init__(
+        self,
+        *,
+        actions_service: Any,
+        history_service: Any,
+        transcript_service: AgentTranscriptService,
+    ) -> None:
+        self._actions_service = actions_service
+        self._history_service = history_service
+        self._transcript_service = transcript_service
+
+    async def list_executions(
+        self,
+        *,
+        user_id: str,
+        status: ActionStatus | None,
+        workflow_uri: str | None,
+        search: str | None,
+        page: int,
+        size: int,
+        submitted_after: datetime | None,
+        submitted_before: datetime | None,
+    ) -> tuple[list[AgentExecutionSummary], int]:
+        normalized_workflow_uri = _normalize_optional_text(workflow_uri)
+        normalized_search = _normalize_optional_text(search)
+        actions, total = await self._actions_service.list_actions(
+            user_id=user_id,
+            status=status,
+            action_kind=ActionKind.AGENTIC_WORKFLOW,
+            action_uri=normalized_workflow_uri,
+            search=normalized_search,
+            page=page,
+            size=size,
+            submitted_after=submitted_after,
+            submitted_before=submitted_before,
+        )
+        summaries = [await self._build_execution_summary(action) for action in actions]
+        return summaries, total
+
+    async def get_execution_detail(self, execution_id: UUID) -> AgentExecutionDetail:
+        action = await self._load_agentic_execution(execution_id)
+        execution = await self._build_execution_summary(action)
+
+        parent_execution = None
+        if action.parent_execution_id is not None:
+            parent_action = await self._actions_service.get_action(action.parent_execution_id)
+            if parent_action is not None:
+                parent_execution = _action_summary(parent_action)
+
+        child_actions = await self._actions_service.list_child_actions(
+            parent_execution_id=execution_id
+        )
+        child_summaries = [_action_summary(child_action) for child_action in child_actions]
+        produced_event_execution_ids = [
+            execution_id,
+            *[child_action.action_id for child_action in child_actions],
+        ]
+        produced_events = await self._load_produced_events(produced_event_execution_ids)
+        return AgentExecutionDetail(
+            execution=execution,
+            parent_execution=parent_execution,
+            child_executions=child_summaries,
+            produced_events=produced_events,
+        )
+
+    async def get_execution_messages(
+        self,
+        execution_id: UUID,
+        *,
+        after_ordinal: int = 0,
+        limit: int = 200,
+    ) -> AgentExecutionMessagesPage:
+        action = await self._load_agentic_execution(execution_id)
+        transcript_rows = await self._transcript_service.load_transcript_messages(
+            execution_id=execution_id
+        )
+        workflow_uri = action.action_uri
+        messages = _message_page_from_records(
+            execution_id=execution_id,
+            workflow_uri=workflow_uri,
+            records=transcript_rows,
+            after_ordinal=after_ordinal,
+            limit=limit,
+        )
+        return messages
+
+    async def get_execution_status(self, execution_id: UUID) -> AgentExecutionActionSummary:
+        action = await self._load_agentic_execution(execution_id)
+        return _action_summary(action)
+
+    async def _build_execution_summary(self, action: ActionRecord) -> AgentExecutionSummary:
+        transcript_rows = await self._transcript_service.load_transcript_messages(
+            execution_id=action.action_id
+        )
+        last_persisted_at = transcript_rows[-1].persisted_at if transcript_rows else None
+        return AgentExecutionSummary(
+            action=_action_summary(action),
+            transcript_message_count=len(transcript_rows),
+            last_transcript_persisted_at=last_persisted_at,
+        )
+
+    async def _load_agentic_execution(self, execution_id: UUID) -> ActionRecord:
+        try:
+            action = await self._actions_service.get_action(execution_id)
+        except ActionDependencyUnavailableError as exc:
+            raise AgentOrchestrationDependencyUnavailableError(str(exc)) from exc
+        except ActionError as exc:
+            raise AgentOrchestrationDependencyUnavailableError(str(exc)) from exc
+        if action is None or action.action_kind is not ActionKind.AGENTIC_WORKFLOW:
+            raise ValueError(f"agentic workflow execution '{execution_id}' was not found")
+        return action
+
+    async def _load_produced_events(
+        self,
+        execution_ids: list[UUID],
+    ) -> list[AgentExecutionEventSummary]:
+        unique_ids = list(dict.fromkeys(execution_ids))
+        if not unique_ids:
+            return []
+        try:
+            timeline = await self._history_service.produced_events(
+                produced_by_execution_ids=unique_ids,
+                limit=200,
+            )
+        except HistoryDependencyUnavailableError as exc:
+            raise AgentOrchestrationDependencyUnavailableError(str(exc)) from exc
+        except HistoryError as exc:
+            raise AgentOrchestrationDependencyUnavailableError(str(exc)) from exc
+        return [_event_summary(event) for event in timeline.items]
+
+
+class UnavailableAgentOrchestrationService:
+    """Fallback service when transcript/query dependencies cannot be built."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+
+    async def list_executions(
+        self,
+        *,
+        user_id: str,
+        status: ActionStatus | None,
+        workflow_uri: str | None,
+        search: str | None,
+        page: int,
+        size: int,
+        submitted_after: datetime | None,
+        submitted_before: datetime | None,
+    ) -> tuple[list[AgentExecutionSummary], int]:
+        del user_id, status, workflow_uri, search, page, size, submitted_after, submitted_before
+        raise AgentOrchestrationDependencyUnavailableError(self.reason)
+
+    async def get_execution_detail(self, execution_id: UUID) -> AgentExecutionDetail:
+        del execution_id
+        raise AgentOrchestrationDependencyUnavailableError(self.reason)
+
+    async def get_execution_messages(
+        self,
+        execution_id: UUID,
+        *,
+        after_ordinal: int = 0,
+        limit: int = 200,
+    ) -> AgentExecutionMessagesPage:
+        del execution_id, after_ordinal, limit
+        raise AgentOrchestrationDependencyUnavailableError(self.reason)
+
+    async def get_execution_status(self, execution_id: UUID) -> AgentExecutionActionSummary:
+        del execution_id
+        raise AgentOrchestrationDependencyUnavailableError(self.reason)
+
+
 def resume_state_from_records(
     *,
     execution_id: UUID,
@@ -207,3 +405,89 @@ def _call_id(message_json: dict[str, Any]) -> str | None:
     if not isinstance(call_id, str) or not call_id.strip():
         return None
     return call_id
+
+
+def _normalize_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    return normalized if normalized else None
+
+
+def _action_summary(action: ActionRecord) -> AgentExecutionActionSummary:
+    return AgentExecutionActionSummary(
+        action_id=action.action_id,
+        user_id=action.user_id,
+        action_uri=action.action_uri,
+        action_kind=action.action_kind,
+        status=action.status,
+        parent_execution_id=action.parent_execution_id,
+        attempt_count=action.attempt_count,
+        max_attempts=action.max_attempts,
+        submitted_at=action.submitted_at,
+        updated_at=action.updated_at,
+        completed_at=action.completed_at,
+        lease_owner_instance_id=action.lease_owner_instance_id,
+        lease_expires_at=action.lease_expires_at,
+        last_error_code=action.last_error_code,
+        last_error_detail=action.last_error_detail,
+    )
+
+
+def _event_summary(event: EventHistoryItem) -> AgentExecutionEventSummary:
+    return AgentExecutionEventSummary(
+        event_id=event.event_id,
+        occurred_at=event.occurred_at,
+        event_type=event.event_type,
+        source=event.source,
+        payload=event.payload,
+        trace_id=event.trace_id,
+        attributes=event.attributes,
+        produced_by_execution_id=event.produced_by_execution_id,
+        ingested_at=event.ingested_at,
+    )
+
+
+def _message_page_from_records(
+    *,
+    execution_id: UUID,
+    workflow_uri: str,
+    records: list[AgentTranscriptMessageRecord],
+    after_ordinal: int,
+    limit: int,
+) -> AgentExecutionMessagesPage:
+    ordered = sorted(records, key=lambda record: (record.attempt_no, record.sequence_no))
+    if after_ordinal < 0:
+        raise ValueError("after_ordinal must be >= 0")
+    page_size = max(int(limit), 1)
+
+    messages = [
+        AgentExecutionMessage(
+            ordinal=index,
+            execution_id=execution_id,
+            workflow_uri=record.workflow_uri,
+            attempt_no=record.attempt_no,
+            sequence_no=record.sequence_no,
+            message_role=record.message_role,
+            message_kind=record.message_kind,
+            call_id=record.call_id,
+            message_json=dict(record.message_json),
+            persisted_at=record.persisted_at,
+        )
+        for index, record in enumerate(ordered, start=1)
+        if index > after_ordinal
+    ][:page_size]
+    last_ordinal = len(ordered)
+    effective_workflow_uri = ordered[-1].workflow_uri if ordered else workflow_uri
+    return AgentExecutionMessagesPage(
+        execution_id=execution_id,
+        workflow_uri=effective_workflow_uri,
+        total_messages=last_ordinal,
+        returned_messages=len(messages),
+        last_ordinal=last_ordinal,
+        messages=messages,
+    )
+
+
+def is_terminal_status(status: ActionStatus) -> bool:
+    return status in _TERMINAL_ACTION_STATUSES

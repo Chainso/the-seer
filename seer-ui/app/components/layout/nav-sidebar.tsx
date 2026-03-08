@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
-import { Network, Sparkles, Sun, Moon, Database, Bot } from 'lucide-react';
+import { Network, Sparkles, Sun, Moon, Database, Bot, Waypoints } from 'lucide-react';
 
 const navigation = [
   {
@@ -23,6 +23,11 @@ const navigation = [
     name: 'Insights',
     href: '/inspector/insights',
     icon: Sparkles,
+  },
+  {
+    name: 'Workflow Runs',
+    href: '/inspector/agentic-workflows',
+    icon: Waypoints,
   },
   {
     name: 'Assistant',

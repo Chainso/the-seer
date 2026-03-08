@@ -14,6 +14,10 @@ from seer_backend.actions.service import (
     inject_actions_service,
 )
 from seer_backend.api.actions import router as actions_router
+from seer_backend.api.agentic_workflows import (
+    inject_agent_orchestration_service,
+)
+from seer_backend.api.agentic_workflows import router as agentic_workflows_router
 from seer_backend.api.ai import inject_ai_gateway_service
 from seer_backend.api.ai import router as ai_router
 from seer_backend.api.health import router as health_router
@@ -75,15 +79,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(ontology_router, prefix=settings.api_prefix)
     app.include_router(history_router, prefix=settings.api_prefix)
     app.include_router(actions_router, prefix=settings.api_prefix)
+    app.include_router(agentic_workflows_router, prefix=settings.api_prefix)
     app.include_router(process_router, prefix=settings.api_prefix)
     app.include_router(root_cause_router, prefix=settings.api_prefix)
     app.include_router(ai_router, prefix=settings.api_prefix)
     inject_ontology_services(app, settings)
     inject_history_service(app, settings)
+    inject_actions_service(app, settings)
+    inject_agent_orchestration_service(app, settings)
     inject_process_service(app, settings)
     inject_root_cause_service(app, settings)
     inject_ai_gateway_service(app)
-    inject_actions_service(app, settings)
 
     return app
 

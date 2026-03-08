@@ -759,6 +759,8 @@ Expected when implementation lands:
 12. 2026-03-08: The Seer ontology extension will live in `prophet/seer.ttl` and be loaded automatically alongside `prophet/prophet.ttl` by backend ontology validation/bootstrap paths.
 13. 2026-03-08: `action_kind` classification is derived from ontology subtype relationships with precedence `agentic_workflow` > `process` > `workflow`, so custom Prophet subclasses still map cleanly into the generic action control plane.
 14. 2026-03-08: Phase 3 transcript sequencing is backend-assigned per `(execution_id, attempt_no)` at append time, while resume remains attempt-scoped and transcript reads may still span all attempts for audit/debug views.
+15. 2026-03-08: Phase 4 execution list APIs require explicit `user_id` until the generic action control plane grows a different authenticated scoping model.
+16. 2026-03-08: Phase 4 transcript fetch and SSE tailing use a derived monotonic `after_ordinal` cursor over canonical `(attempt_no, sequence_no)` ordering so the UI can page and resume across attempts without ambiguous per-attempt cursors.
 
 ## Progress Log
 
@@ -774,17 +776,21 @@ Expected when implementation lands:
 10. 2026-03-08: Phase 3 implementation landed backend-only primitives under `seer_backend/agent_orchestration`: append-only transcript models/repository/service, ordered resume-state reconstruction from persisted `completion_messages`, ClickHouse transcript migration, and optional `produced_by_execution_id` carried through history ingest/timeline/object-event/relation models.
 11. 2026-03-08: Phase 3 focused validation passed before the full backend gate: `cd seer-backend && uv run ruff check src tests` passed and targeted `uv run pytest -q tests/test_agent_orchestration_phase3.py tests/test_history_phase2.py` passed (`16 passed, 1 warning`).
 12. 2026-03-08: Phase 3 final backend validation completed successfully: `cd seer-backend && uv run ruff check src tests` passed and full `uv run pytest -q` passed (`133 passed, 6 warnings`).
+13. 2026-03-08: Phase 4 landed dedicated `/api/v1/agentic-workflows/executions` list/detail/message/stream APIs backed by a new `agent_orchestration` query service that composes generic `actions`, persisted transcripts, and produced-event history without inventing a parallel control plane.
+14. 2026-03-08: Phase 4 landed the inspector execution surfaces at `/inspector/agentic-workflows` and `/inspector/agentic-workflows/[executionId]`, reusing history-style filtering and drill-in patterns for execution list, child action lineage, produced events, and live persisted-message transcript tailing.
+15. 2026-03-08: Phase 4 validation completed successfully: `cd seer-backend && uv run ruff check src tests` passed, `cd seer-backend && uv run pytest -q` passed (`138 passed, 6 warnings`), `cd seer-ui && npm run lint` passed, `cd seer-ui && npm run build` passed, and `cd seer-ui && npm run test:contracts` passed (`49 passed`).
 
 ## Progress Tracking
 
 - [x] Phase 1 architecture lock opened in docs
 - [x] Phase 2 ontology extension + action control-plane evolution
 - [x] Phase 3 transcript persistence + resume + provenance
-- [ ] Phase 4 agentic workflow execution APIs + UI surfaces
+- [x] Phase 4 agentic workflow execution APIs + UI surfaces
 - [ ] Phase 5 canonical docs/spec ratification
 
 Current execution state:
 
 1. `completed`: Phase 2 ontology extension + action control-plane evolution.
 2. `completed`: Phase 3 transcript persistence + runtime resume + produced-event provenance.
-3. `ready_for_handoff`: Phase 4 agentic workflow execution APIs + UI surfaces is the next implementation phase.
+3. `completed`: Phase 4 agentic workflow execution APIs + UI surfaces.
+4. `ready_for_handoff`: Phase 5 canonical docs/spec ratification is the next implementation phase.

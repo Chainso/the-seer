@@ -153,11 +153,20 @@ class ActionsRepository(Protocol):
         *,
         user_id: str,
         status: ActionStatus | None = None,
+        action_kind: ActionKind | None = None,
+        action_uri: str | None = None,
+        search: str | None = None,
         page: int = 1,
         size: int = 20,
         submitted_after: datetime | None = None,
         submitted_before: datetime | None = None,
     ) -> tuple[list[ActionRecord], int]: ...
+
+    def list_child_actions(
+        self,
+        *,
+        parent_execution_id: UUID,
+    ) -> list[ActionRecord]: ...
 
     def claim_actions(
         self,
@@ -332,6 +341,9 @@ class PostgresActionsRepository:
         *,
         user_id: str,
         status: ActionStatus | None = None,
+        action_kind: ActionKind | None = None,
+        action_uri: str | None = None,
+        search: str | None = None,
         page: int = 1,
         size: int = 20,
         submitted_after: datetime | None = None,
@@ -343,6 +355,12 @@ class PostgresActionsRepository:
         filters = [actions_table.c.user_id == user_id]
         if status is not None:
             filters.append(actions_table.c.status == status.value)
+        if action_kind is not None:
+            filters.append(actions_table.c.action_kind == action_kind.value)
+        if action_uri is not None:
+            filters.append(actions_table.c.action_uri == action_uri)
+        if search is not None:
+            filters.append(actions_table.c.action_uri.ilike(f"%{search}%"))
         if submitted_after is not None:
             filters.append(actions_table.c.submitted_at >= _ensure_utc(submitted_after))
         if submitted_before is not None:
@@ -372,6 +390,32 @@ class PostgresActionsRepository:
             raise ActionRepositoryError(f"Postgres list actions failed: {exc}") from exc
 
         return [_action_from_row(row) for row in rows], int(total)
+
+    def list_child_actions(
+        self,
+        *,
+        parent_execution_id: UUID,
+    ) -> list[ActionRecord]:
+        try:
+            with self._engine_instance().connect() as connection:
+                rows = (
+                    connection.execute(
+                        select(*actions_table.c)
+                        .where(actions_table.c.parent_execution_id == parent_execution_id)
+                        .order_by(
+                            desc(actions_table.c.submitted_at),
+                            desc(actions_table.c.action_id),
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+        except SQLAlchemyError as exc:
+            raise ActionRepositoryError(
+                f"Postgres list child actions failed: {exc}"
+            ) from exc
+
+        return [_action_from_row(row) for row in rows]
 
     def claim_actions(
         self,
@@ -1064,6 +1108,9 @@ class InMemoryActionsRepository:
         *,
         user_id: str,
         status: ActionStatus | None = None,
+        action_kind: ActionKind | None = None,
+        action_uri: str | None = None,
+        search: str | None = None,
         page: int = 1,
         size: int = 20,
         submitted_after: datetime | None = None,
@@ -1084,6 +1131,12 @@ class InMemoryActionsRepository:
                     continue
                 if status is not None and action.status != status:
                     continue
+                if action_kind is not None and action.action_kind != action_kind:
+                    continue
+                if action_uri is not None and action.action_uri != action_uri:
+                    continue
+                if search is not None and search.lower() not in action.action_uri.lower():
+                    continue
                 if submitted_after_utc is not None and action.submitted_at < submitted_after_utc:
                     continue
                 if submitted_before_utc is not None and action.submitted_at > submitted_before_utc:
@@ -1096,6 +1149,20 @@ class InMemoryActionsRepository:
             total = len(filtered)
             page_rows = filtered[offset : offset + page_size]
             return [_clone_action(row) for row in page_rows], total
+
+    def list_child_actions(
+        self,
+        *,
+        parent_execution_id: UUID,
+    ) -> list[ActionRecord]:
+        with self._lock:
+            rows = [
+                action
+                for action in self._actions.values()
+                if action.parent_execution_id == parent_execution_id
+            ]
+            rows.sort(key=lambda row: (row.submitted_at, str(row.action_id)), reverse=True)
+            return [_clone_action(row) for row in rows]
 
     def claim_actions(
         self,

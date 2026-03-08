@@ -149,6 +149,34 @@ class HistoryService:
             ]
         )
 
+    async def produced_events(
+        self,
+        *,
+        produced_by_execution_ids: list[UUID],
+        limit: int,
+    ) -> EventTimelineResponse:
+        await self._ensure_schema()
+        rows = await self._repository.fetch_events_by_produced_execution_ids(
+            produced_by_execution_ids=produced_by_execution_ids,
+            limit=limit,
+        )
+        return EventTimelineResponse(
+            items=[
+                EventHistoryItem(
+                    event_id=row.event_id,
+                    occurred_at=row.occurred_at,
+                    event_type=row.event_type,
+                    source=row.source,
+                    payload=row.payload,
+                    trace_id=row.trace_id,
+                    attributes=row.attributes,
+                    produced_by_execution_id=row.produced_by_execution_id,
+                    ingested_at=row.ingested_at,
+                )
+                for row in rows
+            ]
+        )
+
     async def object_timeline(
         self,
         *,
@@ -331,6 +359,15 @@ class UnavailableHistoryService:
         limit: int,
     ) -> EventTimelineResponse:
         del start_at, end_at, event_type, limit
+        raise HistoryDependencyUnavailableError(self.reason)
+
+    async def produced_events(
+        self,
+        *,
+        produced_by_execution_ids: list[UUID],
+        limit: int,
+    ) -> EventTimelineResponse:
+        del produced_by_execution_ids, limit
         raise HistoryDependencyUnavailableError(self.reason)
 
     async def object_timeline(

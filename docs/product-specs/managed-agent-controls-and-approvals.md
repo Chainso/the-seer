@@ -2,7 +2,7 @@
 
 **Status:** draft  
 **Owner plan:** `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md`  
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-08
 
 ---
 
@@ -63,15 +63,18 @@ At any point, the user should be able to answer:
 ### Inspect Agent Run History
 
 1. User opens one managed agent.
-2. User sees:
+2. User can filter that agent's execution history by runtime state such as running, completed, failed, or dead-letter.
+3. User opens one execution from the table.
+4. User sees:
    - objective,
    - current lifecycle state,
    - recent decisions,
+   - canonical persisted transcript messages,
    - executed actions,
    - outcomes,
    - failures,
    - guardrail events.
-3. User can inspect the evidence behind a major decision.
+5. User can inspect the evidence behind a major decision and watch newly persisted transcript messages arrive live while the execution is still running.
 
 ### Change Runtime Controls
 
@@ -94,13 +97,16 @@ At any point, the user should be able to answer:
 The control surface should expose:
 
 1. current lifecycle state,
-2. recent guardrail events,
-3. last meaningful action,
-4. last meaningful evidence set,
-5. current runtime guardrails,
-6. trusted-mode execution state,
-7. pause/resume/revoke controls,
-8. and outcome summaries.
+2. execution list/history with reasonable filters,
+3. execution detail drill-in,
+4. canonical persisted transcript messages for one run,
+5. recent guardrail events,
+6. last meaningful action,
+7. last meaningful evidence set,
+8. current runtime guardrails,
+9. trusted-mode execution state,
+10. pause/resume/revoke controls,
+11. and outcome summaries.
 
 ## Trusted-Mode Scope
 
@@ -121,11 +127,12 @@ Audit records should show:
 1. investigation steps that materially informed a decision,
 2. recommended actions,
 3. executed actions,
-4. guardrail-triggered stops or failures,
-5. returned results,
-6. failures and retries,
-7. policy changes,
-8. and user interventions.
+4. canonical persisted transcript messages in execution order,
+5. guardrail-triggered stops or failures,
+6. returned results,
+7. failures and retries,
+8. policy changes,
+9. and user interventions.
 
 ## Default Safety Posture
 
@@ -151,11 +158,13 @@ That means:
 ## Acceptance Expectations
 
 1. Users can inspect recent agent decisions without reading raw logs.
-2. Users can see when runtime guardrails stopped, deferred, or constrained an agent.
-3. Users can pause, resume, or revoke an agent from the control surface.
-4. Runtime guardrails are visible and editable after activation.
-5. Audit history is sufficient to explain what happened to a non-author of the agent.
-6. The control model is understandable to someone who does not already know Seer's internal architecture.
+2. Users can list/filter agent executions and drill into one execution's transcript, child actions, and produced events.
+3. Users can watch a running execution through persisted-message live tailing rather than a token-only debug stream.
+4. Users can see when runtime guardrails stopped, deferred, or constrained an agent.
+5. Users can pause, resume, or revoke an agent from the control surface.
+6. Runtime guardrails are visible and editable after activation.
+7. Audit history is sufficient to explain what happened to a non-author of the agent.
+8. The control model is understandable to someone who does not already know Seer's internal architecture.
 
 ## Out Of Scope For This Spec
 

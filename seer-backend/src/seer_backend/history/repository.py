@@ -95,6 +95,13 @@ class HistoryRepository(Protocol):
         limit: int,
     ) -> list[EventHistoryRecord]: ...
 
+    async def fetch_events_by_produced_execution_ids(
+        self,
+        *,
+        produced_by_execution_ids: Sequence[UUID],
+        limit: int,
+    ) -> list[EventHistoryRecord]: ...
+
     async def fetch_object_timeline(
         self,
         *,
@@ -308,6 +315,40 @@ class ClickHouseHistoryRepository:
         if conditions:
             stmt = stmt.where(*conditions)
 
+        rows = await self._select_rows(stmt)
+        return [_event_row_from_clickhouse(row) for row in rows]
+
+    async def fetch_events_by_produced_execution_ids(
+        self,
+        *,
+        produced_by_execution_ids: Sequence[UUID],
+        limit: int,
+    ) -> list[EventHistoryRecord]:
+        normalized_ids = [str(execution_id) for execution_id in produced_by_execution_ids]
+        if not normalized_ids:
+            return []
+
+        event_history = _EVENT_HISTORY.alias("e")
+        stmt = (
+            select(
+                event_history.c.event_id,
+                event_history.c.occurred_at,
+                event_history.c.event_type,
+                event_history.c.source,
+                event_history.c.payload,
+                event_history.c.trace_id,
+                event_history.c.attributes,
+                event_history.c.produced_by_execution_id,
+                event_history.c.ingested_at,
+            )
+            .select_from(event_history)
+            .where(event_history.c.produced_by_execution_id.in_(normalized_ids))
+            .order_by(
+                desc(event_history.c.occurred_at),
+                desc(event_history.c.event_id),
+            )
+            .limit(int(limit))
+        )
         rows = await self._select_rows(stmt)
         return [_event_row_from_clickhouse(row) for row in rows]
 
@@ -638,6 +679,26 @@ class InMemoryHistoryRepository:
         if event_type is not None:
             rows = [row for row in rows if row.event_type == event_type]
         rows.sort(key=lambda row: (_ensure_utc(row.occurred_at), str(row.event_id)))
+        return rows[:limit]
+
+    async def fetch_events_by_produced_execution_ids(
+        self,
+        *,
+        produced_by_execution_ids: Sequence[UUID],
+        limit: int,
+    ) -> list[EventHistoryRecord]:
+        execution_ids = set(produced_by_execution_ids)
+        if not execution_ids:
+            return []
+        rows = [
+            row
+            for row in self._events.values()
+            if row.produced_by_execution_id in execution_ids
+        ]
+        rows.sort(
+            key=lambda row: (_ensure_utc(row.occurred_at), str(row.event_id)),
+            reverse=True,
+        )
         return rows[:limit]
 
     async def fetch_object_timeline(
