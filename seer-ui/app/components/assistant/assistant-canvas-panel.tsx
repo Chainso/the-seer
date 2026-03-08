@@ -7,9 +7,11 @@ import type {
   AssistantArtifactType,
   AssistantCanvasState,
 } from '@/app/lib/assistant-canvas-state';
+import { AssistantRootCauseCanvas } from '@/app/components/assistant/assistant-root-cause-canvas';
 import { OcdfgGraph as OcdfgGraphView } from '@/app/components/inspector/ocdfg-graph';
 import { toOcdfgGraphFromContract } from '@/app/lib/api/process-mining';
 import { useOntologyDisplay } from '@/app/lib/ontology-display';
+import type { RootCauseRunResponseContract } from '@/app/types/root-cause';
 import type { OcdfgMiningResponseContract } from '@/app/types/process-mining';
 
 const ARTIFACT_TYPE_LABELS: Record<AssistantArtifactType, string> = {
@@ -94,6 +96,37 @@ function parseOcdfgContract(artifact: AssistantArtifact): OcdfgMiningResponseCon
   return candidate as unknown as OcdfgMiningResponseContract;
 }
 
+function parseRcaRunContract(artifact: AssistantArtifact): RootCauseRunResponseContract | null {
+  if (artifact.artifact_type !== 'rca') {
+    return null;
+  }
+
+  const run = artifact.data.run;
+  if (!run || typeof run !== 'object') {
+    return null;
+  }
+
+  const candidate = run as Record<string, unknown>;
+  if (
+    typeof candidate.run_id !== 'string' ||
+    typeof candidate.anchor_object_type !== 'string' ||
+    typeof candidate.start_at !== 'string' ||
+    typeof candidate.end_at !== 'string' ||
+    typeof candidate.depth !== 'number' ||
+    typeof candidate.cohort_size !== 'number' ||
+    typeof candidate.positive_count !== 'number' ||
+    typeof candidate.baseline_rate !== 'number' ||
+    typeof candidate.feature_count !== 'number' ||
+    !Array.isArray(candidate.insights) ||
+    !Array.isArray(candidate.warnings) ||
+    typeof candidate.interpretation_caveat !== 'string'
+  ) {
+    return null;
+  }
+
+  return candidate as unknown as RootCauseRunResponseContract;
+}
+
 export function AssistantCanvasPanel({
   state,
   compact = false,
@@ -102,6 +135,10 @@ export function AssistantCanvasPanel({
   const artifact = state.artifact;
   const ocdfgContract = useMemo(
     () => (artifact ? parseOcdfgContract(artifact) : null),
+    [artifact]
+  );
+  const rcaRun = useMemo(
+    () => (artifact ? parseRcaRunContract(artifact) : null),
     [artifact]
   );
   const ocdfgGraph = useMemo(
@@ -230,6 +267,19 @@ export function AssistantCanvasPanel({
             </div>
           ) : null}
         </div>
+      </section>
+    );
+  }
+
+  if (rcaRun) {
+    return (
+      <section
+        data-assistant-canvas-panel
+        data-assistant-rca-canvas
+        data-artifact-type={visibleArtifact.artifact_type}
+        className={`flex ${compact ? 'h-auto' : 'h-full min-h-0'} flex-col bg-background/96`}
+      >
+        <AssistantRootCauseCanvas run={rcaRun} />
       </section>
     );
   }

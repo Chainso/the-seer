@@ -25,24 +25,30 @@ test("inspector page exposes insights route and analytics redirect", () => {
 test("insights panel consolidates root-cause and process-mining tabs", () => {
   const insightsPanel = read("app/components/inspector/insights-panel.tsx");
   const rootCausePanel = read("app/components/inspector/process-insights-panel.tsx");
+  const rootCauseSurface = read("app/components/inspector/root-cause-results-surface.tsx");
   const processApi = read("app/lib/api/process-mining.ts");
   const rootCauseApi = read("app/lib/api/root-cause.ts");
   const nav = read("app/components/layout/nav-sidebar.tsx");
 
-  assert.match(insightsPanel, /TabsTrigger value="process-insights">Process Insights<\/TabsTrigger>/);
-  assert.match(insightsPanel, /TabsTrigger value="process-mining">Process Mining<\/TabsTrigger>/);
-  assert.match(insightsPanel, /<ProcessInsightsPanel isActive=\{activeTab === "process-insights"\} \/>/);
-  assert.match(insightsPanel, /<ProcessMiningPanel isActive=\{activeTab === "process-mining"\} \/>/);
+  assert.match(insightsPanel, /value="process-insights"/);
+  assert.match(insightsPanel, /value="process-mining"/);
+  assert.match(insightsPanel, /mode\.label/);
+  assert.match(insightsPanel, /<ProcessInsightsPanel isActive=\{activeTab === "process-insights"\} showIntro=\{false\} \/>/);
+  assert.match(insightsPanel, /<ProcessMiningPanel isActive=\{activeTab === "process-mining"\} showIntro=\{false\} \/>/);
   assert.match(insightsPanel, /useSearchParams/);
   assert.match(insightsPanel, /mergeSearchParams/);
   assert.match(rootCausePanel, /runRootCause/);
   assert.match(rootCausePanel, /getRootCauseEvidence/);
   assert.match(rootCausePanel, /assistRootCauseSetup/);
   assert.match(rootCausePanel, /assistRootCauseInterpret/);
+  assert.match(rootCausePanel, /RootCauseResultsSurface/);
   assert.match(rootCausePanel, /buildReferenceEdges/);
   assert.match(rootCausePanel, /referencesObjectModel/);
   assert.match(rootCausePanel, /Select event type/);
   assert.match(rootCausePanel, /Select filter field/);
+  assert.match(rootCauseSurface, /data-root-cause-results-surface/);
+  assert.match(rootCauseSurface, /Evidence Traces/);
+  assert.match(rootCauseSurface, /AI Interpretation/);
   assert.match(processApi, /max_events/);
   assert.match(processApi, /max_relations/);
   assert.match(processApi, /max_traces_per_handle/);

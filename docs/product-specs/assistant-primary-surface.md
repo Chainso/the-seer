@@ -86,8 +86,9 @@ Mobile and compact variants may fall back to an inline compact canvas treatment 
 Current delivered artifact behavior:
 
 1. `ocdfg` renders with the shipped OC-DFG graph component in the desktop canvas,
-2. other artifact families currently use the generic artifact panel,
-3. non-visual artifact fallback remains available even when no specialized renderer exists.
+2. `rca` renders with the shared RCA results surface used by `/inspector/insights`,
+3. other artifact families currently use the generic artifact panel,
+4. non-visual artifact fallback remains available even when no specialized renderer exists.
 
 ## Acceptance Expectations
 
