@@ -215,6 +215,8 @@ Current execution state:
    - `cd seer-ui && node --test tests/assistant-global.contract.test.mjs tests/insights.contract.test.mjs`
    - `cd seer-ui && npm run lint`
    - `cd seer-ui && npm run build`
+7. Follow-up validation after updating the stale `insights` contract assertions:
+   - `cd seer-ui && npm run test:contracts` passed (`8/8` contract tests)
 
 ## Decision Log
 

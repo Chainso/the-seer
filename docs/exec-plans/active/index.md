@@ -1,7 +1,7 @@
 # MVP Phase Execution Index
 
 **Status:** Canonical per-phase execution map  
-**Date:** 2026-03-07  
+**Date:** 2026-03-08  
 **Parent roadmap:** `docs/exec-plans/completed/mvp-roadmap-2026.md`
 
 ---
@@ -65,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. none
+1. `docs/exec-plans/active/assistant-canvas-shared-display-surfaces.md` - in progress
 
 ## Post-MVP Status Tracking
 
@@ -82,7 +82,7 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: none
+- `in_progress`: `docs/exec-plans/active/assistant-canvas-shared-display-surfaces.md` (started on 2026-03-08 to extract shared result-display surfaces so assistant canvas and expert pages reuse the same RCA, history, and ontology UI presentation)
 - `blocked`: none
 - `completed`: `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md` (archived on 2026-03-07 after ratifying `/assistant` as the canonical conversational assistant surface with dynamic skill loading, artifact-backed canvas presentation, and OC-DFG canvas rendering)
 - `completed`: `docs/exec-plans/completed/ai-investigation-workbench-execution.md` (first workbench delivery archived on 2026-03-07; product/spec ratification completed, and a broader `/assistant` redesign track opened the same day after confirming contract and UI regressions)
