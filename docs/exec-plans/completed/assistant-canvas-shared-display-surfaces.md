@@ -1,10 +1,10 @@
 # Post-MVP Exec Plan: Assistant Canvas Shared Display Surfaces
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 14  
 **Agent slot:** AI-ASSISTANT-2  
 **Predecessor:** `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md`  
-**Successor:** none  
+**Successor:** none (archived on 2026-03-08)  
 **Last updated:** 2026-03-08
 
 ---
@@ -184,15 +184,16 @@ Validation:
 - [x] Phase 1 complete
 - [x] Phase 2 complete
 - [x] Phase 3 complete
-- [ ] Phase 4 complete
+- [x] Phase 4 complete
 
 Current execution state:
 
-- `in_progress`: Phase 4 - Ratification and archive readiness
+- `in_progress`: none
 - `blocked`: none
 - `completed`: Phase 1 - RCA shared display surface extraction
 - `completed`: Phase 2 - Object History shared display surface extraction
 - `completed`: Phase 3 - Ontology shared display surface and artifact support
+- `completed`: Phase 4 - Ratification and archive readiness
 
 ## Phase Progress Notes
 
@@ -248,6 +249,17 @@ Current execution state:
    - `cd seer-ui && node --test tests/assistant-global.contract.test.mjs tests/ontology-display.contract.test.mjs`
    - `seer-backend/.venv/bin/pytest -q seer-backend/tests/test_ai_phase5.py -k "artifact or canvas or skill"`
 
+### 2026-03-08: Phase 4 Ratification Complete
+
+1. Ratified the shared-display-surface architecture in `DESIGN.md` so the canonical design map now requires assistant canvas artifacts to reuse page-grade expert display surfaces wherever possible.
+2. Ratified assistant artifact coverage for RCA, object history, and ontology graph in `docs/product-specs/assistant-primary-surface.md`, including the new first-class `ontology-graph` artifact.
+3. Updated execution tracking so the active plan and post-MVP index reflect that all four phases completed on 2026-03-08.
+4. Final validation passed:
+   - `cd seer-ui && npm run test:contracts`
+   - `cd seer-ui && npm run lint`
+   - `cd seer-ui && npm run build`
+   - `seer-backend/.venv/bin/pytest -q seer-backend/tests/test_ai_phase5.py -k "artifact or canvas or skill"`
+
 ## Decision Log
 
 1. 2026-03-08: The correct reuse boundary is "same display surface, different control surface" rather than full route parity or canvas-only renderers.
@@ -255,7 +267,7 @@ Current execution state:
 3. 2026-03-08: Domain result presentation should be extracted from expert pages and mounted in assistant canvas, not reimplemented inside `assistant-canvas-panel.tsx`.
 4. 2026-03-08: Phase 1 establishes the extraction pattern as a shared result surface plus thin page/canvas hosts, rather than a shared route container.
 5. 2026-03-08: Ontology canvas artifacts should stay lightweight and reuse the frontend ontology graph provider instead of duplicating graph transport in assistant artifact payloads.
-5. 2026-03-08: Phase 2 confirms the same pattern works for history even when the assistant artifact is only an identity/timeline starter and the assistant host must fetch extra event/relation data.
+6. 2026-03-08: Phase 2 confirms the same pattern works for history even when the assistant artifact is only an identity/timeline starter and the assistant host must fetch extra event/relation data.
 
 ## Risks And Mitigations
 

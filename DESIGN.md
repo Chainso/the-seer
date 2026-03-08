@@ -33,6 +33,7 @@ For a new reader, the shortest useful summary is:
 11. The dedicated `/assistant` page uses one `completion_messages` conversation contract, dynamic skill loading, and a tool-driven artifact canvas rather than separate workflow transports.
 12. Seer UI components are built on Radix UI primitives as the standard accessibility and interaction foundation for reusable frontend components.
 13. The shared Seer shell is responsive by default, but shell affordances should stay subordinate to the primary investigation and managed-agent experiences.
+14. Assistant canvas artifacts should reuse the same expert display surfaces as their page counterparts wherever possible, with host differences limited to orchestration controls and outer chrome.
 
 ## Design Docs Index
 
