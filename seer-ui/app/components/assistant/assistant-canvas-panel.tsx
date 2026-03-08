@@ -7,10 +7,12 @@ import type {
   AssistantArtifactType,
   AssistantCanvasState,
 } from '@/app/lib/assistant-canvas-state';
+import { AssistantObjectHistoryCanvas } from '@/app/components/assistant/assistant-object-history-canvas';
 import { AssistantRootCauseCanvas } from '@/app/components/assistant/assistant-root-cause-canvas';
 import { OcdfgGraph as OcdfgGraphView } from '@/app/components/inspector/ocdfg-graph';
 import { toOcdfgGraphFromContract } from '@/app/lib/api/process-mining';
 import { useOntologyDisplay } from '@/app/lib/ontology-display';
+import type { LatestObjectItem } from '@/app/types/history';
 import type { RootCauseRunResponseContract } from '@/app/types/root-cause';
 import type { OcdfgMiningResponseContract } from '@/app/types/process-mining';
 
@@ -127,6 +129,24 @@ function parseRcaRunContract(artifact: AssistantArtifact): RootCauseRunResponseC
   return candidate as unknown as RootCauseRunResponseContract;
 }
 
+function parseObjectTimelineSnapshots(artifact: AssistantArtifact): LatestObjectItem[] | null {
+  if (artifact.artifact_type !== 'object-timeline') {
+    return null;
+  }
+
+  const timeline = artifact.data.timeline;
+  if (!timeline || typeof timeline !== 'object') {
+    return null;
+  }
+
+  const items = (timeline as Record<string, unknown>).items;
+  if (!Array.isArray(items)) {
+    return null;
+  }
+
+  return items as LatestObjectItem[];
+}
+
 export function AssistantCanvasPanel({
   state,
   compact = false,
@@ -139,6 +159,10 @@ export function AssistantCanvasPanel({
   );
   const rcaRun = useMemo(
     () => (artifact ? parseRcaRunContract(artifact) : null),
+    [artifact]
+  );
+  const objectTimelineSnapshots = useMemo(
+    () => (artifact ? parseObjectTimelineSnapshots(artifact) : null),
     [artifact]
   );
   const ocdfgGraph = useMemo(
@@ -280,6 +304,19 @@ export function AssistantCanvasPanel({
         className={`flex ${compact ? 'h-auto' : 'h-full min-h-0'} flex-col bg-background/96`}
       >
         <AssistantRootCauseCanvas run={rcaRun} />
+      </section>
+    );
+  }
+
+  if (objectTimelineSnapshots) {
+    return (
+      <section
+        data-assistant-canvas-panel
+        data-assistant-object-history-canvas
+        data-artifact-type={visibleArtifact.artifact_type}
+        className={`flex ${compact ? 'h-auto' : 'h-full min-h-0'} flex-col bg-background/96`}
+      >
+        <AssistantObjectHistoryCanvas timelineSnapshots={objectTimelineSnapshots} />
       </section>
     );
   }

@@ -182,15 +182,16 @@ Validation:
 ## Progress Checklist
 
 - [x] Phase 1 complete
-- [ ] Phase 2 complete
+- [x] Phase 2 complete
 - [ ] Phase 3 complete
 - [ ] Phase 4 complete
 
 Current execution state:
 
-- `in_progress`: Phase 2 - Object History shared display surface extraction
+- `in_progress`: Phase 3 - Ontology shared display surface and artifact support
 - `blocked`: none
 - `completed`: Phase 1 - RCA shared display surface extraction
+- `completed`: Phase 2 - Object History shared display surface extraction
 
 ## Phase Progress Notes
 
@@ -218,12 +219,26 @@ Current execution state:
 7. Follow-up validation after updating the stale `insights` contract assertions:
    - `cd seer-ui && npm run test:contracts` passed (`8/8` contract tests)
 
+### 2026-03-08: Phase 2 Delivery Complete
+
+1. Extracted the object-history presentation into a shared `ObjectHistoryDisplaySurface` so the header, graph, timeline, and pagination UI are no longer route-only.
+2. Centralized object-history display derivation into `useObjectHistoryDisplayData`, including timeline grouping, ontology-aware payload summaries, and graph view-model construction.
+3. Kept identity lookup, graph time source controls, custom range state, and back-navigation inside `object-history-details-panel.tsx`.
+4. Added `AssistantObjectHistoryCanvas` so assistant canvas now mounts the same object-history display surface used by `/inspector/history/object`.
+5. Replaced the assistant canvas `object-timeline` generic payload fallback with shared history display rendering driven by the existing timeline artifact plus follow-up history fetches.
+6. Updated contract coverage to assert the shared history surface boundary for both page and assistant canvas.
+7. Validation passed:
+   - `cd seer-ui && node --test tests/assistant-global.contract.test.mjs tests/assistant-history.contract.test.mjs tests/history.contract.test.mjs`
+   - `cd seer-ui && npm run lint`
+   - `cd seer-ui && npm run build`
+
 ## Decision Log
 
 1. 2026-03-08: The correct reuse boundary is "same display surface, different control surface" rather than full route parity or canvas-only renderers.
 2. 2026-03-08: Assistant canvas will continue to own orchestration/input, while pages keep route/query/setup controls.
 3. 2026-03-08: Domain result presentation should be extracted from expert pages and mounted in assistant canvas, not reimplemented inside `assistant-canvas-panel.tsx`.
 4. 2026-03-08: Phase 1 establishes the extraction pattern as a shared result surface plus thin page/canvas hosts, rather than a shared route container.
+5. 2026-03-08: Phase 2 confirms the same pattern works for history even when the assistant artifact is only an identity/timeline starter and the assistant host must fetch extra event/relation data.
 
 ## Risks And Mitigations
 

@@ -18,6 +18,7 @@ test("inspector root and object store route follow the forward-only history IA",
   const objectRoute = read("app/inspector/history/object/page.tsx");
   const historyPanel = read("app/components/inspector/history-panel.tsx");
   const detailsPanel = read("app/components/inspector/object-history-details-panel.tsx");
+  const displaySurface = read("app/components/inspector/object-history-display-surface.tsx");
   const nav = read("app/components/layout/nav-sidebar.tsx");
 
   assert.match(inspectorPage, /redirect\('\/inspector\/history'\)/);
@@ -32,9 +33,12 @@ test("inspector root and object store route follow the forward-only history IA",
   assert.doesNotMatch(historyPanel, /Graph Controls/);
   assert.doesNotMatch(historyPanel, /Graph View/);
   assert.doesNotMatch(historyPanel, /Load older/);
+  assert.match(detailsPanel, /ObjectHistoryDisplaySurface/);
   assert.match(detailsPanel, /Graph time source/);
   assert.match(detailsPanel, /Follow Timeline/);
   assert.match(detailsPanel, /Custom Range/);
+  assert.match(displaySurface, /Timeline by Day/);
+  assert.match(displaySurface, /Load older/);
   assert.match(nav, /name:\s*'Object Store'/);
   assert.match(nav, /href:\s*'\/inspector\/history'/);
 });
@@ -54,6 +58,8 @@ test("history API client targets canonical history endpoints for object discover
 test("history surfaces consume shared ontology display resolver contracts", () => {
   const historyPanel = read("app/components/inspector/history-panel.tsx");
   const detailsPanel = read("app/components/inspector/object-history-details-panel.tsx");
+  const displayHook = read("app/components/inspector/use-object-history-display-data.ts");
+  const displaySurface = read("app/components/inspector/object-history-display-surface.tsx");
 
   assert.match(historyPanel, /useOntologyDisplay/);
   assert.match(historyPanel, /\.displayObjectType\(/);
@@ -62,20 +68,22 @@ test("history surfaces consume shared ontology display resolver contracts", () =
   assert.match(historyPanel, /\.operatorOptionsForField\(/);
   assert.match(historyPanel, /profile:\s*"history"/);
 
-  assert.match(detailsPanel, /useOntologyDisplay/);
-  assert.match(detailsPanel, /\.displayObjectType\(/);
-  assert.match(detailsPanel, /\.displayEventType\(/);
-  assert.match(detailsPanel, /\.displayFieldLabel\(/);
-  assert.match(detailsPanel, /\.displayFieldValue\(/);
-  assert.match(detailsPanel, /\.summarizeObjectRef\(/);
-  assert.match(detailsPanel, /\.summarizePayload\(/);
-  assert.match(detailsPanel, /buildTimelineHighlights/);
-  assert.match(detailsPanel, /resolveStateTransition/);
-  assert.match(detailsPanel, /Timeline by Day/);
-  assert.match(detailsPanel, /toLocaleDateString\(undefined,\s*\{\s*weekday:\s*"short"/);
-  assert.match(detailsPanel, /<ObjectHistoryTimeline/);
-  assert.match(detailsPanel, /groups=\{timelineGroups\}/);
-  assert.doesNotMatch(detailsPanel, /workflow/i);
-  assert.doesNotMatch(detailsPanel, /trace id/i);
-  assert.doesNotMatch(detailsPanel, /workflow id/i);
+  assert.match(detailsPanel, /useObjectHistoryDisplayData/);
+  assert.match(detailsPanel, /ObjectHistoryDisplaySurface/);
+  assert.match(displayHook, /useOntologyDisplay/);
+  assert.match(displayHook, /\.displayObjectType\(/);
+  assert.match(displayHook, /\.displayEventType\(/);
+  assert.match(displayHook, /\.displayFieldLabel\(/);
+  assert.match(displayHook, /\.displayFieldValue\(/);
+  assert.match(displayHook, /\.summarizeObjectRef\(/);
+  assert.match(displayHook, /\.summarizePayload\(/);
+  assert.match(displayHook, /buildTimelineHighlights/);
+  assert.match(displayHook, /resolveStateTransition/);
+  assert.match(displayHook, /toLocaleDateString\(undefined,\s*\{\s*weekday:\s*"short"/);
+  assert.match(displaySurface, /<ObjectHistoryActivityGraph/);
+  assert.match(displaySurface, /<ObjectHistoryTimeline/);
+  assert.match(displaySurface, /timelineGroups/);
+  assert.doesNotMatch(displaySurface, /workflow/i);
+  assert.doesNotMatch(displaySurface, /trace id/i);
+  assert.doesNotMatch(displaySurface, /workflow id/i);
 });
