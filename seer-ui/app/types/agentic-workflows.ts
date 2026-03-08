@@ -34,7 +34,6 @@ export interface AgenticWorkflowExecutionSummary {
 }
 
 export interface AgenticWorkflowExecutionListResponse {
-  user_id: string;
   status: AgenticWorkflowStatus | null;
   workflow_uri: string | null;
   search: string | null;
@@ -42,6 +41,11 @@ export interface AgenticWorkflowExecutionListResponse {
   size: number;
   total: number;
   executions: AgenticWorkflowExecutionSummary[];
+}
+
+export interface AgenticWorkflowCapabilityOption {
+  value: string;
+  label: string;
 }
 
 export interface AgenticWorkflowProducedEvent {

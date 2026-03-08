@@ -9,9 +9,11 @@ import {
   listAgenticWorkflowMessages,
   streamAgenticWorkflowMessages,
 } from "@/app/lib/api/agentic-workflows";
+import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import type {
   AgenticWorkflowActionSummary,
   AgenticWorkflowExecutionDetailResponse,
+  AgenticWorkflowProducedEvent,
   AgenticWorkflowStatus,
   AgenticWorkflowTranscriptMessage,
   AgenticWorkflowTranscriptSnapshotEvent,
@@ -58,20 +60,6 @@ function mergeMessages(
   return [...merged.values()].sort((left, right) => left.ordinal - right.ordinal);
 }
 
-function summarizeMessageContent(message: AgenticWorkflowTranscriptMessage): string {
-  const content = message.message.content;
-  if (typeof content === "string" && content.trim().length > 0) {
-    return content;
-  }
-  if (Array.isArray(message.message.tool_calls) && message.message.tool_calls.length > 0) {
-    return `${message.message.tool_calls.length} tool call(s)`;
-  }
-  if (typeof message.message.name === "string" && message.message.name.trim().length > 0) {
-    return `Tool result from ${message.message.name}`;
-  }
-  return "Structured message payload";
-}
-
 function serializeMessage(message: Record<string, unknown>): string {
   return JSON.stringify(message, null, 2);
 }
@@ -100,10 +88,12 @@ function ActionTable({
   title,
   emptyLabel,
   actions,
+  displayActionLabel,
 }: {
   title: string;
   emptyLabel: string;
   actions: AgenticWorkflowActionSummary[];
+  displayActionLabel: (action: AgenticWorkflowActionSummary) => string;
 }) {
   return (
     <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -132,8 +122,9 @@ function ActionTable({
               <Table.Row key={action.action_id}>
                 <Table.RowHeaderCell className="max-w-[340px]">
                   <div className="space-y-1">
-                    <div className="truncate font-medium">{action.action_uri}</div>
-                    <div className="text-xs text-muted-foreground">{action.action_id}</div>
+                    <div className="truncate font-medium">{displayActionLabel(action)}</div>
+                    <div className="truncate text-xs text-muted-foreground">{action.action_uri}</div>
+                    <div className="text-xs text-muted-foreground">Run {action.action_id}</div>
                   </div>
                 </Table.RowHeaderCell>
                 <Table.Cell>
@@ -164,7 +155,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const userId = searchParams.get("user_id")?.trim() || "";
+  const ontologyDisplay = useOntologyDisplay();
 
   const [detail, setDetail] = useState<AgenticWorkflowExecutionDetailResponse | null>(null);
   const [messages, setMessages] = useState<AgenticWorkflowTranscriptMessage[]>([]);
@@ -265,20 +256,81 @@ export function AgenticWorkflowExecutionDetailsPanel({
   }, [executionId, streamReady]);
 
   const backHref = useMemo(() => {
-    if (!userId) {
-      return "/inspector/agentic-workflows";
-    }
-    return `/inspector/agentic-workflows?user_id=${encodeURIComponent(userId)}`;
-  }, [userId]);
+    const query = searchParams.toString();
+    return query ? `/inspector/agentic-workflows?${query}` : "/inspector/agentic-workflows";
+  }, [searchParams]);
 
   const currentStatus = detail?.execution.action.status || snapshot?.status;
   const lastOrdinal = snapshot?.last_ordinal || messages[messages.length - 1]?.ordinal || 0;
   const loading = !detail && !error;
 
+  const executionLookupById = useMemo(() => {
+    const entries: AgenticWorkflowActionSummary[] = [];
+    if (detail?.execution?.action) {
+      entries.push(detail.execution.action);
+    }
+    if (detail?.parent_execution) {
+      entries.push(detail.parent_execution);
+    }
+    if (detail?.child_executions?.length) {
+      entries.push(...detail.child_executions);
+    }
+    return new Map(entries.map((action) => [action.action_id, action]));
+  }, [detail]);
+
+  const displayActionLabel = (action: AgenticWorkflowActionSummary) =>
+    ontologyDisplay.displayConcept(action.action_uri);
+
+  const displayProducedBy = (event: AgenticWorkflowProducedEvent): string => {
+    if (!event.produced_by_execution_id) {
+      return "External source";
+    }
+    const action = executionLookupById.get(event.produced_by_execution_id);
+    if (!action) {
+      return `Run ${event.produced_by_execution_id}`;
+    }
+    return displayActionLabel(action);
+  };
+
+  const summarizeMessageContent = (message: AgenticWorkflowTranscriptMessage): string => {
+    const content = message.message.content;
+    if (typeof content === "string" && content.trim().length > 0) {
+      return content;
+    }
+
+    if (message.role === "tool" && typeof message.message.name === "string") {
+      return `Result from ${ontologyDisplay.displayConcept(message.message.name)}`;
+    }
+
+    if (Array.isArray(message.message.tool_calls) && message.message.tool_calls.length > 0) {
+      const firstCall = message.message.tool_calls[0];
+      const functionName =
+        typeof firstCall === "object" &&
+        firstCall !== null &&
+        "function" in firstCall &&
+        typeof firstCall.function === "object" &&
+        firstCall.function !== null &&
+        "name" in firstCall.function &&
+        typeof firstCall.function.name === "string"
+          ? firstCall.function.name
+          : null;
+      if (functionName) {
+        return `Calls ${ontologyDisplay.displayConcept(functionName)}`;
+      }
+      return `${message.message.tool_calls.length} tool call(s)`;
+    }
+
+    if (typeof message.message.name === "string" && message.message.name.trim().length > 0) {
+      return `Activity for ${ontologyDisplay.displayConcept(message.message.name)}`;
+    }
+
+    return "Structured message payload";
+  };
+
   if (loading) {
     return (
       <Card className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">
-        Loading workflow execution...
+        Loading workflow run...
       </Card>
     );
   }
@@ -297,12 +349,14 @@ export function AgenticWorkflowExecutionDetailsPanel({
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-3">
             <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-              Agentic Workflow Execution
+              Agentic Workflow Run
             </p>
-            <h1 className="font-display text-3xl">Transcript + Execution Lineage</h1>
+            <h1 className="font-display text-3xl">
+              {ontologyDisplay.displayConcept(detail.execution.action.action_uri)}
+            </h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              This detail surface reads from persisted transcript messages, generic child
-              executions, and explicit produced-event provenance.
+              Review persisted transcript history, related action runs, and produced events for
+              this workflow execution.
             </p>
             <div className="flex flex-wrap gap-2">
               <Badge
@@ -311,17 +365,18 @@ export function AgenticWorkflowExecutionDetailsPanel({
               >
                 {currentStatus || detail.execution.action.status}
               </Badge>
-              <Badge variant="outline" className="rounded-full max-w-[820px] truncate">
-                {detail.execution.action.action_uri}
-              </Badge>
               <Badge variant="outline" className="rounded-full">
                 {messages.length} loaded messages
               </Badge>
+              <Badge variant="outline" className="rounded-full">
+                {snapshot?.terminal ? "Completed stream" : "Live updates"}
+              </Badge>
             </div>
+            <p className="text-xs text-muted-foreground">{detail.execution.action.action_uri}</p>
           </div>
           <Button type="button" variant="outline" onClick={() => router.push(backHref)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Executions
+            Back to Runs
           </Button>
         </div>
       </Card>
@@ -337,7 +392,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               <Rows3 className="h-4 w-4" />
-              Persisted Transcript
+              Transcript
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="rounded-full">
@@ -367,30 +422,26 @@ export function AgenticWorkflowExecutionDetailsPanel({
                     <Badge variant="outline" className="rounded-full">
                       attempt {message.attempt_no}
                     </Badge>
-                    <Badge variant="outline" className="rounded-full">
-                      seq {message.sequence_no}
-                    </Badge>
-                    <Badge variant="outline" className="rounded-full">
-                      ordinal {message.ordinal}
-                    </Badge>
                     {message.message_kind && (
                       <Badge variant="outline" className="rounded-full">
                         {message.message_kind}
                       </Badge>
                     )}
-                    {message.call_id && (
-                      <Badge variant="outline" className="rounded-full">
-                        {message.call_id}
-                      </Badge>
-                    )}
                   </div>
                   <p className="mt-3 text-sm">{summarizeMessageContent(message)}</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Persisted {formatDateTime(message.persisted_at)}
+                    Persisted {formatDateTime(message.persisted_at)} | seq {message.sequence_no} |
+                    ordinal {message.ordinal}
+                    {message.call_id ? ` | call ${message.call_id}` : ""}
                   </p>
-                  <pre className="mt-3 overflow-x-auto rounded-xl bg-background p-3 text-xs text-muted-foreground">
-                    {serializeMessage(message.message)}
-                  </pre>
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                      View raw message payload
+                    </summary>
+                    <pre className="mt-3 overflow-x-auto rounded-xl bg-background p-3 text-xs text-muted-foreground">
+                      {serializeMessage(message.message)}
+                    </pre>
+                  </details>
                 </Card>
               ))}
             </div>
@@ -401,9 +452,20 @@ export function AgenticWorkflowExecutionDetailsPanel({
           <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <div className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               <RadioTower className="h-4 w-4" />
-              Execution Summary
+              Run Summary
             </div>
             <dl className="grid gap-4 text-sm md:grid-cols-2">
+              <div>
+                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Workflow Capability
+                </dt>
+                <dd className="mt-1 font-medium">
+                  {ontologyDisplay.displayConcept(detail.execution.action.action_uri)}
+                </dd>
+                <dd className="mt-1 break-all text-xs text-muted-foreground">
+                  {detail.execution.action.action_uri}
+                </dd>
+              </div>
               <div>
                 <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                   Execution ID
@@ -460,16 +522,18 @@ export function AgenticWorkflowExecutionDetailsPanel({
           </Card>
 
           <ActionTable
-            title="Child Actions"
-            emptyLabel="This execution has not launched any child ontology actions yet."
+            title="Related Actions"
+            emptyLabel="This workflow run has not launched any child ontology actions yet."
             actions={detail.child_executions}
+            displayActionLabel={displayActionLabel}
           />
 
           {detail.parent_execution && (
             <ActionTable
-              title="Parent Execution"
+              title="Parent Run"
               emptyLabel="Parent execution unavailable."
               actions={[detail.parent_execution]}
+              displayActionLabel={displayActionLabel}
             />
           )}
 
@@ -481,7 +545,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
             <Table.Root>
               <Table.Header>
                 <Table.Row>
-                  <Table.ColumnHeaderCell>Event Type</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Produced By</Table.ColumnHeaderCell>
                   <Table.ColumnHeaderCell>Occurred</Table.ColumnHeaderCell>
                 </Table.Row>
@@ -498,12 +562,24 @@ export function AgenticWorkflowExecutionDetailsPanel({
                     <Table.Row key={event.event_id}>
                       <Table.RowHeaderCell className="max-w-[320px]">
                         <div className="space-y-1">
-                          <div className="truncate font-medium">{event.event_type}</div>
+                          <div className="truncate font-medium">
+                            {ontologyDisplay.displayEventType(event.event_type)}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {event.event_type}
+                          </div>
                           <div className="text-xs text-muted-foreground">{event.event_id}</div>
                         </div>
                       </Table.RowHeaderCell>
-                      <Table.Cell className="font-mono text-xs">
-                        {event.produced_by_execution_id || "-"}
+                      <Table.Cell>
+                        <div className="space-y-1">
+                          <div>{displayProducedBy(event)}</div>
+                          {event.produced_by_execution_id && (
+                            <div className="font-mono text-xs text-muted-foreground">
+                              {event.produced_by_execution_id}
+                            </div>
+                          )}
+                        </div>
                       </Table.Cell>
                       <Table.Cell>{formatDateTime(event.occurred_at)}</Table.Cell>
                     </Table.Row>

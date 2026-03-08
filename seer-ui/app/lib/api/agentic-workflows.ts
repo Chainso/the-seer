@@ -1,6 +1,8 @@
 import { fetchApi } from './client';
 import { asObject, getApiUrl, parseSseEvent, readErrorDetail } from '@/app/lib/api/ai-sse';
+import { queryOntologySelect } from '@/app/lib/api/ontology';
 import type {
+  AgenticWorkflowCapabilityOption,
   AgenticWorkflowExecutionDetailResponse,
   AgenticWorkflowExecutionListResponse,
   AgenticWorkflowMessagesResponse,
@@ -10,8 +12,23 @@ import type {
   AgenticWorkflowTranscriptSnapshotEvent,
 } from '@/app/types/agentic-workflows';
 
+const REGISTERED_AGENTIC_WORKFLOW_QUERY = `
+PREFIX prophet: <http://prophet.platform/ontology#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX seer: <http://seer.platform/ontology#>
+SELECT DISTINCT ?workflow ?label
+WHERE {
+  ?workflow a ?workflowType .
+  ?workflowType rdfs:subClassOf* seer:AgenticWorkflow .
+  FILTER(isIRI(?workflow))
+  OPTIONAL { ?workflow prophet:name ?prophetName . }
+  OPTIONAL { ?workflow rdfs:label ?rdfsLabel . }
+  BIND(COALESCE(STR(?prophetName), STR(?rdfsLabel), STR(?workflow)) AS ?label)
+}
+`.trim();
+
 export async function listAgenticWorkflowExecutions(options: {
-  userId: string;
+  userId?: string;
   status?: AgenticWorkflowStatus;
   workflowUri?: string;
   search?: string;
@@ -21,7 +38,9 @@ export async function listAgenticWorkflowExecutions(options: {
   submittedBefore?: string;
 }): Promise<AgenticWorkflowExecutionListResponse> {
   const query = new URLSearchParams();
-  query.set('user_id', options.userId.trim());
+  if (options.userId?.trim()) {
+    query.set('user_id', options.userId.trim());
+  }
   if (options.status) {
     query.set('status', options.status);
   }
@@ -42,6 +61,24 @@ export async function listAgenticWorkflowExecutions(options: {
   return fetchApi<AgenticWorkflowExecutionListResponse>(
     `/agentic-workflows/executions?${query.toString()}`
   );
+}
+
+export async function listRegisteredAgenticWorkflows(): Promise<
+  AgenticWorkflowCapabilityOption[]
+> {
+  const rows = await queryOntologySelect(REGISTERED_AGENTIC_WORKFLOW_QUERY);
+  const options = new Map<string, AgenticWorkflowCapabilityOption>();
+  rows.forEach((row) => {
+    const value = row.workflow?.trim();
+    if (!value || options.has(value)) {
+      return;
+    }
+    options.set(value, {
+      value,
+      label: row.label?.trim() || value,
+    });
+  });
+  return Array.from(options.values()).sort((left, right) => left.label.localeCompare(right.label));
 }
 
 export async function getAgenticWorkflowExecution(

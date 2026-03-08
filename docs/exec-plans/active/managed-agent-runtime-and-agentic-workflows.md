@@ -667,7 +667,31 @@ Validation:
 2. frontend lint/build/contracts for new execution surfaces,
 3. end-to-end smoke covering list -> detail -> live-tail.
 
-## Phase 5: Canonical Docs and Spec Ratification
+## Phase 5: Execution UX Alignment + Ontology-Backed Filtering
+
+**Goal:** make the execution list/detail surfaces feel like the rest of Seer's ontology/history experience rather than a raw control-plane admin view.
+
+Deliverables:
+
+1. Remove `user_id` from the agentic workflow execution list UX and make it optional on the execution-list read API while leaving the generic action control plane keyed by `user_id`.
+2. Replace raw workflow URI text filtering with an ontology-backed workflow selector populated from registered `seer:AgenticWorkflow` capabilities.
+3. Reuse ontology display helpers so execution list/detail surfaces resolve workflow/action/event labels the same way other inspector/history pages do.
+4. Tighten the execution list/detail copy, chips, and transcript/event/action presentation so it matches the ontology-based display experience used elsewhere.
+
+Exit criteria:
+
+1. Users can open `/inspector/agentic-workflows` without entering `user_id`.
+2. Workflow filtering uses a dropdown/select of ontology-discovered agentic workflows rather than raw URI entry.
+3. Execution list/detail surfaces use ontology-resolved labels/summaries instead of exposing raw URIs/identifiers as the primary display experience.
+4. The execution UI follows the existing history/ontology filter and display patterns closely enough that it no longer feels like a separate admin surface.
+
+Validation:
+
+1. backend API/repository tests covering optional `user_id` execution queries,
+2. frontend lint/build/contracts for the updated execution surfaces,
+3. focused review against `useOntologyDisplay`, history-panel filter patterns, and object-history display surfaces.
+
+## Phase 6: Canonical Docs and Spec Ratification
 
 **Goal:** update architecture/spec docs once implementation stabilizes.
 
@@ -696,6 +720,9 @@ Exit criteria:
 9. Events produced by orchestrated executions can optionally point to `produced_by_execution_id`.
 10. Users can list/filter agentic workflow executions and drill into one execution's transcript in the UI.
 11. Live execution visibility uses SSE of persisted transcript messages, not a separate ephemeral debug-only protocol.
+12. The execution list read surface does not require `user_id` in the user-facing UI/API path.
+13. Workflow filtering uses ontology-backed selectable registered agentic workflows rather than raw URI text entry.
+14. Execution list/detail surfaces use the shared ontology-based display experience rather than primarily exposing raw URIs and unshaped control-plane data.
 
 ## Risks and Mitigations
 
@@ -761,6 +788,9 @@ Expected when implementation lands:
 14. 2026-03-08: Phase 3 transcript sequencing is backend-assigned per `(execution_id, attempt_no)` at append time, while resume remains attempt-scoped and transcript reads may still span all attempts for audit/debug views.
 15. 2026-03-08: Phase 4 execution list APIs require explicit `user_id` until the generic action control plane grows a different authenticated scoping model.
 16. 2026-03-08: Phase 4 transcript fetch and SSE tailing use a derived monotonic `after_ordinal` cursor over canonical `(attempt_no, sequence_no)` ordering so the UI can page and resume across attempts without ambiguous per-attempt cursors.
+17. 2026-03-08: Follow-on execution UX work will remove `user_id` from the execution-list read surface only, keeping `user_id` mandatory in the generic action control plane while making the agentic-workflow query surface feel like the rest of the inspector UX.
+18. 2026-03-08: The execution UI should reuse shared ontology/history display primitives and selectors rather than treating workflow URIs, event types, and action identities as raw control-plane text.
+19. 2026-03-08: Phase 5 keeps `user_id` mandatory for generic action submit/claim/heartbeat semantics, but the dedicated agentic workflow execution list read surface treats `user_id` as optional so the inspector can open directly into ontology-scoped workflow runs.
 
 ## Progress Log
 
@@ -779,6 +809,10 @@ Expected when implementation lands:
 13. 2026-03-08: Phase 4 landed dedicated `/api/v1/agentic-workflows/executions` list/detail/message/stream APIs backed by a new `agent_orchestration` query service that composes generic `actions`, persisted transcripts, and produced-event history without inventing a parallel control plane.
 14. 2026-03-08: Phase 4 landed the inspector execution surfaces at `/inspector/agentic-workflows` and `/inspector/agentic-workflows/[executionId]`, reusing history-style filtering and drill-in patterns for execution list, child action lineage, produced events, and live persisted-message transcript tailing.
 15. 2026-03-08: Phase 4 validation completed successfully: `cd seer-backend && uv run ruff check src tests` passed, `cd seer-backend && uv run pytest -q` passed (`138 passed, 6 warnings`), `cd seer-ui && npm run lint` passed, `cd seer-ui && npm run build` passed, and `cd seer-ui && npm run test:contracts` passed (`49 passed`).
+16. 2026-03-08: Phase 5 docs/archive closure was intentionally deferred after review of the new execution surfaces showed UX drift from the shared ontology/history display patterns: the list still required `user_id`, workflow filtering was raw URI entry instead of ontology-backed selection, and list/detail views still exposed raw URI/control-plane data more directly than other inspector surfaces.
+17. 2026-03-08: Phase 5 implementation landed optional `user_id` support on `/api/v1/agentic-workflows/executions`, propagated the optional filter through `agent_orchestration` and `actions` list queries only, and removed the top-level `user_id` echo from the dedicated execution-list response while leaving generic action control-plane write/claim semantics unchanged.
+18. 2026-03-08: Phase 5 UI execution alignment landed on `/inspector/agentic-workflows` and `/inspector/agentic-workflows/[executionId]`: the list now opens without a user-id gate, workflow filtering uses an ontology-backed selector of registered `seer:AgenticWorkflow` capabilities, and list/detail tables resolve workflow/action/event labels through shared ontology display helpers with reduced raw control-plane copy.
+19. 2026-03-08: Phase 5 validation completed successfully: `cd seer-backend && uv run ruff check src tests` passed, `cd seer-backend && uv run pytest -q tests/test_agent_orchestration_phase4.py` passed (`6 passed`), `cd seer-ui && npm run lint` passed, `cd seer-ui && npm run build` passed, and `cd seer-ui && npm run test:contracts` passed (`10 passed`).
 
 ## Progress Tracking
 
@@ -786,11 +820,13 @@ Expected when implementation lands:
 - [x] Phase 2 ontology extension + action control-plane evolution
 - [x] Phase 3 transcript persistence + resume + provenance
 - [x] Phase 4 agentic workflow execution APIs + UI surfaces
-- [ ] Phase 5 canonical docs/spec ratification
+- [x] Phase 5 execution UX alignment + ontology-backed filtering
+- [ ] Phase 6 canonical docs/spec ratification
 
 Current execution state:
 
 1. `completed`: Phase 2 ontology extension + action control-plane evolution.
 2. `completed`: Phase 3 transcript persistence + runtime resume + produced-event provenance.
 3. `completed`: Phase 4 agentic workflow execution APIs + UI surfaces.
-4. `ready_for_handoff`: Phase 5 canonical docs/spec ratification is the next implementation phase.
+4. `completed`: Phase 5 execution UX alignment + ontology-backed filtering.
+5. `pending`: Phase 6 canonical docs/spec ratification follows after the execution UX alignment phase lands.

@@ -151,7 +151,7 @@ class ActionsRepository(Protocol):
     def list_actions(
         self,
         *,
-        user_id: str,
+        user_id: str | None,
         status: ActionStatus | None = None,
         action_kind: ActionKind | None = None,
         action_uri: str | None = None,
@@ -339,7 +339,7 @@ class PostgresActionsRepository:
     def list_actions(
         self,
         *,
-        user_id: str,
+        user_id: str | None,
         status: ActionStatus | None = None,
         action_kind: ActionKind | None = None,
         action_uri: str | None = None,
@@ -352,7 +352,9 @@ class PostgresActionsRepository:
         page_number = max(int(page), 1)
         page_size = max(int(size), 1)
         offset = (page_number - 1) * page_size
-        filters = [actions_table.c.user_id == user_id]
+        filters = []
+        if user_id is not None:
+            filters.append(actions_table.c.user_id == user_id)
         if status is not None:
             filters.append(actions_table.c.status == status.value)
         if action_kind is not None:
@@ -1106,7 +1108,7 @@ class InMemoryActionsRepository:
     def list_actions(
         self,
         *,
-        user_id: str,
+        user_id: str | None,
         status: ActionStatus | None = None,
         action_kind: ActionKind | None = None,
         action_uri: str | None = None,
@@ -1127,7 +1129,7 @@ class InMemoryActionsRepository:
         with self._lock:
             filtered = []
             for action in self._actions.values():
-                if action.user_id != user_id:
+                if user_id is not None and action.user_id != user_id:
                     continue
                 if status is not None and action.status != status:
                     continue

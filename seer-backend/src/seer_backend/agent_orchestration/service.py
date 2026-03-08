@@ -155,7 +155,7 @@ class AgentOrchestrationService:
     async def list_executions(
         self,
         *,
-        user_id: str,
+        user_id: str | None,
         status: ActionStatus | None,
         workflow_uri: str | None,
         search: str | None,
@@ -281,7 +281,7 @@ class UnavailableAgentOrchestrationService:
     async def list_executions(
         self,
         *,
-        user_id: str,
+        user_id: str | None,
         status: ActionStatus | None,
         workflow_uri: str | None,
         search: str | None,

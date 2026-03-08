@@ -70,7 +70,6 @@ class AgenticWorkflowExecutionSummaryResponse(BaseModel):
 
 
 class AgenticWorkflowExecutionListResponse(BaseModel):
-    user_id: str
     status: str | None = None
     workflow_uri: str | None = None
     search: str | None = None
@@ -186,7 +185,7 @@ def get_agent_orchestration_service(
 @router.get("/executions", response_model=AgenticWorkflowExecutionListResponse)
 async def list_agentic_workflow_executions(
     request: Request,
-    user_id: str = Query(min_length=1, max_length=255),
+    user_id: str | None = Query(default=None, min_length=1, max_length=255),
     execution_status: ActionStatus | None = Query(default=None, alias="status"),
     workflow_uri: str | None = Query(default=None, min_length=1, max_length=2048),
     search: str | None = Query(default=None, min_length=1, max_length=255),
@@ -226,7 +225,6 @@ async def list_agentic_workflow_executions(
         raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
     return AgenticWorkflowExecutionListResponse(
-        user_id=user_id,
         status=execution_status.value if execution_status is not None else None,
         workflow_uri=workflow_uri,
         search=search,

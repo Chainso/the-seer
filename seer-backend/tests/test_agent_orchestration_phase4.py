@@ -215,11 +215,56 @@ def test_execution_list_filters_to_agentic_workflows_and_exposes_transcript_coun
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["total"] == 1
+    assert "user_id" not in body
     assert body["executions"][0]["action"]["action_id"] == str(completed_id)
     assert body["executions"][0]["action"]["status"] == "completed"
     assert body["executions"][0]["action"]["action_kind"] == "agentic_workflow"
     assert body["executions"][0]["transcript_message_count"] == 2
     assert str(running_id) != body["executions"][0]["action"]["action_id"]
+
+
+def test_execution_list_allows_optional_user_scope_for_agentic_workflow_queries() -> None:
+    client, repository, _history_service, _transcript_service = _build_client()
+    base = datetime(2026, 3, 8, 10, 30, tzinfo=UTC)
+    first_execution_id = _create_action(
+        repository,
+        user_id="user-phase5-a",
+        action_uri="urn:seer:test:workflow.invoice.follow-up",
+        action_kind=ActionKind.AGENTIC_WORKFLOW,
+        submitted_at=base,
+    )
+    second_execution_id = _create_action(
+        repository,
+        user_id="user-phase5-b",
+        action_uri="urn:seer:test:workflow.invoice.follow-up",
+        action_kind=ActionKind.AGENTIC_WORKFLOW,
+        submitted_at=base + timedelta(minutes=1),
+    )
+    _create_action(
+        repository,
+        user_id="user-phase5-b",
+        action_uri="urn:seer:test:process.invoice.sync",
+        action_kind=ActionKind.PROCESS,
+        submitted_at=base + timedelta(minutes=2),
+    )
+
+    response = client.get(
+        "/api/v1/agentic-workflows/executions",
+        params={"workflow_uri": "urn:seer:test:workflow.invoice.follow-up"},
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert "user_id" not in body
+    assert body["total"] == 2
+    assert [item["action"]["action_id"] for item in body["executions"]] == [
+        str(second_execution_id),
+        str(first_execution_id),
+    ]
+    assert {item["action"]["user_id"] for item in body["executions"]} == {
+        "user-phase5-a",
+        "user-phase5-b",
+    }
 
 
 def test_execution_detail_includes_child_actions_produced_events_and_parent_context() -> None:

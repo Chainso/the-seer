@@ -2,7 +2,7 @@
 
 **Status:** draft  
 **Owner plan:** `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md`  
-**Last updated:** 2026-03-07
+**Last updated:** 2026-03-08
 
 ---
 
@@ -80,6 +80,7 @@ Seer should not require users to build a separate execution graph in the UI.
    - invoke allowed actions,
    - track outcomes.
 8. User monitors current state, recent decisions, guardrail events, and business results.
+9. Monitoring surfaces should open directly into workflow runs without requiring a user-id lookup step, and capability filtering should use ontology-backed workflow labels rather than raw IRIs.
 
 ## Agent Runtime Expectations
 
@@ -151,6 +152,7 @@ The product should show:
 4. Managed agents expose clear lifecycle state, recent decisions, and guardrail-triggered stops or failures.
 5. Managed agents are auditable and can be paused, resumed, or revoked.
 6. Managed-agent setup makes the capability and runtime guardrails understandable to a user without ontology expertise.
+7. Execution history and drill-in views use ontology-resolved workflow, action, and event labels as the primary presentation, with raw identifiers available as supporting detail.
 
 ## Out Of Scope For This Spec
 

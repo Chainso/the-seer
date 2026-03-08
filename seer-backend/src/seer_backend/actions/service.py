@@ -266,7 +266,7 @@ class ActionsService:
     async def list_actions(
         self,
         *,
-        user_id: str,
+        user_id: str | None,
         status: ActionStatus | None = None,
         action_kind: ActionKind | None = None,
         action_uri: str | None = None,
@@ -513,7 +513,7 @@ class UnavailableActionsService:
     async def list_actions(
         self,
         *,
-        user_id: str,
+        user_id: str | None,
         status: ActionStatus | None = None,
         action_kind: ActionKind | None = None,
         action_uri: str | None = None,

@@ -21,13 +21,13 @@ test("agentic workflow inspector surfaces expose dedicated execution list and de
 
   assert.match(listPage, /AgenticWorkflowExecutionPanel/);
   assert.match(detailPage, /AgenticWorkflowExecutionDetailsPanel/);
-  assert.match(listPanel, /Execution History \+ Live Tail/);
-  assert.match(listPanel, /Persisted transcripts only/);
+  assert.match(listPanel, /Workflow Runs/);
+  assert.match(listPanel, /Workflow capability/);
   assert.match(listPanel, /router\.push\(\s*query\s*\?/);
   assert.match(listPanel, /\/inspector\/agentic-workflows\/\$\{executionId\}/);
-  assert.match(detailsPanel, /Transcript \+ Execution Lineage/);
-  assert.match(detailsPanel, /Persisted Transcript/);
-  assert.match(detailsPanel, /Child Actions/);
+  assert.match(detailsPanel, /Agentic Workflow Run/);
+  assert.match(detailsPanel, /Transcript/);
+  assert.match(detailsPanel, /Related Actions/);
   assert.match(detailsPanel, /Produced Events/);
   assert.match(nav, /name:\s*'Workflow Runs'/);
   assert.match(nav, /href:\s*'\/inspector\/agentic-workflows'/);
@@ -39,10 +39,13 @@ test("agentic workflow API client targets dedicated execution and transcript end
 
   assert.match(apiClient, /\/agentic-workflows\/executions\?/);
   assert.match(apiClient, /\/agentic-workflows\/executions\/\$\{executionId\}/);
+  assert.match(apiClient, /listRegisteredAgenticWorkflows/);
+  assert.match(apiClient, /queryOntologySelect/);
   assert.match(apiClient, /after_ordinal/);
   assert.match(apiClient, /messages\/stream/);
   assert.match(apiClient, /case 'message'/);
   assert.match(apiClient, /case 'terminal'/);
   assert.match(types, /export interface AgenticWorkflowTranscriptMessage/);
   assert.match(types, /export interface AgenticWorkflowTranscriptSnapshotEvent/);
+  assert.doesNotMatch(types, /user_id:\s*string;\s*status:/);
 });
