@@ -45,16 +45,18 @@ At any point, the user should be able to answer:
 1. User opens `/inspector/agentic-workflows`.
 2. User filters execution history by runtime state such as running, completed, failed, or dead-letter.
 3. User can also narrow by time window and ontology-backed workflow capability selection.
-4. User opens one execution from the table.
+4. User opens one execution from a browseable inspector card rather than an action-column-only table flow.
 4. User sees:
    - workflow identity,
    - current lifecycle state,
+   - execution-chain orientation before transcript deep-reading,
    - recent decisions,
    - canonical persisted transcript messages,
    - executed actions,
    - produced events,
    - failures.
-5. User can inspect the evidence behind a major decision and watch newly persisted transcript messages arrive live while the execution is still running.
+5. Transcript entries are grouped and summarized for scanability, while raw payloads and identifiers remain available as supporting detail.
+6. User can inspect the evidence behind a major decision and watch newly persisted transcript messages arrive live while the execution is still running.
 
 ### Inspect Execution Traceability
 
@@ -130,7 +132,8 @@ That means:
 4. The execution list read surface works without `user_id`, while generic action control-plane write/claim semantics remain user-scoped.
 5. Workflow, action, and event identity are shown with ontology-resolved labels as the primary presentation.
 6. Audit history is sufficient to explain what happened to a non-author of the agent.
-7. The control model is understandable to someone who does not already know Seer's internal architecture.
+7. Raw workflow/action/event identifiers remain available for audit/debug work, but do not dominate the primary hierarchy.
+8. The control model is understandable to someone who does not already know Seer's internal architecture.
 
 ## Out Of Scope For This Spec
 

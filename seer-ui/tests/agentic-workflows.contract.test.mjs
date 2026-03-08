@@ -23,7 +23,8 @@ test("agentic workflow inspector surfaces expose dedicated execution list and de
   assert.match(detailPage, /AgenticWorkflowExecutionDetailsPanel/);
   assert.match(listPanel, /Workflow Runs/);
   assert.match(listPanel, /Workflow capability/);
-  assert.match(listPanel, /router\.push\(\s*query\s*\?/);
+  assert.match(listPanel, /buildExecutionHref/);
+  assert.match(listPanel, /Open run/);
   assert.match(listPanel, /\/inspector\/agentic-workflows\/\$\{executionId\}/);
   assert.match(detailsPanel, /Agentic Workflow Run/);
   assert.match(detailsPanel, /Transcript/);

@@ -1,8 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Clock3, RadioTower, Rows3, Waypoints } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, ArrowRight, Clock3, RadioTower, Rows3, Waypoints } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 import {
   getAgenticWorkflowExecution,
@@ -22,7 +23,18 @@ import type {
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
-import { Table } from "../ui/table";
+
+type TranscriptMessageGroup = {
+  dayKey: string;
+  dayLabel: string;
+  entries: AgenticWorkflowTranscriptMessage[];
+};
+
+type MessageHighlight = {
+  key: string;
+  label: string;
+  value: string;
+};
 
 function formatDateTime(value: string | null): string {
   if (!value) return "-";
@@ -50,6 +62,36 @@ function statusBadgeClass(status: AgenticWorkflowStatus): string {
   }
 }
 
+function roleBadgeClass(role: AgenticWorkflowTranscriptMessage["role"]): string {
+  switch (role) {
+    case "assistant":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "tool":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "user":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "system":
+      return "border-slate-200 bg-slate-100 text-slate-700";
+    default:
+      return "border-border bg-background text-foreground";
+  }
+}
+
+function transcriptCardClass(role: AgenticWorkflowTranscriptMessage["role"]): string {
+  switch (role) {
+    case "assistant":
+      return "border-blue-100 bg-blue-50/30";
+    case "tool":
+      return "border-amber-100 bg-amber-50/30";
+    case "user":
+      return "border-emerald-100 bg-emerald-50/30";
+    case "system":
+      return "border-slate-200 bg-slate-50/70";
+    default:
+      return "border-border bg-card";
+  }
+}
+
 function mergeMessages(
   existing: AgenticWorkflowTranscriptMessage[],
   incoming: AgenticWorkflowTranscriptMessage[]
@@ -62,6 +104,24 @@ function mergeMessages(
 
 function serializeMessage(message: Record<string, unknown>): string {
   return JSON.stringify(message, null, 2);
+}
+
+function shortIdentifier(value: string | null | undefined, keep = 10): string {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return "Unavailable";
+  }
+  return trimmed.length <= keep ? trimmed : `${trimmed.slice(0, keep)}...`;
+}
+
+function truncateText(value: string, maxLength = 180): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return "";
+  }
+  return normalized.length <= maxLength
+    ? normalized
+    : `${normalized.slice(0, maxLength - 3).trimEnd()}...`;
 }
 
 function updateExecutionStatus(
@@ -84,67 +144,102 @@ function updateExecutionStatus(
   };
 }
 
-function ActionTable({
-  title,
-  emptyLabel,
-  actions,
-  displayActionLabel,
+function groupTranscriptMessages(
+  messages: AgenticWorkflowTranscriptMessage[]
+): TranscriptMessageGroup[] {
+  const groups: TranscriptMessageGroup[] = [];
+
+  messages.forEach((message) => {
+    const persisted = new Date(message.persisted_at);
+    const isValid = !Number.isNaN(persisted.valueOf());
+    const dayKey = isValid
+      ? `${persisted.getFullYear()}-${persisted.getMonth()}-${persisted.getDate()}`
+      : "unknown-day";
+    const dayLabel = isValid
+      ? persisted.toLocaleDateString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : "Unknown day";
+
+    const current = groups[groups.length - 1];
+    if (!current || current.dayKey !== dayKey) {
+      groups.push({ dayKey, dayLabel, entries: [message] });
+      return;
+    }
+    current.entries.push(message);
+  });
+
+  return groups;
+}
+
+function SummaryStat({
+  label,
+  value,
+  supporting,
 }: {
-  title: string;
-  emptyLabel: string;
-  actions: AgenticWorkflowActionSummary[];
-  displayActionLabel: (action: AgenticWorkflowActionSummary) => string;
+  label: string;
+  value: string;
+  supporting?: string;
 }) {
   return (
-    <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-      <div className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-        <Waypoints className="h-4 w-4" />
-        {title}
+    <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-base font-semibold">{value}</div>
+      {supporting ? <div className="mt-1 text-xs text-muted-foreground">{supporting}</div> : null}
+    </div>
+  );
+}
+
+function ExecutionRunCard({
+  eyebrow,
+  action,
+  href,
+  displayActionLabel,
+  isCurrent = false,
+}: {
+  eyebrow: string;
+  action: AgenticWorkflowActionSummary;
+  href?: string;
+  displayActionLabel: (action: AgenticWorkflowActionSummary) => string;
+  isCurrent?: boolean;
+}) {
+  const content = (
+    <div className="flex items-start justify-between gap-3 rounded-2xl border border-border bg-background/80 p-4 text-left">
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+          {eyebrow}
+        </div>
+        <div className="truncate font-medium">{displayActionLabel(action)}</div>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span title={action.action_id}>Run {shortIdentifier(action.action_id, 10)}</span>
+          <span>{formatDateTime(action.updated_at)}</span>
+        </div>
       </div>
-      <Table.Root>
-        <Table.Header>
-          <Table.Row>
-            <Table.ColumnHeaderCell>Action</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
-            <Table.ColumnHeaderCell>Updated</Table.ColumnHeaderCell>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {actions.length === 0 ? (
-            <Table.Row>
-              <Table.Cell colSpan={4} className="py-8 text-center text-muted-foreground">
-                {emptyLabel}
-              </Table.Cell>
-            </Table.Row>
-          ) : (
-            actions.map((action) => (
-              <Table.Row key={action.action_id}>
-                <Table.RowHeaderCell className="max-w-[340px]">
-                  <div className="space-y-1">
-                    <div className="truncate font-medium">{displayActionLabel(action)}</div>
-                    <div className="truncate text-xs text-muted-foreground">{action.action_uri}</div>
-                    <div className="text-xs text-muted-foreground">Run {action.action_id}</div>
-                  </div>
-                </Table.RowHeaderCell>
-                <Table.Cell>
-                  <Badge
-                    variant="outline"
-                    className={`rounded-full ${statusBadgeClass(action.status)}`}
-                  >
-                    {action.status}
-                  </Badge>
-                </Table.Cell>
-                <Table.Cell>
-                  {action.attempt_count} / {action.max_attempts}
-                </Table.Cell>
-                <Table.Cell>{formatDateTime(action.updated_at)}</Table.Cell>
-              </Table.Row>
-            ))
-          )}
-        </Table.Body>
-      </Table.Root>
-    </Card>
+      <div className="flex items-center gap-2">
+        <Badge variant="outline" className={`rounded-full ${statusBadgeClass(action.status)}`}>
+          {action.status}
+        </Badge>
+        {!isCurrent && href ? (
+          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        ) : null}
+      </div>
+    </div>
+  );
+
+  if (!href || isCurrent) {
+    return content;
+  }
+
+  return (
+    <Link
+      href={href}
+      className="block rounded-2xl transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-ring"
+    >
+      {content}
+    </Link>
   );
 }
 
@@ -153,7 +248,6 @@ export function AgenticWorkflowExecutionDetailsPanel({
 }: {
   executionId: string;
 }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const ontologyDisplay = useOntologyDisplay();
 
@@ -255,10 +349,15 @@ export function AgenticWorkflowExecutionDetailsPanel({
     };
   }, [executionId, streamReady]);
 
-  const backHref = useMemo(() => {
-    const query = searchParams.toString();
-    return query ? `/inspector/agentic-workflows?${query}` : "/inspector/agentic-workflows";
-  }, [searchParams]);
+  const query = useMemo(() => searchParams.toString(), [searchParams]);
+  const backHref = useMemo(
+    () => (query ? `/inspector/agentic-workflows?${query}` : "/inspector/agentic-workflows"),
+    [query]
+  );
+  const buildExecutionHref = (targetExecutionId: string) =>
+    query
+      ? `/inspector/agentic-workflows/${targetExecutionId}?${query}`
+      : `/inspector/agentic-workflows/${targetExecutionId}`;
 
   const currentStatus = detail?.execution.action.status || snapshot?.status;
   const lastOrdinal = snapshot?.last_ordinal || messages[messages.length - 1]?.ordinal || 0;
@@ -278,6 +377,8 @@ export function AgenticWorkflowExecutionDetailsPanel({
     return new Map(entries.map((action) => [action.action_id, action]));
   }, [detail]);
 
+  const transcriptGroups = useMemo(() => groupTranscriptMessages(messages), [messages]);
+
   const displayActionLabel = (action: AgenticWorkflowActionSummary) =>
     ontologyDisplay.displayConcept(action.action_uri);
 
@@ -287,7 +388,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
     }
     const action = executionLookupById.get(event.produced_by_execution_id);
     if (!action) {
-      return `Run ${event.produced_by_execution_id}`;
+      return `Run ${shortIdentifier(event.produced_by_execution_id, 10)}`;
     }
     return displayActionLabel(action);
   };
@@ -295,7 +396,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
   const summarizeMessageContent = (message: AgenticWorkflowTranscriptMessage): string => {
     const content = message.message.content;
     if (typeof content === "string" && content.trim().length > 0) {
-      return content;
+      return truncateText(content, 180);
     }
 
     if (message.role === "tool" && typeof message.message.name === "string") {
@@ -327,6 +428,64 @@ export function AgenticWorkflowExecutionDetailsPanel({
     return "Structured message payload";
   };
 
+  const previewMessageContent = (message: AgenticWorkflowTranscriptMessage): string | null => {
+    const content = message.message.content;
+    if (typeof content !== "string" || !content.trim()) {
+      return null;
+    }
+    return truncateText(content, 320);
+  };
+
+  const messageHighlights = (message: AgenticWorkflowTranscriptMessage): MessageHighlight[] => {
+    const highlights: MessageHighlight[] = [];
+
+    if (typeof message.message.name === "string" && message.message.name.trim()) {
+      highlights.push({
+        key: "name",
+        label: message.role === "tool" ? "Tool" : "Activity",
+        value: ontologyDisplay.displayConcept(message.message.name),
+      });
+    }
+
+    if (Array.isArray(message.message.tool_calls) && message.message.tool_calls.length > 0) {
+      const firstCall = message.message.tool_calls[0];
+      const functionName =
+        typeof firstCall === "object" &&
+        firstCall !== null &&
+        "function" in firstCall &&
+        typeof firstCall.function === "object" &&
+        firstCall.function !== null &&
+        "name" in firstCall.function &&
+        typeof firstCall.function.name === "string"
+          ? firstCall.function.name
+          : null;
+
+      highlights.push({
+        key: "tool_calls",
+        label: "Tool calls",
+        value: `${message.message.tool_calls.length}`,
+      });
+
+      if (functionName) {
+        highlights.push({
+          key: "first_tool",
+          label: "First tool",
+          value: ontologyDisplay.displayConcept(functionName),
+        });
+      }
+    }
+
+    if (message.call_id) {
+      highlights.push({
+        key: "call_id",
+        label: "Call",
+        value: shortIdentifier(message.call_id, 12),
+      });
+    }
+
+    return highlights.slice(0, 3);
+  };
+
   if (loading) {
     return (
       <Card className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">
@@ -343,6 +502,17 @@ export function AgenticWorkflowExecutionDetailsPanel({
     );
   }
 
+  const currentAction = detail.execution.action;
+  const workflowLabel = ontologyDisplay.displayConcept(currentAction.action_uri);
+  const transcriptCountLabel = `${messages.length} loaded / ${detail.execution.transcript_message_count} persisted`;
+  const producedEventCountLabel =
+    detail.produced_events.length === 1
+      ? "1 produced event"
+      : `${detail.produced_events.length} produced events`;
+  const lineageLabel = detail.parent_execution
+    ? `${detail.child_executions.length} child runs + parent context`
+    : `${detail.child_executions.length} child runs`;
+
   return (
     <div className="space-y-6" data-agentic-workflow-execution-details-panel>
       <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
@@ -351,32 +521,31 @@ export function AgenticWorkflowExecutionDetailsPanel({
             <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
               Agentic Workflow Run
             </p>
-            <h1 className="font-display text-3xl">
-              {ontologyDisplay.displayConcept(detail.execution.action.action_uri)}
-            </h1>
+            <h1 className="font-display text-3xl">{workflowLabel}</h1>
             <p className="max-w-3xl text-sm text-muted-foreground">
-              Review persisted transcript history, related action runs, and produced events for
-              this workflow execution.
+              Review persisted transcript history, related actions, and produced events for this
+              workflow execution.
             </p>
             <div className="flex flex-wrap gap-2">
               <Badge
                 variant="outline"
-                className={`rounded-full ${statusBadgeClass(detail.execution.action.status)}`}
+                className={`rounded-full ${statusBadgeClass(currentStatus || currentAction.status)}`}
               >
-                {currentStatus || detail.execution.action.status}
+                {currentStatus || currentAction.status}
               </Badge>
               <Badge variant="outline" className="rounded-full">
-                {messages.length} loaded messages
+                Run {shortIdentifier(currentAction.action_id, 10)}
               </Badge>
               <Badge variant="outline" className="rounded-full">
                 {snapshot?.terminal ? "Completed stream" : "Live updates"}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground">{detail.execution.action.action_uri}</p>
           </div>
-          <Button type="button" variant="outline" onClick={() => router.push(backHref)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Runs
+          <Button asChild variant="outline">
+            <Link href={backHref}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Runs
+            </Link>
           </Button>
         </div>
       </Card>
@@ -387,12 +556,196 @@ export function AgenticWorkflowExecutionDetailsPanel({
         </Card>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[1.3fr_0.9fr]">
-        <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
+      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
             <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              <Rows3 className="h-4 w-4" />
-              Transcript
+              <RadioTower className="h-4 w-4" />
+              Run Summary
+            </div>
+            <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+              Start here for the workflow identity, current state, lineage, and recent execution
+              activity before drilling into raw transcript detail.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className="rounded-full">
+              {producedEventCountLabel}
+            </Badge>
+            <Badge variant="outline" className="rounded-full">
+              {lineageLabel}
+            </Badge>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <SummaryStat
+            label="Workflow Capability"
+            value={workflowLabel}
+            supporting={`Run ${shortIdentifier(currentAction.action_id, 10)}`}
+          />
+          <SummaryStat
+            label="Transcript"
+            value={transcriptCountLabel}
+            supporting={`Last ordinal ${lastOrdinal}`}
+          />
+          <SummaryStat
+            label="Attempts"
+            value={`${currentAction.attempt_count} / ${currentAction.max_attempts}`}
+            supporting={currentAction.completed_at ? "Execution reached completion state" : "Execution still mutable"}
+          />
+          <SummaryStat
+            label="Updated"
+            value={formatDateTime(currentAction.updated_at)}
+            supporting={`Submitted ${formatDateTime(currentAction.submitted_at)}`}
+          />
+          <SummaryStat
+            label="Lineage"
+            value={`${detail.child_executions.length} child runs`}
+            supporting={detail.parent_execution ? "Parent run linked" : "Top-level workflow run"}
+          />
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+          <div className="rounded-2xl border border-border/70 bg-muted/15 p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <Waypoints className="h-4 w-4" />
+              Related Actions
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Browse parent and child runs directly from the execution chain instead of reading the
+              transcript first.
+            </p>
+
+            <div className="mt-4 space-y-3">
+              {detail.parent_execution ? (
+                <ExecutionRunCard
+                  eyebrow="Parent run"
+                  action={detail.parent_execution}
+                  href={buildExecutionHref(detail.parent_execution.action_id)}
+                  displayActionLabel={displayActionLabel}
+                />
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  No parent run is linked to this execution.
+                </div>
+              )}
+
+              <ExecutionRunCard
+                eyebrow="Current run"
+                action={currentAction}
+                displayActionLabel={displayActionLabel}
+                isCurrent
+              />
+
+              {detail.child_executions.length > 0 ? (
+                detail.child_executions.map((action) => (
+                  <ExecutionRunCard
+                    key={action.action_id}
+                    eyebrow="Child run"
+                    action={action}
+                    href={buildExecutionHref(action.action_id)}
+                    displayActionLabel={displayActionLabel}
+                  />
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  This workflow run has not launched any child ontology actions yet.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <details className="rounded-2xl border border-border/70 bg-muted/15 p-4">
+            <summary className="cursor-pointer text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              Supporting Detail
+            </summary>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Raw identifiers and control-plane metadata stay available here without dominating the
+              main reading path.
+            </p>
+            <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  Workflow URI
+                </dt>
+                <dd className="mt-1 break-all text-xs text-muted-foreground">
+                  {currentAction.action_uri}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  Execution ID
+                </dt>
+                <dd className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                  {currentAction.action_id}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  User ID
+                </dt>
+                <dd className="mt-1 break-all text-xs text-muted-foreground">
+                  {currentAction.user_id}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  Completed
+                </dt>
+                <dd className="mt-1 text-xs text-muted-foreground">
+                  {formatDateTime(currentAction.completed_at)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  Lease owner
+                </dt>
+                <dd className="mt-1 break-all text-xs text-muted-foreground">
+                  {currentAction.lease_owner_instance_id || "Unavailable"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  Lease expires
+                </dt>
+                <dd className="mt-1 text-xs text-muted-foreground">
+                  {formatDateTime(currentAction.lease_expires_at)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  Last error code
+                </dt>
+                <dd className="mt-1 break-all text-xs text-muted-foreground">
+                  {currentAction.last_error_code || "None"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                  Last error detail
+                </dt>
+                <dd className="mt-1 break-words text-xs text-muted-foreground">
+                  {currentAction.last_error_detail || "None"}
+                </dd>
+              </div>
+            </dl>
+          </details>
+        </div>
+      </Card>
+
+      <div className="grid gap-6 xl:grid-cols-[1.25fr_0.95fr]">
+        <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                <Rows3 className="h-4 w-4" />
+                Transcript
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Transcript entries are grouped by day and summarized first. Raw payloads and full
+                IDs stay available in supporting detail for audit work.
+              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="rounded-full">
@@ -409,186 +762,188 @@ export function AgenticWorkflowExecutionDetailsPanel({
               No persisted transcript messages yet.
             </div>
           ) : (
-            <div className="space-y-4">
-              {messages.map((message) => (
-                <Card
-                  key={message.ordinal}
-                  className="rounded-2xl border border-border bg-muted/10 p-4"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="rounded-full uppercase">
-                      {message.role}
-                    </Badge>
-                    <Badge variant="outline" className="rounded-full">
-                      attempt {message.attempt_no}
-                    </Badge>
-                    {message.message_kind && (
-                      <Badge variant="outline" className="rounded-full">
-                        {message.message_kind}
-                      </Badge>
-                    )}
+            <div className="space-y-5">
+              {transcriptGroups.map((group) => (
+                <section key={group.dayKey} className="space-y-3">
+                  <div className="sticky top-0 z-[1] rounded-md bg-card/90 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground backdrop-blur">
+                    {group.dayLabel}
                   </div>
-                  <p className="mt-3 text-sm">{summarizeMessageContent(message)}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Persisted {formatDateTime(message.persisted_at)} | seq {message.sequence_no} |
-                    ordinal {message.ordinal}
-                    {message.call_id ? ` | call ${message.call_id}` : ""}
-                  </p>
-                  <details className="mt-3">
-                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                      View raw message payload
-                    </summary>
-                    <pre className="mt-3 overflow-x-auto rounded-xl bg-background p-3 text-xs text-muted-foreground">
-                      {serializeMessage(message.message)}
-                    </pre>
-                  </details>
-                </Card>
+                  <div className="relative space-y-3 pl-5">
+                    <div className="pointer-events-none absolute bottom-2 left-1 top-2 w-px bg-border/70" />
+                    {group.entries.map((message) => {
+                      const summary = summarizeMessageContent(message);
+                      const preview = previewMessageContent(message);
+                      const highlights = messageHighlights(message);
+
+                      return (
+                        <div key={message.ordinal} className="relative">
+                          <span className="absolute -left-[19px] top-5 h-2.5 w-2.5 rounded-full border border-border bg-card" />
+                          <article
+                            className={`rounded-2xl border p-4 shadow-sm ${transcriptCardClass(message.role)}`}
+                          >
+                            <header className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge
+                                    variant="outline"
+                                    className={`rounded-full uppercase ${roleBadgeClass(message.role)}`}
+                                  >
+                                    {message.role}
+                                  </Badge>
+                                  <Badge variant="outline" className="rounded-full">
+                                    attempt {message.attempt_no}
+                                  </Badge>
+                                  {message.message_kind && (
+                                    <Badge variant="outline" className="rounded-full">
+                                      {message.message_kind}
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="font-display text-sm">{summary}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  Persisted {formatDateTime(message.persisted_at)}
+                                </div>
+                              </div>
+                              <Badge variant="outline" className="rounded-full">
+                                #{message.ordinal}
+                              </Badge>
+                            </header>
+
+                            {highlights.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {highlights.map((highlight) => (
+                                  <span
+                                    key={`${message.ordinal}-${highlight.key}`}
+                                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-background/90 px-2.5 py-1 text-[11px] text-foreground"
+                                    title={`${highlight.label}: ${highlight.value}`}
+                                  >
+                                    <span className="text-muted-foreground">{highlight.label}</span>
+                                    <span className="truncate">{highlight.value}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {preview && preview !== summary ? (
+                              <p className="mt-3 whitespace-pre-wrap break-words text-sm text-foreground/90">
+                                {preview}
+                              </p>
+                            ) : null}
+
+                            <details className="mt-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2">
+                              <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                                Supporting detail and raw payload
+                              </summary>
+                              <dl className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                                <div>
+                                  <dt className="uppercase tracking-[0.18em]">Workflow URI</dt>
+                                  <dd className="mt-1 break-all">{message.workflow_uri}</dd>
+                                </div>
+                                <div>
+                                  <dt className="uppercase tracking-[0.18em]">Execution ID</dt>
+                                  <dd className="mt-1 break-all font-mono">{message.execution_id}</dd>
+                                </div>
+                                <div>
+                                  <dt className="uppercase tracking-[0.18em]">Sequence</dt>
+                                  <dd className="mt-1">
+                                    seq {message.sequence_no} / ordinal {message.ordinal}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="uppercase tracking-[0.18em]">Call ID</dt>
+                                  <dd className="mt-1 break-all">{message.call_id || "Unavailable"}</dd>
+                                </div>
+                              </dl>
+                              <pre className="mt-3 overflow-x-auto rounded-xl bg-background p-3 text-xs text-muted-foreground">
+                                {serializeMessage(message.message)}
+                              </pre>
+                            </details>
+                          </article>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
               ))}
             </div>
           )}
         </Card>
 
-        <div className="space-y-6">
-          <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              <RadioTower className="h-4 w-4" />
-              Run Summary
+        <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            <Clock3 className="h-4 w-4" />
+            Produced Events
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Event cards keep ontology-aware identity and provenance up front, with raw event IDs and
+            payloads tucked into supporting detail.
+          </p>
+
+          {detail.produced_events.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+              No produced events recorded for this execution chain yet.
             </div>
-            <dl className="grid gap-4 text-sm md:grid-cols-2">
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Workflow Capability
-                </dt>
-                <dd className="mt-1 font-medium">
-                  {ontologyDisplay.displayConcept(detail.execution.action.action_uri)}
-                </dd>
-                <dd className="mt-1 break-all text-xs text-muted-foreground">
-                  {detail.execution.action.action_uri}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Execution ID
-                </dt>
-                <dd className="mt-1 break-all font-mono text-xs">{detail.execution.action.action_id}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  User ID
-                </dt>
-                <dd className="mt-1">{detail.execution.action.user_id}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Submitted
-                </dt>
-                <dd className="mt-1">{formatDateTime(detail.execution.action.submitted_at)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Updated
-                </dt>
-                <dd className="mt-1">{formatDateTime(detail.execution.action.updated_at)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Completed
-                </dt>
-                <dd className="mt-1">{formatDateTime(detail.execution.action.completed_at)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Attempts
-                </dt>
-                <dd className="mt-1">
-                  {detail.execution.action.attempt_count} / {detail.execution.action.max_attempts}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Transcript Count
-                </dt>
-                <dd className="mt-1">{detail.execution.transcript_message_count}</dd>
-              </div>
-              <div>
-                <dt className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Last Persisted Message
-                </dt>
-                <dd className="mt-1">
-                  {formatDateTime(detail.execution.last_transcript_persisted_at)}
-                </dd>
-              </div>
-            </dl>
-          </Card>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {detail.produced_events.map((event) => (
+                <article
+                  key={event.event_id}
+                  className="rounded-2xl border border-border bg-muted/10 p-4 shadow-sm"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Event
+                      </div>
+                      <div className="truncate font-medium">
+                        {ontologyDisplay.displayEventType(event.event_type)}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Produced by {displayProducedBy(event)}
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="rounded-full">
+                      {formatDateTime(event.occurred_at)}
+                    </Badge>
+                  </div>
 
-          <ActionTable
-            title="Related Actions"
-            emptyLabel="This workflow run has not launched any child ontology actions yet."
-            actions={detail.child_executions}
-            displayActionLabel={displayActionLabel}
-          />
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {ontologyDisplay.summarizePayload(event.payload, { eventType: event.event_type })}
+                  </p>
 
-          {detail.parent_execution && (
-            <ActionTable
-              title="Parent Run"
-              emptyLabel="Parent execution unavailable."
-              actions={[detail.parent_execution]}
-              displayActionLabel={displayActionLabel}
-            />
+                  <details className="mt-3 rounded-xl border border-border/70 bg-background/80 px-3 py-2">
+                    <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                      Supporting detail and raw payload
+                    </summary>
+                    <dl className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                      <div>
+                        <dt className="uppercase tracking-[0.18em]">Event type</dt>
+                        <dd className="mt-1 break-all">{event.event_type}</dd>
+                      </div>
+                      <div>
+                        <dt className="uppercase tracking-[0.18em]">Event ID</dt>
+                        <dd className="mt-1 break-all font-mono">{event.event_id}</dd>
+                      </div>
+                      <div>
+                        <dt className="uppercase tracking-[0.18em]">Produced by execution</dt>
+                        <dd className="mt-1 break-all">
+                          {event.produced_by_execution_id || "Unavailable"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="uppercase tracking-[0.18em]">Ingested</dt>
+                        <dd className="mt-1">{formatDateTime(event.ingested_at)}</dd>
+                      </div>
+                    </dl>
+                    <pre className="mt-3 overflow-x-auto rounded-xl bg-background p-3 text-xs text-muted-foreground">
+                      {serializeMessage(event.payload)}
+                    </pre>
+                  </details>
+                </article>
+              ))}
+            </div>
           )}
-
-          <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              <Clock3 className="h-4 w-4" />
-              Produced Events
-            </div>
-            <Table.Root>
-              <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeaderCell>Event</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Produced By</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell>Occurred</Table.ColumnHeaderCell>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {detail.produced_events.length === 0 ? (
-                  <Table.Row>
-                    <Table.Cell colSpan={3} className="py-8 text-center text-muted-foreground">
-                      No produced events recorded for this execution chain yet.
-                    </Table.Cell>
-                  </Table.Row>
-                ) : (
-                  detail.produced_events.map((event) => (
-                    <Table.Row key={event.event_id}>
-                      <Table.RowHeaderCell className="max-w-[320px]">
-                        <div className="space-y-1">
-                          <div className="truncate font-medium">
-                            {ontologyDisplay.displayEventType(event.event_type)}
-                          </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {event.event_type}
-                          </div>
-                          <div className="text-xs text-muted-foreground">{event.event_id}</div>
-                        </div>
-                      </Table.RowHeaderCell>
-                      <Table.Cell>
-                        <div className="space-y-1">
-                          <div>{displayProducedBy(event)}</div>
-                          {event.produced_by_execution_id && (
-                            <div className="font-mono text-xs text-muted-foreground">
-                              {event.produced_by_execution_id}
-                            </div>
-                          )}
-                        </div>
-                      </Table.Cell>
-                      <Table.Cell>{formatDateTime(event.occurred_at)}</Table.Cell>
-                    </Table.Row>
-                  ))
-                )}
-              </Table.Body>
-            </Table.Root>
-          </Card>
-        </div>
+        </Card>
       </div>
     </div>
   );

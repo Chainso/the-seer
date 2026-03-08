@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Filter } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -21,7 +22,6 @@ import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { Table } from "../ui/table";
 
 const PAGE_SIZE = 20;
 const ALL_WORKFLOWS_VALUE = "__all_workflows__";
@@ -79,6 +79,28 @@ function statusBadgeClass(status: AgenticWorkflowStatus): string {
 
 function totalPages(total: number): number {
   return total <= 0 ? 0 : Math.ceil(total / PAGE_SIZE);
+}
+
+function shortIdentifier(value: string | null | undefined, keep = 8): string {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return "Unavailable";
+  }
+  return trimmed.length <= keep ? trimmed : `${trimmed.slice(0, keep)}...`;
+}
+
+function displayDateRangeLabel(after: string, before: string): string {
+  if (after && before) {
+    return `${formatDateTime(after)} to ${formatDateTime(before)}`;
+  }
+  if (after) {
+    return `After ${formatDateTime(after)}`;
+  }
+  return `Before ${formatDateTime(before)}`;
+}
+
+function summaryCardValueClass(value: string): string {
+  return value === "-" ? "text-muted-foreground" : "text-foreground";
 }
 
 export function AgenticWorkflowExecutionPanel() {
@@ -195,9 +217,28 @@ export function AgenticWorkflowExecutionPanel() {
     return Array.from(options.values()).sort((left, right) => left.label.localeCompare(right.label));
   }, [ontologyDisplay, workflowOptions, workflowUri]);
 
+  const workflowLabelLookup = useMemo(
+    () => new Map(resolvedWorkflowOptions.map((option) => [option.value, option.label])),
+    [resolvedWorkflowOptions]
+  );
+
   const loading = loadedRequestKey !== requestKey;
   const visiblePages = useMemo(() => totalPages(total), [total]);
   const visibleError = loadedRequestKey === requestKey ? error : null;
+
+  const activeFilterBadges = useMemo(() => {
+    const items: string[] = [];
+    if (status) {
+      items.push(`Status: ${STATUS_OPTIONS.find((option) => option.value === status)?.label || status}`);
+    }
+    if (workflowUri) {
+      items.push(`Workflow: ${workflowLabelLookup.get(workflowUri) || ontologyDisplay.displayConcept(workflowUri)}`);
+    }
+    if (submittedAfter || submittedBefore) {
+      items.push(`Submitted: ${displayDateRangeLabel(submittedAfter, submittedBefore)}`);
+    }
+    return items;
+  }, [ontologyDisplay, status, submittedAfter, submittedBefore, workflowLabelLookup, workflowUri]);
 
   const applyFilters = () => {
     const params = new URLSearchParams();
@@ -228,13 +269,11 @@ export function AgenticWorkflowExecutionPanel() {
     router.push("/inspector/agentic-workflows");
   };
 
-  const openExecution = (executionId: string) => {
+  const buildExecutionHref = (executionId: string) => {
     const query = searchParams.toString();
-    router.push(
-      query
-        ? `/inspector/agentic-workflows/${executionId}?${query}`
-        : `/inspector/agentic-workflows/${executionId}`
-    );
+    return query
+      ? `/inspector/agentic-workflows/${executionId}?${query}`
+      : `/inspector/agentic-workflows/${executionId}`;
   };
 
   const changePage = (nextPage: number) => {
@@ -256,21 +295,52 @@ export function AgenticWorkflowExecutionPanel() {
               Browse managed workflow runs, narrow the list by capability and lifecycle state,
               and open a run to review transcript history, related actions, and produced events.
             </p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className="rounded-full px-4 py-2 text-sm font-normal">
+                {loading ? "Loading runs..." : `${total} matching runs`}
+              </Badge>
+              <Badge variant="outline" className="rounded-full px-4 py-2 text-sm font-normal">
+                {activeFilterBadges.length === 0 ? "All recent runs" : `${activeFilterBadges.length} active filters`}
+              </Badge>
+            </div>
           </div>
-          <Badge variant="outline" className="rounded-full px-4 py-2 text-sm font-normal">
-            {loading ? "Loading runs..." : `${total} matching runs`}
-          </Badge>
         </div>
       </Card>
 
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          <Filter className="h-4 w-4" />
-          Filters
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              <Filter className="h-4 w-4" />
+              Filters
+            </div>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+              Focus the run list by lifecycle, workflow capability, or submission window without
+              leaving the inspector browse flow.
+            </p>
+          </div>
+          <div className="flex max-w-full flex-wrap gap-2">
+            {activeFilterBadges.length === 0 ? (
+              <Badge variant="outline" className="rounded-full bg-muted/20 px-3 py-1 text-xs font-normal">
+                Showing all recent workflow runs
+              </Badge>
+            ) : (
+              activeFilterBadges.map((item) => (
+                <Badge
+                  key={item}
+                  variant="outline"
+                  className="max-w-full rounded-full bg-muted/20 px-3 py-1 text-xs font-normal"
+                  title={item}
+                >
+                  <span className="truncate">{item}</span>
+                </Badge>
+              ))
+            )}
+          </div>
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-2">
+        <div className="mt-6 grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+          <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/15 p-4">
             <Label htmlFor="agentic-status">Status</Label>
             <Select
               value={statusDraft}
@@ -290,7 +360,7 @@ export function AgenticWorkflowExecutionPanel() {
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/15 p-4">
             <Label htmlFor="agentic-workflow-uri">Workflow capability</Label>
             <Select
               value={workflowUriDraft || ALL_WORKFLOWS_VALUE}
@@ -319,7 +389,7 @@ export function AgenticWorkflowExecutionPanel() {
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/15 p-4">
             <Label htmlFor="agentic-submitted-after">Submitted after</Label>
             <Input
               id="agentic-submitted-after"
@@ -329,7 +399,7 @@ export function AgenticWorkflowExecutionPanel() {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/15 p-4">
             <Label htmlFor="agentic-submitted-before">Submitted before</Label>
             <Input
               id="agentic-submitted-before"
@@ -357,7 +427,7 @@ export function AgenticWorkflowExecutionPanel() {
       )}
 
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
               Workflow Runs
@@ -371,80 +441,111 @@ export function AgenticWorkflowExecutionPanel() {
           </Badge>
         </div>
 
-        <Table.Root striped>
-          <Table.Header>
-            <Table.Row>
-              <Table.ColumnHeaderCell>Workflow</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Submitted</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Updated</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Transcript</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell>Attempts</Table.ColumnHeaderCell>
-              <Table.ColumnHeaderCell className="w-[120px]">Inspect</Table.ColumnHeaderCell>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {executions.length === 0 ? (
-              <Table.Row>
-                <Table.Cell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  {loading ? "Loading workflow runs..." : "No workflow runs match the active filters."}
-                </Table.Cell>
-              </Table.Row>
-            ) : (
-              executions.map((execution) => (
-                <Table.Row key={execution.action.action_id}>
-                  <Table.RowHeaderCell className="max-w-[440px]">
-                    <div className="space-y-1">
-                      <div className="truncate font-medium">
-                        {ontologyDisplay.displayConcept(execution.action.action_uri)}
+        {executions.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
+            {loading ? "Loading workflow runs..." : "No workflow runs match the active filters."}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {executions.map((execution) => {
+              const href = buildExecutionHref(execution.action.action_id);
+              const workflowLabel = ontologyDisplay.displayConcept(execution.action.action_uri);
+              const submittedLabel = formatDateTime(execution.action.submitted_at);
+              const updatedLabel = formatDateTime(execution.action.updated_at);
+              const lastPersistedLabel = formatDateTime(execution.last_transcript_persisted_at);
+
+              return (
+                <Link
+                  key={execution.action.action_id}
+                  href={href}
+                  className="group block rounded-2xl border border-border bg-muted/10 p-5 shadow-sm transition hover:border-foreground/20 hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Workflow capability
                       </div>
-                      <div className="truncate text-xs text-muted-foreground">
+                      <div className="truncate font-display text-xl">{workflowLabel}</div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span title={execution.action.action_id}>
+                          Run {shortIdentifier(execution.action.action_id, 10)}
+                        </span>
+                        {execution.action.parent_execution_id && (
+                          <span title={execution.action.parent_execution_id}>
+                            Child of {shortIdentifier(execution.action.parent_execution_id, 10)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <Badge
+                        variant="outline"
+                        className={`rounded-full ${statusBadgeClass(execution.action.status)}`}
+                      >
+                        {execution.action.status}
+                      </Badge>
+                      <Badge variant="outline" className="rounded-full">
+                        {execution.transcript_message_count} messages
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-xl border border-border/70 bg-background/80 p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Submitted
+                      </div>
+                      <div className={`mt-1 text-sm font-medium ${summaryCardValueClass(submittedLabel)}`}>
+                        {submittedLabel}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-background/80 p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Updated
+                      </div>
+                      <div className={`mt-1 text-sm font-medium ${summaryCardValueClass(updatedLabel)}`}>
+                        {updatedLabel}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-background/80 p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Transcript
+                      </div>
+                      <div className="mt-1 text-sm font-medium">
+                        {execution.transcript_message_count} persisted
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">{lastPersistedLabel}</div>
+                    </div>
+                    <div className="rounded-xl border border-border/70 bg-background/80 p-3">
+                      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        Attempts
+                      </div>
+                      <div className="mt-1 text-sm font-medium">
+                        {execution.action.attempt_count} / {execution.action.max_attempts}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between gap-4 border-t border-border/70 pt-3">
+                    <div className="min-w-0 text-[11px] text-muted-foreground">
+                      <div className="uppercase tracking-[0.18em]">Capability URI</div>
+                      <div className="truncate" title={execution.action.action_uri}>
                         {execution.action.action_uri}
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Run {execution.action.action_id}
-                      </div>
                     </div>
-                  </Table.RowHeaderCell>
-                  <Table.Cell>
-                    <Badge
-                      variant="outline"
-                      className={`rounded-full ${statusBadgeClass(execution.action.status)}`}
-                    >
-                      {execution.action.status}
-                    </Badge>
-                  </Table.Cell>
-                  <Table.Cell>{formatDateTime(execution.action.submitted_at)}</Table.Cell>
-                  <Table.Cell>{formatDateTime(execution.action.updated_at)}</Table.Cell>
-                  <Table.Cell>
-                    <div className="space-y-1">
-                      <div>{execution.transcript_message_count} messages</div>
-                      <div className="text-xs text-muted-foreground">
-                        {formatDateTime(execution.last_transcript_persisted_at)}
-                      </div>
+                    <div className="inline-flex items-center gap-1 text-sm font-medium text-foreground">
+                      Open run
+                      <ArrowRight className="h-4 w-4 transition group-hover:translate-x-0.5" />
                     </div>
-                  </Table.Cell>
-                  <Table.Cell>
-                    {execution.action.attempt_count} / {execution.action.max_attempts}
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openExecution(execution.action.action_id)}
-                    >
-                      Open
-                      <ArrowRight className="ml-1 h-3.5 w-3.5" />
-                    </Button>
-                  </Table.Cell>
-                </Table.Row>
-              ))
-            )}
-          </Table.Body>
-        </Table.Root>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
 
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
             {loading ? "Refreshing workflow runs..." : "Transcript counts reflect persisted messages."}
           </p>
