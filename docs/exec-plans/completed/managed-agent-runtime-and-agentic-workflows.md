@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: Managed Agent Runtime and Agentic Workflow Architecture
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP track 12  
 **Agent slot:** AGENT-RUNTIME-1  
 **Predecessor:** `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md`, `docs/exec-plans/completed/action-orchestration-backend-service.md`  
@@ -743,7 +743,7 @@ Exit criteria:
 
 Plan ratification / doc coherence:
 
-1. `rg -n "agentic workflow|AgenticWorkflow|parent_execution_id|produced_by_execution_id|completion_messages" docs/exec-plans/active/managed-agent-runtime-and-agentic-workflows.md docs/exec-plans/active/index.md`
+1. `rg -n "agentic workflow|AgenticWorkflow|parent_execution_id|produced_by_execution_id|completion_messages|agent_orchestration|load_action|load_skill|user_id" ARCHITECTURE.md DESIGN.md docs/product-specs/index.md docs/product-specs/managed-agentic-workflows.md docs/product-specs/managed-agent-controls-and-approvals.md docs/exec-plans/active/index.md docs/exec-plans/completed/README.md docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`
 2. Manual link/reference review for touched docs
 
 Implementation-phase validation targets:
@@ -757,18 +757,19 @@ Implementation-phase validation targets:
 
 ## Docs Impact
 
-Immediate:
+Plan artifact:
 
-1. `docs/exec-plans/active/managed-agent-runtime-and-agentic-workflows.md`
+1. `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`
 2. `docs/exec-plans/active/index.md`
 
-Expected when implementation lands:
+Delivered in Phase 6:
 
 1. `ARCHITECTURE.md`
-2. `DESIGN.md` if runtime boundary wording changes
+2. `DESIGN.md`
 3. `docs/product-specs/managed-agentic-workflows.md`
 4. `docs/product-specs/managed-agent-controls-and-approvals.md`
-5. `docs/exec-plans/completed/README.md`
+5. `docs/product-specs/index.md`
+6. `docs/exec-plans/completed/README.md`
 
 ## Decision Log
 
@@ -813,6 +814,8 @@ Expected when implementation lands:
 17. 2026-03-08: Phase 5 implementation landed optional `user_id` support on `/api/v1/agentic-workflows/executions`, propagated the optional filter through `agent_orchestration` and `actions` list queries only, and removed the top-level `user_id` echo from the dedicated execution-list response while leaving generic action control-plane write/claim semantics unchanged.
 18. 2026-03-08: Phase 5 UI execution alignment landed on `/inspector/agentic-workflows` and `/inspector/agentic-workflows/[executionId]`: the list now opens without a user-id gate, workflow filtering uses an ontology-backed selector of registered `seer:AgenticWorkflow` capabilities, and list/detail tables resolve workflow/action/event labels through shared ontology display helpers with reduced raw control-plane copy.
 19. 2026-03-08: Phase 5 validation completed successfully: `cd seer-backend && uv run ruff check src tests` passed, `cd seer-backend && uv run pytest -q tests/test_agent_orchestration_phase4.py` passed (`6 passed`), `cd seer-ui && npm run lint` passed, `cd seer-ui && npm run build` passed, and `cd seer-ui && npm run test:contracts` passed (`10 passed`).
+20. 2026-03-08: Phase 6 ratified the canonical docs/specs to match the landed runtime: `agent_orchestration` now owns LLM-backed agent execution and transcript semantics, `actions` remains the generic control plane, ClickHouse stores canonical agent transcript `completion_messages`, and the delivered execution list/detail/live-tail surfaces are documented as ontology-aligned runtime inspection surfaces.
+21. 2026-03-08: Phase 6 archived this plan to `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`, updated product-spec/index status to mark the managed-agent runtime work delivered, and reused the clean Phase 5 backend/frontend validation ledger because this closure phase changed docs only.
 
 ## Progress Tracking
 
@@ -821,7 +824,7 @@ Expected when implementation lands:
 - [x] Phase 3 transcript persistence + resume + provenance
 - [x] Phase 4 agentic workflow execution APIs + UI surfaces
 - [x] Phase 5 execution UX alignment + ontology-backed filtering
-- [ ] Phase 6 canonical docs/spec ratification
+- [x] Phase 6 canonical docs/spec ratification
 
 Current execution state:
 
@@ -829,4 +832,4 @@ Current execution state:
 2. `completed`: Phase 3 transcript persistence + runtime resume + produced-event provenance.
 3. `completed`: Phase 4 agentic workflow execution APIs + UI surfaces.
 4. `completed`: Phase 5 execution UX alignment + ontology-backed filtering.
-5. `pending`: Phase 6 canonical docs/spec ratification follows after the execution UX alignment phase lands.
+5. `completed`: Phase 6 canonical docs/spec ratification and archive closure.

@@ -1,53 +1,53 @@
 # Managed Agentic Workflows
 
-**Status:** draft  
-**Owner plan:** `docs/exec-plans/completed/ai-first-investigation-and-managed-agents.md`  
+**Status:** completed (`current managed-agent runtime and execution surface`)
+**Owner plan:** `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`
 **Last updated:** 2026-03-08
 
 ---
 
 ## What This Is
 
-This spec defines how Seer should let users register and run managed AI agents.
+This spec defines the current managed-agent runtime model and execution visibility surface.
 
-The key model is:
+The delivered model is:
 
 1. the ontology defines executable workflows and actions,
-2. some workflows are agentic and adaptive,
-3. Seer runs those workflows inside a managed runtime,
-4. and the rest of the platform treats them as executable capabilities.
+2. `seer:AgenticWorkflow` extends `prophet:Workflow`,
+3. every agentic workflow run is also a generic action execution,
+4. `agent_orchestration` owns LLM-backed execution and transcript semantics,
+5. `actions` remains the generic execution control plane,
+6. and Seer exposes dedicated execution list/detail/live-tail surfaces for those runs.
 
-This is not a low-code workflow builder.
-
-It is a managed-agent product surface built on ontology-defined workflows.
+This is not a low-code workflow builder or a second capability model outside the ontology.
 
 ## Why It Exists
 
-Businesses do not only need answers.
+Managed-agent execution needs to feel like a first-class Seer capability rather than an opaque worker queue.
 
-They also need persistent operational behavior such as:
+The delivered runtime surface lets users:
 
-1. watching for risk,
-2. triaging exceptions,
-3. deciding what to do,
-4. invoking allowed actions,
-5. and reporting outcomes.
-
-That behavior should live in the product as managed agents, not as ad hoc scripts outside the platform.
+1. find agentic workflow runs without dropping into backend-only control-plane views,
+2. inspect canonical transcript history for one run,
+3. understand which child actions and produced events came from that run,
+4. and monitor live progress through persisted-message tailing.
 
 ## Product Model
 
-Managed agentic workflows have three layers:
+Managed agentic workflow execution now has four product-visible layers:
 
 1. `Ontology-defined workflow capability`
    - source of truth for the executable workflow concept
-   - part of the ontology/action catalog
-2. `Operating instruction`
-   - natural-language guidance describing the objective, priorities, and decision style
-3. `Runtime guardrails`
-   - execution limits, budgets, stop conditions, and allowed actions/tools
-
-The managed agent is the combination of those layers running in Seer.
+   - represented in Seer as `seer:AgenticWorkflow`
+2. `Generic action execution record`
+   - canonical lifecycle state, attempts, lineage, and lease metadata
+   - persisted in PostgreSQL through the `actions` control plane
+3. `Canonical transcript state`
+   - ordered append-only `completion_messages`
+   - persisted in ClickHouse for inspection and resume
+4. `Execution visibility surface`
+   - dedicated execution list, detail, and transcript stream APIs/UI
+   - rendered with ontology-aligned labels and filters rather than raw URI-first controls
 
 ## Authoring Boundary
 
@@ -56,114 +56,104 @@ Ontology authoring remains outside Seer.
 That means:
 
 1. workflow/action definitions originate in Prophet plus Seer ontology extensions,
-2. Seer ingests those definitions,
-3. and Seer provides registration, activation, monitoring, and control.
-
-Seer should not require users to build a separate execution graph in the UI.
+2. Seer ingests those definitions, including the `seer:AgenticWorkflow` subtype,
+3. Seer does not provide ontology authoring or a separate workflow-graph editor,
+4. and the runtime/UI treat agentic workflows as ontology-discovered executable capabilities.
 
 ## Primary User Flow
 
-1. User opens the managed-agent workflow surface.
-2. User selects an ontology-defined workflow/action capability to activate as a managed agent.
-3. User provides or edits the operating instruction in plain language.
-4. User configures runtime guardrails:
-   - allowed actions,
-   - allowed evidence/tools,
-   - budget, cadence, and step limits,
-   - stop conditions,
-   - success criteria.
-5. Seer shows a clear preview of what the agent can do.
-6. User activates the managed agent.
-7. Seer runs the agent over time:
-   - inspect evidence,
-   - decide next steps,
-   - invoke allowed actions,
-   - track outcomes.
-8. User monitors current state, recent decisions, guardrail events, and business results.
-9. Monitoring surfaces should open directly into workflow runs without requiring a user-id lookup step, and capability filtering should use ontology-backed workflow labels rather than raw IRIs.
+1. User opens `/inspector/agentic-workflows`.
+2. Seer lists recent workflow runs without requiring a `user_id` entry gate.
+3. User filters by lifecycle state, time window, and ontology-backed workflow capability selection.
+4. User opens one run.
+5. Seer shows:
+   - execution summary,
+   - canonical persisted transcript messages,
+   - child action executions,
+   - produced events,
+   - live transcript updates for running executions.
+6. The UI resolves workflow, action, and event labels through shared ontology display helpers, with raw identifiers available as supporting detail.
 
 ## Agent Runtime Expectations
 
-The managed agent should be able to:
+The current managed-agent runtime model is:
 
-1. inspect object and event history,
-2. use analytical tools such as process mining and RCA when helpful,
-3. invoke ontology-defined actions within its runtime guardrails,
-4. adapt to new evidence,
-5. explain what it did and why,
-6. and stop or defer when confidence or runtime limits require it.
+1. `agent_orchestration` owns LLM-backed execution and transcript reconstruction from persisted `completion_messages`,
+2. runtime tool access is intentionally restricted,
+3. `load_skill` is limited to deep ontology, object store, and object history,
+4. ontology-defined execution flows through `load_action`,
+5. child ontology actions remain ordinary action executions linked by `parent_execution_id`,
+6. and produced events may carry `produced_by_execution_id` when runtime execution emitted them.
 
 ## What Seer Must Persist
 
 1. ontology workflow/action identity,
-2. current instruction text,
-3. runtime guardrail configuration,
-4. current lifecycle state,
-5. run history,
-6. executed actions,
-7. evidence used for major decisions,
-8. and outcome metrics.
+2. generic execution lifecycle state and attempts,
+3. canonical ordered transcript `completion_messages`,
+4. child action lineage through `parent_execution_id`,
+5. produced-event provenance through `produced_by_execution_id` when present,
+6. and enough execution metadata to support list/detail/live-tail inspection.
 
 ## What Seer Must Not Require
 
 1. A compiled DAG as the canonical representation.
 2. A separate action registry detached from the ontology.
-3. Manual flowchart authoring as the default setup path.
+3. A second transcript protocol outside canonical persisted `completion_messages`.
+4. A `user_id` lookup gate just to open the execution list surface.
 
 ## Relationship To The Ontology
 
-The ontology is the capability catalog.
+The ontology remains the capability catalog.
 
 That means:
 
 1. atomic actions and agentic workflows are both discoverable through ontology concepts,
-2. typing and produced-event expectations come from ontology definitions,
-3. Seer runtime guardrails may further narrow what is allowed,
-4. but Seer should not invent a conflicting capability model.
+2. `seer:AgenticWorkflow` composes as a subtype of `prophet:Workflow`,
+3. typing and produced-event expectations come from ontology definitions,
+4. execution filtering/display uses ontology-discovered workflow capabilities and shared ontology labels,
+5. and Seer does not invent a conflicting capability model.
 
 ## User Trust Requirements
 
-The product must make the following clear before activation:
+The delivered execution surfaces must make the following clear:
 
-1. what the agent is trying to achieve,
-2. what evidence it may inspect,
-3. what actions it may invoke,
-4. how often it runs,
-5. what limits can stop it,
-6. what success looks like,
-7. and how it can be paused or revoked.
+1. which workflow capability is running,
+2. what lifecycle state the run is in,
+3. what transcript messages were canonically persisted,
+4. which child actions were invoked,
+5. which produced events came from the run,
+6. and whether the execution is still live or terminal.
 
 ## Outcome Expectations
 
-Managed agents are not useful if they only generate logs.
+Managed-agent execution inspection is not useful if it only exposes raw control-plane rows.
 
 The product should show:
 
-1. what the agent did,
-2. what changed in the business,
-3. whether the target metric improved,
-4. and whether the agent is helping or harming.
+1. what the workflow did,
+2. what actions it triggered,
+3. what events it produced,
+4. and the canonical message history that explains the run.
 
 ## Acceptance Expectations
 
-1. Users can activate ontology-defined workflow capabilities as managed agents without building a separate flow graph.
-2. Managed agents can inspect history and invoke allowed ontology-defined actions.
-3. Runtime guardrails can narrow execution below the ontology-defined capability envelope.
-4. Managed agents expose clear lifecycle state, recent decisions, and guardrail-triggered stops or failures.
-5. Managed agents are auditable and can be paused, resumed, or revoked.
-6. Managed-agent setup makes the capability and runtime guardrails understandable to a user without ontology expertise.
+1. Users can list/filter agentic workflow executions from a dedicated inspector surface.
+2. The execution list read surface does not require `user_id`, while generic action control-plane write/claim semantics still do.
+3. Workflow filtering uses ontology-backed selectable registered agentic workflows rather than raw URI text entry.
+4. Users can drill into one execution and read canonical persisted transcript history.
+5. Execution detail shows child actions and produced events with explicit lineage/provenance data.
+6. Live execution visibility uses SSE of persisted transcript messages rather than an ephemeral token-only stream.
 7. Execution history and drill-in views use ontology-resolved workflow, action, and event labels as the primary presentation, with raw identifiers available as supporting detail.
 
 ## Out Of Scope For This Spec
 
-1. Final backend schema for managed-agent runtime state.
+1. Managed-agent activation/editor UX and ongoing configuration authoring.
 2. Final billing, quotas, or multi-tenant packaging.
-3. Final UI interaction details for every control.
-4. Final ontology extension vocabulary names.
+3. Final authz, approvals, or pause/resume/revoke controls.
+4. Broader assistant skill-catalog exposure beyond the restricted managed-agent runtime tool policy.
 
-## Open Questions
+## Follow-Up Gaps
 
-1. Which parts of the operating instruction belong in ontology versus runtime configuration?
-2. How should recurring triggers versus continuous monitoring be expressed in the user experience?
-3. How should Seer differentiate "recommended action", "one-off action execution", and "managed agent activation" in the UI?
-4. What are the right default runtime limits before platform authz exists?
+1. Activation, instruction editing, and runtime-guardrail authoring still need their own delivered control surface.
+2. Pause/resume/revoke semantics remain deferred beyond the current execution visibility phase.
+3. Final authz and approval workflows remain intentionally out of scope for the trusted-mode runtime.

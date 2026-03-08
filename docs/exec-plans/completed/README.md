@@ -40,3 +40,4 @@ Each completed plan should preserve:
 28. `assistant-conversation-canvas-and-skills.md` - completed (2026-03-07)
 29. `assistant-canvas-shared-display-surfaces.md` - completed (2026-03-08)
 30. `backend-frontend-lint-build-stability-2026-03-08.md` - completed (2026-03-08)
+31. `managed-agent-runtime-and-agentic-workflows.md` - completed (2026-03-08)

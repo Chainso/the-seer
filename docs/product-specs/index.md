@@ -23,16 +23,16 @@ Catalog user-facing product specs and make implementation state obvious.
 8. `action-orchestration-backend-service.md` - completed
 9. `assistant-primary-surface.md` - completed (`current canonical /assistant surface`)
 10. `ai-investigation-workbench.md` - completed (`historical delivered workbench snapshot`)
+11. `managed-agentic-workflows.md` - completed (`current managed-agent runtime and execution surface`)
+12. `managed-agent-controls-and-approvals.md` - completed (`trusted-mode execution inspection surface; approvals deferred`)
 
 ## Draft Specs
 
-1. `managed-agentic-workflows.md` - draft (`not implemented yet`)
-2. `managed-agent-controls-and-approvals.md` - draft (`Managed Agent Runtime Controls`, `not implemented yet`)
+1. none
 
 ## Current Implementation Gaps
 
-1. `managed-agentic-workflows.md`
-2. `managed-agent-controls-and-approvals.md`
+1. none
 
 Current active execution coverage:
 
