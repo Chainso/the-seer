@@ -294,7 +294,7 @@ test("explorer opts into explicit lifecycle naming in catalog, inspector, and gr
 
 test("history details panel keeps object-local lifecycle naming in plain/default mode", () => {
   const historySource = read("app/components/inspector/history-panel.tsx");
-  const detailsSource = read("app/components/inspector/object-history-details-panel.tsx");
+  const detailsSource = read("app/components/inspector/use-object-history-display-data.ts");
   const resolver = buildResolver();
 
   assert.doesNotMatch(historySource, /lifecycleLabelMode:\s*['"]explicit['"]/);
