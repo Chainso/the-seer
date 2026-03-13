@@ -46,11 +46,13 @@
   "init": true,
   "mounts": [
     "source=${localWorkspaceFolder},target=/mnt/host-workspace,type=bind,readonly",
-    "source=${localEnv:HOME}/.codex,target=/root/.codex,type=bind",
+    "source=${localEnv:HOME}/.codex,target=/mnt/host-codex,type=bind,readonly",
+    "source=seer-python-codex,target=/root/.codex,type=volume",
     "source=${localEnv:HOME}/.gitconfig,target=/mnt/host-gitconfig,type=bind,readonly",
     "source=${localEnv:HOME}/.ssh,target=/mnt/host-ssh,type=bind,readonly"
   ],
   "postCreateCommand": "/usr/local/share/devcontainer/bootstrap-workspace.sh",
+  "postStartCommand": "/usr/local/share/devcontainer/sync-host-config.sh",
   "customizations": {
     "vscode": {
       "settings": {

@@ -26,13 +26,13 @@ What it sets up:
 1. A named Docker volume mounted at `/workspaces/seer-python` for the container-side repo copy.
 2. Your host checkout mounted read-only at `/mnt/host-workspace`, used only to seed the isolated workspace on first create.
 3. Codex installed in the container, with `codex` defaulting to full access (`--dangerously-bypass-approvals-and-sandbox`).
-4. Host `~/.codex` mounted read-write so Codex auth and sessions persist.
-5. Host `~/.gitconfig` and `~/.ssh` mounted read-only and copied into container-local config during bootstrap so git push works without giving the container host write access there.
+4. A container-local named volume mounted at `/root/.codex`, with host `~/.codex` mounted separately as read-only at `/mnt/host-codex`.
+5. Host `~/.codex`, `~/.gitconfig`, and `~/.ssh` seeded into container-local config during bootstrap/startup so Codex auth and git push work without giving the container host write access to those paths.
 6. A Docker daemon running inside the devcontainer, so `docker compose` stays container-local rather than controlling the host Docker daemon.
 
 On first create, the workspace volume is populated with a real local `git clone` of the host repo, so `/workspaces/seer-python` has its own `.git` directory and independent history state.
 
-That means the container can persist changes back to host only through `~/.codex`. The host checkout, git config, and SSH directory remain read-only mounts.
+That means the container does not write back to the host checkout or host credential/config directories during normal operation. The host checkout, Codex config, git config, and SSH directory remain read-only mounts, and the container writes only to its own named volumes unless you explicitly copy data out.
 
 First bootstrap happens automatically through the devcontainer post-create hook:
 

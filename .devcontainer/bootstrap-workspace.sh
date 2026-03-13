@@ -5,6 +5,7 @@ SOURCE_DIR="/mnt/host-workspace"
 TARGET_DIR="/workspaces/seer-python"
 SEED_MARKER="${TARGET_DIR}/.devcontainer-seeded"
 SYNC_SCRIPT="/usr/local/share/devcontainer/sync-from-host.sh"
+HOST_CONFIG_SYNC_SCRIPT="/usr/local/share/devcontainer/sync-host-config.sh"
 TMP_CLONE_ROOT=""
 
 cleanup() {
@@ -25,11 +26,14 @@ if [ ! -x "${SYNC_SCRIPT}" ]; then
   exit 1
 fi
 
+if [ ! -x "${HOST_CONFIG_SYNC_SCRIPT}" ]; then
+  echo "Missing host config sync script: ${HOST_CONFIG_SYNC_SCRIPT}" >&2
+  exit 1
+fi
+
 mkdir -p "${TARGET_DIR}"
 
-if [ -f /mnt/host-gitconfig ]; then
-  cp /mnt/host-gitconfig /root/.gitconfig
-fi
+"${HOST_CONFIG_SYNC_SCRIPT}"
 
 git config --global --add safe.directory "${SOURCE_DIR}" || true
 git config --global --add safe.directory "${SOURCE_DIR}/.git" || true
@@ -43,15 +47,6 @@ if [ ! -d "${TARGET_DIR}/.git" ]; then
   mv "${TMP_CLONE_ROOT}/repo"/* "${TARGET_DIR}/"
   shopt -u dotglob nullglob
   touch "${SEED_MARKER}"
-fi
-
-if [ -d /mnt/host-ssh ]; then
-  mkdir -p /root/.ssh
-  rsync -a /mnt/host-ssh/ /root/.ssh/
-  chown -R root:root /root/.ssh
-  chmod 700 /root/.ssh
-  find /root/.ssh -type f -name "*.pub" -exec chmod 644 {} +
-  find /root/.ssh -type f ! -name "*.pub" -exec chmod 600 {} +
 fi
 
 git config --global --add safe.directory "${TARGET_DIR}" || true

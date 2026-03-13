@@ -26,4 +26,5 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list \
 
 COPY bootstrap-workspace.sh /usr/local/share/devcontainer/bootstrap-workspace.sh
 COPY sync-from-host.sh /usr/local/share/devcontainer/sync-from-host.sh
-RUN chmod +x /usr/local/share/devcontainer/bootstrap-workspace.sh /usr/local/share/devcontainer/sync-from-host.sh
+COPY sync-host-config.sh /usr/local/share/devcontainer/sync-host-config.sh
+RUN chmod +x /usr/local/share/devcontainer/bootstrap-workspace.sh /usr/local/share/devcontainer/sync-from-host.sh /usr/local/share/devcontainer/sync-host-config.sh
