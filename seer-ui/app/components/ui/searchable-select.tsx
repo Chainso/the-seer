@@ -1,9 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/app/lib/utils';
-import { Button } from '@/app/components/ui/button';
 import { Input } from '@/app/components/ui/input';
 import {
   DropdownMenu,
@@ -35,6 +34,7 @@ interface SearchableSelectProps {
   emptyMessage?: string;
   disabled?: boolean;
   className?: string;
+  triggerId?: string;
 }
 
 export function SearchableSelect({
@@ -46,9 +46,12 @@ export function SearchableSelect({
   emptyMessage = 'No matches found.',
   disabled,
   className,
+  triggerId,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [triggerWidth, setTriggerWidth] = useState<number | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
 
   const flatOptions = useMemo(
     () => groups.flatMap((group) => group.options),
@@ -79,28 +82,66 @@ export function SearchableSelect({
     setSearch('');
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      setSearch('');
+    }
+  };
+
+  useEffect(() => {
+    const node = triggerRef.current;
+    if (!node) {
+      return;
+    }
+
+    const updateWidth = () => {
+      setTriggerWidth(node.offsetWidth || null);
+    };
+
+    updateWidth();
+
+    const observer = new ResizeObserver(() => {
+      updateWidth();
+    });
+    observer.observe(node);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu open={open} onOpenChange={handleOpenChange}>
       <DropdownMenuTrigger asChild>
-        <Button
+        <button
+          ref={triggerRef}
+          id={triggerId}
           type="button"
-          variant="outline"
-          className={cn('w-full justify-between', className)}
+          className={cn(
+            "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 dark:hover:bg-input/50 flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
+            className
+          )}
           disabled={disabled}
         >
           <span className={cn('truncate', !selectedOption && 'text-muted-foreground')}>
             {selectedOption?.label ?? placeholder}
           </span>
           <ChevronDown className="h-4 w-4 opacity-60" />
-        </Button>
+        </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[320px] p-0">
+      <DropdownMenuContent
+        align="start"
+        className="min-w-[8rem] p-0"
+        style={triggerWidth ? { minWidth: `${triggerWidth}px` } : undefined}
+      >
         <div className="border-b border-border p-2">
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={searchPlaceholder}
             className="h-8"
+            autoFocus
           />
         </div>
         <div className="max-h-64 overflow-y-auto p-2">

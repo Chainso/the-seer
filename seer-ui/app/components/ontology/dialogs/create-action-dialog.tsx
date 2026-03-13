@@ -13,6 +13,7 @@ import {
 } from '@/app/components/ui/dialog';
 import { Input } from '@/app/components/ui/input';
 import { Label } from '@/app/components/ui/label';
+import { SearchableSelect } from '@/app/components/ui/searchable-select';
 import { Textarea } from '@/app/components/ui/textarea';
 import {
   Select,
@@ -461,57 +462,64 @@ export function CreateActionDialog({ onActionCreated }: CreateActionDialogProps)
                   <div className="grid gap-3 rounded-xl border border-border/60 bg-background p-3">
                     <div className="grid gap-2">
                       <Label>Object Model *</Label>
-                      <Select value={transitionOfUri} onValueChange={setTransitionOfUri} disabled={loading}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select object model" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {objectModels.map((model) => (
-                            <SelectItem key={model.uri} value={model.uri}>
-                              {(model.properties.name as string) || model.uri}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={transitionOfUri}
+                        onValueChange={setTransitionOfUri}
+                        disabled={loading}
+                        groups={[
+                          {
+                            label: 'Object models',
+                            options: objectModels.map((model) => ({
+                              value: model.uri,
+                              label: (model.properties.name as string) || model.uri,
+                            })),
+                          },
+                        ]}
+                        placeholder="Select object model"
+                        searchPlaceholder="Search object models..."
+                        emptyMessage="No object models found."
+                      />
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div className="grid gap-2">
                         <Label>From State *</Label>
-                        <Select
+                        <SearchableSelect
                           value={fromStateUri}
                           onValueChange={setFromStateUri}
                           disabled={loading || !transitionOfUri}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select from state" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {transitionStateOptions.map((state) => (
-                              <SelectItem key={state.uri} value={state.uri}>
-                                {state.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          groups={[
+                            {
+                              label: 'States',
+                              options: transitionStateOptions.map((state) => ({
+                                value: state.uri,
+                                label: state.name,
+                              })),
+                            },
+                          ]}
+                          placeholder="Select from state"
+                          searchPlaceholder="Search states..."
+                          emptyMessage="No states found."
+                        />
                       </div>
                       <div className="grid gap-2">
                         <Label>To State *</Label>
-                        <Select
+                        <SearchableSelect
                           value={toStateUri}
                           onValueChange={setToStateUri}
                           disabled={loading || !transitionOfUri}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select to state" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {transitionStateOptions.map((state) => (
-                              <SelectItem key={state.uri} value={state.uri}>
-                                {state.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          groups={[
+                            {
+                              label: 'States',
+                              options: transitionStateOptions.map((state) => ({
+                                value: state.uri,
+                                label: state.name,
+                              })),
+                            },
+                          ]}
+                          placeholder="Select to state"
+                          searchPlaceholder="Search states..."
+                          emptyMessage="No states found."
+                        />
                       </div>
                     </div>
                   </div>

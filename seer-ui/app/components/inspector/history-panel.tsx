@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { SearchableSelect } from "../ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Table } from "../ui/table";
 
@@ -413,22 +414,23 @@ export function HistoryPanel() {
         <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_2fr_auto]">
           <div className="space-y-2">
             <Label htmlFor="history-object-type">Object type</Label>
-            <Select
+            <SearchableSelect
+              triggerId="history-object-type"
               value={objectTypeDraft || "__all"}
               onValueChange={(value) => setObjectTypeDraft(value === "__all" ? "" : value)}
-            >
-              <SelectTrigger id="history-object-type">
-                <SelectValue placeholder="All object types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__all">All object types</SelectItem>
-                {objectTypeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              groups={[
+                {
+                  label: "Object types",
+                  options: [
+                    { value: "__all", label: "All object types" },
+                    ...objectTypeOptions,
+                  ],
+                },
+              ]}
+              placeholder="All object types"
+              searchPlaceholder="Search object types..."
+              emptyMessage="No object types found."
+            />
           </div>
 
           <div className="space-y-3">
@@ -451,7 +453,7 @@ export function HistoryPanel() {
 
               return (
                 <div key={filter.id} className="grid gap-2 md:grid-cols-[1.2fr_1fr_1.2fr_auto]">
-                  <Select
+                  <SearchableSelect
                     value={propertyFilteringEnabled ? filter.key || "__unset" : "__unset"}
                     onValueChange={(value) => {
                       const nextKey = value === "__unset" ? "" : value;
@@ -462,19 +464,23 @@ export function HistoryPanel() {
                       });
                     }}
                     disabled={!propertyFilteringEnabled}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select field" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__unset">Select field</SelectItem>
-                      {propertyKeyOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    groups={[
+                      {
+                        label: "Properties",
+                        options: [
+                          { value: "__unset", label: "Select field" },
+                          ...propertyKeyOptions.map((option) => ({
+                            value: option.value,
+                            label: option.label,
+                            description: option.kind,
+                          })),
+                        ],
+                      },
+                    ]}
+                    placeholder="Select field"
+                    searchPlaceholder="Search properties..."
+                    emptyMessage="No properties found."
+                  />
 
                   <Select
                     value={filter.op}

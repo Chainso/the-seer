@@ -65,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. none
+1. `docs/exec-plans/active/ocdfg-clickhouse-native-replacement.md` (`in_progress`, opened 2026-03-13; replace backend `pm4py` OC-DFG discovery with ClickHouse-native mining without adding a new table)
 
 ## Post-MVP Status Tracking
 
@@ -82,9 +82,10 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: none
+- `in_progress`: `docs/exec-plans/active/ocdfg-clickhouse-native-replacement.md` (opened 2026-03-13 to replace backend `pm4py` OC-DFG discovery with ClickHouse-native mining while keeping the existing process-mining surface and avoiding a new analytics table)
 - `blocked`: none
 - `completed`: `docs/exec-plans/completed/hero-card-removal-and-insights-top-tabs.md` (archived on 2026-03-13 after removing explanatory hero-card shells across current inspector/ontology hosts, flattening `/inspector/insights` to top-level `RCA` / `OC-DFG` tabs, updating contract coverage, and validating with targeted contract tests plus `cd seer-ui && npm run build`)
+- `completed`: `docs/exec-plans/completed/searchable-dropdown-audit-2026-03-13.md` (archived on 2026-03-13 after auditing the remaining plain dropdowns under `seer-ui/app/components`, converting ontology/runtime-backed long lists to `SearchableSelect`, and keeping short fixed enumerations as plain selects)
 - `completed`: `docs/exec-plans/completed/backend-frontend-lint-build-maintenance-2026-03-08.md` (archived on 2026-03-08 after re-running canonical backend Ruff/build and frontend ESLint/Next build commands and confirming all four passed without code changes)
 - `completed`: `docs/exec-plans/completed/agentic-workflow-execution-ui-polish.md` (archived on 2026-03-08 after ratifying the delivered workflow execution inspector polish, confirming the managed-agent runtime controls spec remained accurate, and closing the follow-on UI-quality track for browseable run cards, summary-first detail hierarchy, transcript scanability, and supporting-detail disclosure for raw identifiers/payloads)
 - `completed`: `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md` (archived on 2026-03-08 after completing the Seer ontology extension binding, generic action control-plane reuse, ClickHouse transcript persistence, lineage/provenance fields, dedicated agentic workflow execution APIs/UI surfaces, ontology-aligned execution UX, and final canonical docs/spec ratification)

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { SearchableSelect } from "../ui/searchable-select";
 
 export type SharedWindowPreset = "24h" | "7d" | "30d" | "custom";
 
@@ -95,18 +95,14 @@ export function InspectorScopeFilters({
       >
         <div className="space-y-2">
           <Label htmlFor={modelId}>{modelLabel}</Label>
-          <Select value={modelValue} onValueChange={onModelChange}>
-            <SelectTrigger id={modelId}>
-              <SelectValue placeholder="Select model" />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions.map((model) => (
-                <SelectItem key={model.value} value={model.value}>
-                  {model.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            triggerId={modelId}
+            value={modelValue}
+            onValueChange={onModelChange}
+            groups={[{ label: "Object models", options: modelOptions }]}
+            placeholder="Select model"
+            searchPlaceholder="Search models..."
+          />
         </div>
 
         <div className="space-y-2">

@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { SearchableSelect } from "../ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 import type { OntologyRuntimeOverlay } from "@/app/types/analytics";
@@ -437,18 +438,20 @@ export function OntologyAnalyticsPanel() {
         <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr_0.6fr]">
           <div className="space-y-2">
             <Label htmlFor="model">Object model</Label>
-            <Select value={modelUri} onValueChange={value => setModelUri(value)}>
-              <SelectTrigger id="model">
-                <SelectValue placeholder="Select model" />
-              </SelectTrigger>
-              <SelectContent>
-                {modelOptions.map(option => (
-                  <SelectItem key={option.uri} value={option.uri}>
-                    {option.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              triggerId="model"
+              value={modelUri}
+              onValueChange={value => setModelUri(value)}
+              groups={[
+                {
+                  label: "Object models",
+                  options: modelOptions.map(option => ({ value: option.uri, label: option.name })),
+                },
+              ]}
+              placeholder="Select model"
+              searchPlaceholder="Search models..."
+              emptyMessage="No models found."
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="from">From</Label>
@@ -652,18 +655,24 @@ export function OntologyAnalyticsPanel() {
           <div className="mt-4 grid gap-4 lg:grid-cols-4">
             <div className="space-y-2 lg:col-span-2">
               <Label htmlFor="scenario-opportunity">Opportunity</Label>
-              <Select value={effectiveOpportunityId} onValueChange={value => setSelectedOpportunityId(value)}>
-                <SelectTrigger id="scenario-opportunity">
-                  <SelectValue placeholder="Select opportunity" />
-                </SelectTrigger>
-                <SelectContent>
-                  {opportunities.map(opportunity => (
-                    <SelectItem key={opportunity.id} value={opportunity.id}>
-                      {opportunity.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                triggerId="scenario-opportunity"
+                value={effectiveOpportunityId}
+                onValueChange={value => setSelectedOpportunityId(value)}
+                groups={[
+                  {
+                    label: "Opportunities",
+                    options: opportunities.map(opportunity => ({
+                      value: opportunity.id,
+                      label: opportunity.title,
+                      description: `score ${opportunity.score}`,
+                    })),
+                  },
+                ]}
+                placeholder="Select opportunity"
+                searchPlaceholder="Search opportunities..."
+                emptyMessage="No opportunities found."
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="scenario-change">Change (%)</Label>

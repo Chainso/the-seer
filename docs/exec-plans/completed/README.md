@@ -44,3 +44,4 @@ Each completed plan should preserve:
 32. `agentic-workflow-execution-ui-polish.md` - completed (2026-03-08)
 33. `backend-frontend-lint-build-maintenance-2026-03-08.md` - completed (2026-03-08)
 34. `hero-card-removal-and-insights-top-tabs.md` - completed (2026-03-13)
+35. `searchable-dropdown-audit-2026-03-13.md` - completed (2026-03-13)

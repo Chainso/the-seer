@@ -9,6 +9,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { SearchableSelect } from "../ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 import { RootCauseResultsSurface } from "./root-cause-results-surface";
@@ -610,6 +611,24 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
     return Array.from(merged.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [baseOutcomeOptions, displayEventType, setupSuggestions]);
   const selectedOutcomeEventType = useMemo(() => outcomeEventType, [outcomeEventType]);
+  const searchableOutcomeOptions = useMemo(() => {
+    const options = outcomeOptions.map((option) => ({
+      value: option.value,
+      label: option.label,
+      description: option.source,
+    }));
+    if (
+      selectedOutcomeEventType &&
+      !options.some((option) => option.value === selectedOutcomeEventType)
+    ) {
+      options.unshift({
+        value: selectedOutcomeEventType,
+        label: displayEventType(selectedOutcomeEventType),
+        description: "Current selection",
+      });
+    }
+    return options;
+  }, [displayEventType, outcomeOptions, selectedOutcomeEventType]);
   const anchorFieldKeys = useMemo(
     () => selectedDisplayModel?.canonicalFieldKeys || [],
     [selectedDisplayModel]
@@ -642,6 +661,15 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
   );
   const filterFieldKindsByValue = useMemo(
     () => new Map(filterFieldOptions.map((option) => [option.value, option.kind])),
+    [filterFieldOptions]
+  );
+  const filterFieldSelectOptions = useMemo(
+    () =>
+      filterFieldOptions.map((option) => ({
+        value: option.value,
+        label: option.label,
+        description: option.kind,
+      })),
     [filterFieldOptions]
   );
   const operatorOptionsForFilterField = useCallback(
@@ -1145,23 +1173,24 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
         <div className="mt-4 grid gap-4 lg:grid-cols-[1.3fr_auto]">
           <div className="space-y-2">
             <Label htmlFor="outcome-event-type">Outcome event type</Label>
-            <Select value={selectedOutcomeEventType || OUTCOME_SENTINEL} onValueChange={handleOutcomeEventType}>
-              <SelectTrigger id="outcome-event-type">
-                <SelectValue placeholder="Select event type" />
-              </SelectTrigger>
-              <SelectContent>
-                {!selectedOutcomeEventType && (
-                  <SelectItem value={OUTCOME_SENTINEL} disabled>
-                    Select event type
-                  </SelectItem>
-                )}
-                {outcomeOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label} • {option.source}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              triggerId="outcome-event-type"
+              value={selectedOutcomeEventType || OUTCOME_SENTINEL}
+              onValueChange={handleOutcomeEventType}
+              className="w-fit"
+              groups={[
+                {
+                  label: "Outcome event types",
+                  options: [
+                    { value: OUTCOME_SENTINEL, label: "Select event type" },
+                    ...searchableOutcomeOptions,
+                  ],
+                },
+              ]}
+              placeholder="Select event type"
+              searchPlaceholder="Search event types..."
+              emptyMessage="No event types found."
+            />
             <p className="text-xs text-muted-foreground">
               {outcomeOptions.length} ontology-linked event options for this object model.
             </p>
@@ -1190,7 +1219,7 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
               const selectedOperator = normalizeOperatorForFilterField(filter.field, filter.op);
               return (
                 <div key={filter.id} className="grid gap-3 lg:grid-cols-[1fr_180px_1fr_auto]">
-                  <Select
+                  <SearchableSelect
                     value={filter.field || FILTER_FIELD_SENTINEL}
                     onValueChange={(value) => {
                       const nextField = value === FILTER_FIELD_SENTINEL ? "" : value;
@@ -1200,25 +1229,29 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
                         value: "",
                       });
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select filter field" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={FILTER_FIELD_SENTINEL}>Select filter field</SelectItem>
-                      {filter.field &&
-                        !filterFieldOptions.some((option) => option.value === filter.field) && (
-                          <SelectItem value={filter.field}>
-                            {`${displayFilterFieldLabel(filter.field)} (Current)`}
-                          </SelectItem>
-                        )}
-                      {filterFieldOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    groups={[
+                      {
+                        label: "Filter fields",
+                        options: [
+                          { value: FILTER_FIELD_SENTINEL, label: "Select filter field" },
+                          ...(filter.field &&
+                          !filterFieldOptions.some((option) => option.value === filter.field)
+                            ? [
+                                {
+                                  value: filter.field,
+                                  label: `${displayFilterFieldLabel(filter.field)} (Current)`,
+                                  description: "Current selection",
+                                },
+                              ]
+                            : []),
+                          ...filterFieldSelectOptions,
+                        ],
+                      },
+                    ]}
+                    placeholder="Select filter field"
+                    searchPlaceholder="Search filter fields..."
+                    emptyMessage="No filter fields found."
+                  />
                   <Select
                     value={selectedOperator}
                     onValueChange={(value) =>

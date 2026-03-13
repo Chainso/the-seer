@@ -21,6 +21,7 @@ import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { SearchableSelect } from "../ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 const PAGE_SIZE = 20;
@@ -341,28 +342,28 @@ export function AgenticWorkflowExecutionPanel() {
 
           <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/15 p-4">
             <Label htmlFor="agentic-workflow-uri">Workflow capability</Label>
-            <Select
+            <SearchableSelect
+              triggerId="agentic-workflow-uri"
               value={workflowUriDraft || ALL_WORKFLOWS_VALUE}
               onValueChange={(value) =>
                 setWorkflowUriDraft(value === ALL_WORKFLOWS_VALUE ? "" : value)
               }
-            >
-              <SelectTrigger id="agentic-workflow-uri">
-                <SelectValue
-                  placeholder={
-                    workflowOptionsLoaded ? "All workflow capabilities" : "Loading capabilities..."
-                  }
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_WORKFLOWS_VALUE}>All workflow capabilities</SelectItem>
-                {resolvedWorkflowOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              disabled={!workflowOptionsLoaded && resolvedWorkflowOptions.length === 0}
+              groups={[
+                {
+                  label: "Workflow capabilities",
+                  options: [
+                    { value: ALL_WORKFLOWS_VALUE, label: "All workflow capabilities" },
+                    ...resolvedWorkflowOptions,
+                  ],
+                },
+              ]}
+              placeholder={
+                workflowOptionsLoaded ? "All workflow capabilities" : "Loading capabilities..."
+              }
+              searchPlaceholder="Search workflow capabilities..."
+              emptyMessage="No workflow capabilities found."
+            />
             {workflowOptionsError && (
               <p className="text-xs text-muted-foreground">{workflowOptionsError}</p>
             )}
