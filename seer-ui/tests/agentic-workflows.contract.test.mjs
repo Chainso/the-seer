@@ -21,15 +21,17 @@ test("agentic workflow inspector surfaces expose dedicated execution list and de
 
   assert.match(listPage, /AgenticWorkflowExecutionPanel/);
   assert.match(detailPage, /AgenticWorkflowExecutionDetailsPanel/);
-  assert.match(listPanel, /Workflow Runs/);
+  assert.match(listPanel, /matching runs/);
   assert.match(listPanel, /Workflow capability/);
   assert.match(listPanel, /buildExecutionHref/);
   assert.match(listPanel, /Open run/);
   assert.match(listPanel, /\/inspector\/agentic-workflows\/\$\{executionId\}/);
-  assert.match(detailsPanel, /Agentic Workflow Run/);
+  assert.doesNotMatch(listPanel, /Browse managed workflow runs/);
+  assert.match(detailsPanel, /Back to Runs/);
   assert.match(detailsPanel, /Transcript/);
   assert.match(detailsPanel, /Related Actions/);
   assert.match(detailsPanel, /Produced Events/);
+  assert.doesNotMatch(detailsPanel, /Review persisted transcript history/);
   assert.match(nav, /name:\s*'Workflow Runs'/);
   assert.match(nav, /href:\s*'\/inspector\/agentic-workflows'/);
 });

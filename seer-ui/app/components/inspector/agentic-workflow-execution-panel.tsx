@@ -284,29 +284,6 @@ export function AgenticWorkflowExecutionPanel() {
 
   return (
     <div className="space-y-6" data-agentic-workflow-execution-panel>
-      <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-              Agentic Workflows
-            </p>
-            <h1 className="font-display text-3xl">Workflow Runs</h1>
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              Browse managed workflow runs, narrow the list by capability and lifecycle state,
-              and open a run to review transcript history, related actions, and produced events.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="outline" className="rounded-full px-4 py-2 text-sm font-normal">
-                {loading ? "Loading runs..." : `${total} matching runs`}
-              </Badge>
-              <Badge variant="outline" className="rounded-full px-4 py-2 text-sm font-normal">
-                {activeFilterBadges.length === 0 ? "All recent runs" : `${activeFilterBadges.length} active filters`}
-              </Badge>
-            </div>
-          </div>
-        </div>
-      </Card>
-
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -314,12 +291,14 @@ export function AgenticWorkflowExecutionPanel() {
               <Filter className="h-4 w-4" />
               Filters
             </div>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Focus the run list by lifecycle, workflow capability, or submission window without
-              leaving the inspector browse flow.
-            </p>
           </div>
           <div className="flex max-w-full flex-wrap gap-2">
+            <Badge variant="outline" className="rounded-full px-4 py-2 text-sm font-normal">
+              {loading ? "Loading runs..." : `${total} matching runs`}
+            </Badge>
+            <Badge variant="outline" className="rounded-full px-4 py-2 text-sm font-normal">
+              {activeFilterBadges.length === 0 ? "All recent runs" : `${activeFilterBadges.length} active filters`}
+            </Badge>
             {activeFilterBadges.length === 0 ? (
               <Badge variant="outline" className="rounded-full bg-muted/20 px-3 py-1 text-xs font-normal">
                 Showing all recent workflow runs

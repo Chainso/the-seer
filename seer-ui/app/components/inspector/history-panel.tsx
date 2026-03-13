@@ -404,18 +404,6 @@ export function HistoryPanel() {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Object Store</p>
-            <h1 className="mt-3 font-display text-3xl">Object Store</h1>
-            <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-              Discover live object identities and open a dedicated activity view for timeline and graph analysis.
-            </p>
-          </div>
-        </div>
-      </Card>
-
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           <Filter className="h-4 w-4" />

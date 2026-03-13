@@ -59,26 +59,23 @@ export function ObjectHistoryDisplaySurface({
 }: ObjectHistoryDisplaySurfaceProps) {
   return (
     <div className="space-y-6" data-object-history-display-surface>
-      <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
+      {(objectTypeLabel || anchorSummary || headerAction) && (
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Object History</p>
-            <h1 className="font-display text-3xl">Object-Centric Timeline + Graph</h1>
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              Timeline cards are grouped by day and use ontology labels for event names, field highlights, and state transitions.
-            </p>
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
+            {objectTypeLabel ? (
               <Badge variant="outline" className="rounded-full">
                 {objectTypeLabel}
               </Badge>
-              <Badge variant="outline" className="rounded-full max-w-[820px] truncate">
+            ) : null}
+            {anchorSummary ? (
+              <Badge variant="outline" className="max-w-[820px] rounded-full truncate">
                 {anchorSummary}
               </Badge>
-            </div>
+            ) : null}
           </div>
           {headerAction}
         </div>
-      </Card>
+      )}
 
       {controls}
 

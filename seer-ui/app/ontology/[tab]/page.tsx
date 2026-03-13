@@ -91,16 +91,6 @@ export default function OntologyTabPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex flex-col gap-2">
-          <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Ontology Explorer</p>
-          <h1 className="font-display text-3xl">Understand your ontology as an industry-scale system</h1>
-          <p className="text-sm text-muted-foreground max-w-2xl">
-            Explore local ontologies, object lifecycles, action contracts, event semantics, and trigger networks
-            through a graph-first, read-optimized interface built for repository-driven ontology evolution.
-          </p>
-        </div>
-      </div>
       {graph && (
         <OntologyExplorerTabs
           graphData={graph}

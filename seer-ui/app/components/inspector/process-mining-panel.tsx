@@ -2,7 +2,7 @@
 
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Activity, Filter, Layers } from "lucide-react";
+import { Filter, Layers } from "lucide-react";
 
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -398,10 +398,9 @@ function resolveDepthScopedModels(options: {
 
 interface ProcessMiningPanelProps {
   isActive: boolean;
-  showIntro?: boolean;
 }
 
-export function ProcessMiningPanel({ isActive, showIntro = true }: ProcessMiningPanelProps) {
+export function ProcessMiningPanel({ isActive }: ProcessMiningPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1022,24 +1021,6 @@ export function ProcessMiningPanel({ isActive, showIntro = true }: ProcessMining
 
   return (
     <div className="space-y-6">
-      {showIntro && (
-        <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Process Mining</p>
-              <h1 className="mt-3 font-display text-3xl">Object-Centric Process Explorer</h1>
-              <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-                OC-DFG is the first diagram for activity flow analysis. OCPN and BPMN remain available as secondary views.
-              </p>
-            </div>
-            <Badge className="gap-2 rounded-full bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
-              <Activity className="h-3 w-3" />
-              OC-DFG First
-            </Badge>
-          </div>
-        </Card>
-      )}
-
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
           <Filter className="h-4 w-4" />

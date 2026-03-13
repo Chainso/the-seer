@@ -32,11 +32,13 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
 
   assert.match(insightsPanel, /value="process-insights"/);
   assert.match(insightsPanel, /value="process-mining"/);
-  assert.match(insightsPanel, /mode\.label/);
-  assert.match(insightsPanel, /<ProcessInsightsPanel isActive=\{activeTab === "process-insights"\} showIntro=\{false\} \/>/);
-  assert.match(insightsPanel, /<ProcessMiningPanel isActive=\{activeTab === "process-mining"\} showIntro=\{false\} \/>/);
+  assert.match(insightsPanel, /label: "RCA"/);
+  assert.match(insightsPanel, /label: "OC-DFG"/);
+  assert.match(insightsPanel, /<ProcessInsightsPanel isActive=\{activeTab === "process-insights"\} \/>/);
+  assert.match(insightsPanel, /<ProcessMiningPanel isActive=\{activeTab === "process-mining"\} \/>/);
   assert.match(insightsPanel, /useSearchParams/);
   assert.match(insightsPanel, /mergeSearchParams/);
+  assert.doesNotMatch(insightsPanel, /Investigate Process Behavior/);
   assert.match(rootCausePanel, /runRootCause/);
   assert.match(rootCausePanel, /getRootCauseEvidence/);
   assert.match(rootCausePanel, /assistRootCauseSetup/);
@@ -49,6 +51,8 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
   assert.match(rootCauseSurface, /data-root-cause-results-surface/);
   assert.match(rootCauseSurface, /Evidence Traces/);
   assert.match(rootCauseSurface, /AI Interpretation/);
+  assert.doesNotMatch(rootCausePanel, /showIntro\?:/);
+  assert.doesNotMatch(rootCausePanel, /Root-Cause Intelligence/);
   assert.match(processApi, /max_events/);
   assert.match(processApi, /max_relations/);
   assert.match(processApi, /max_traces_per_handle/);
@@ -91,9 +95,10 @@ test("process mining panel consumes shared ontology display resolver contract", 
   assert.match(processMiningPanel, /modelUris:\s*resolvedModelUris/);
   assert.match(processMiningPanel, /Object-Centric Directly-Follows Graph \(Primary\)/);
   assert.match(processMiningPanel, /Object-Centric Petri Net \(Secondary\)/);
-  assert.match(processMiningPanel, /OC-DFG First/);
   assert.match(processApi, /include_object_types:\s*includeObjectTypes/);
   assert.match(processMiningPanel, /getOcdfgGraph/);
+  assert.doesNotMatch(processMiningPanel, /showIntro\?:/);
+  assert.doesNotMatch(processMiningPanel, /Object-Centric Process Explorer/);
   assert.doesNotMatch(processMiningPanel, /const iriLocalName =/);
   assert.doesNotMatch(processMiningPanel, /const ontologyNodeName =/);
 });

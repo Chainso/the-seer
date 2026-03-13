@@ -422,26 +422,16 @@ export function OntologyAnalyticsPanel() {
 
   return (
     <div className="space-y-6">
-      <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">Ontology Analytics</p>
-            <h1 className="mt-3 font-display text-3xl">Aggregate Flow Graph</h1>
-            <p className="mt-3 text-sm text-muted-foreground max-w-2xl">
-              Visualize how objects traverse states, where time accumulates, and which transitions dominate the flow.
-            </p>
+      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            <Filter className="h-4 w-4" />
+            Analytics Filters
           </div>
           <Badge className="gap-2 rounded-full bg-muted px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em]">
             <BarChart3 className="h-3 w-3" />
             Flow + Duration {overlay ? `(${overlay.stats.totalFlowCount} activities)` : ""}
           </Badge>
-        </div>
-      </Card>
-
-      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-3 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          <Filter className="h-4 w-4" />
-          Analytics Filters
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr_0.6fr]">

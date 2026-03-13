@@ -521,40 +521,31 @@ export function AgenticWorkflowExecutionDetailsPanel({
 
   return (
     <div className="space-y-6" data-agentic-workflow-execution-details-panel>
-      <Card className="rounded-3xl border border-border bg-card p-8 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-3">
-            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
-              Agentic Workflow Run
-            </p>
-            <h1 className="font-display text-3xl">{workflowLabel}</h1>
-            <p className="max-w-3xl text-sm text-muted-foreground">
-              Review persisted transcript history, related actions, and produced events for this
-              workflow execution.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Badge
-                variant="outline"
-                className={`rounded-full ${statusBadgeClass(currentStatus || currentAction.status)}`}
-              >
-                {currentStatus || currentAction.status}
-              </Badge>
-              <Badge variant="outline" className="rounded-full">
-                Run {shortIdentifier(currentAction.action_id, 10)}
-              </Badge>
-              <Badge variant="outline" className="rounded-full">
-                {snapshot?.terminal ? "Completed stream" : "Live updates"}
-              </Badge>
-            </div>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="space-y-3">
+          <h1 className="font-display text-3xl">{workflowLabel}</h1>
+          <div className="flex flex-wrap gap-2">
+            <Badge
+              variant="outline"
+              className={`rounded-full ${statusBadgeClass(currentStatus || currentAction.status)}`}
+            >
+              {currentStatus || currentAction.status}
+            </Badge>
+            <Badge variant="outline" className="rounded-full">
+              Run {shortIdentifier(currentAction.action_id, 10)}
+            </Badge>
+            <Badge variant="outline" className="rounded-full">
+              {snapshot?.terminal ? "Completed stream" : "Live updates"}
+            </Badge>
           </div>
-          <Button asChild variant="outline">
-            <Link href={backHref}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Runs
-            </Link>
-          </Button>
         </div>
-      </Card>
+        <Button asChild variant="outline">
+          <Link href={backHref}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Runs
+          </Link>
+        </Button>
+      </div>
 
       {streamError && (
         <Card className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">

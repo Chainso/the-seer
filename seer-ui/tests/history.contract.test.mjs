@@ -24,7 +24,7 @@ test("inspector root and object store route follow the forward-only history IA",
   assert.match(inspectorPage, /redirect\('\/inspector\/history'\)/);
   assert.match(historyRoute, /return <HistoryPanel \/>/);
   assert.match(objectRoute, /<ObjectHistoryDetailsPanel \/>/);
-  assert.match(historyPanel, /Object Store/);
+  assert.match(historyPanel, /History Filters/);
   assert.match(historyPanel, /Live Objects/);
   assert.match(historyPanel, /router\.push\(`\/inspector\/history\/object\?/);
   assert.match(historyPanel, /object_type/);
@@ -39,6 +39,7 @@ test("inspector root and object store route follow the forward-only history IA",
   assert.match(detailsPanel, /Custom Range/);
   assert.match(displaySurface, /Timeline by Day/);
   assert.match(displaySurface, /Load older/);
+  assert.doesNotMatch(displaySurface, /Object-Centric Timeline \+ Graph/);
   assert.match(nav, /name:\s*'Object Store'/);
   assert.match(nav, /href:\s*'\/inspector\/history'/);
 });

@@ -84,6 +84,7 @@ Current post-MVP execution state:
 
 - `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/hero-card-removal-and-insights-top-tabs.md` (archived on 2026-03-13 after removing explanatory hero-card shells across current inspector/ontology hosts, flattening `/inspector/insights` to top-level `RCA` / `OC-DFG` tabs, updating contract coverage, and validating with targeted contract tests plus `cd seer-ui && npm run build`)
 - `completed`: `docs/exec-plans/completed/backend-frontend-lint-build-maintenance-2026-03-08.md` (archived on 2026-03-08 after re-running canonical backend Ruff/build and frontend ESLint/Next build commands and confirming all four passed without code changes)
 - `completed`: `docs/exec-plans/completed/agentic-workflow-execution-ui-polish.md` (archived on 2026-03-08 after ratifying the delivered workflow execution inspector polish, confirming the managed-agent runtime controls spec remained accurate, and closing the follow-on UI-quality track for browseable run cards, summary-first detail hierarchy, transcript scanability, and supporting-detail disclosure for raw identifiers/payloads)
 - `completed`: `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md` (archived on 2026-03-08 after completing the Seer ontology extension binding, generic action control-plane reuse, ClickHouse transcript persistence, lineage/provenance fields, dedicated agentic workflow execution APIs/UI surfaces, ontology-aligned execution UX, and final canonical docs/spec ratification)
