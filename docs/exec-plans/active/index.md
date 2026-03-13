@@ -65,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `docs/exec-plans/active/ocdfg-clickhouse-native-replacement.md` (`in_progress`, opened 2026-03-13; replace backend `pm4py` OC-DFG discovery with ClickHouse-native mining without adding a new table)
+1. none
 
 ## Post-MVP Status Tracking
 
@@ -82,8 +82,10 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: `docs/exec-plans/active/ocdfg-clickhouse-native-replacement.md` (opened 2026-03-13 to replace backend `pm4py` OC-DFG discovery with ClickHouse-native mining while keeping the existing process-mining surface and avoiding a new analytics table)
+- `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/ocpn-pm4py-placeholder-removal.md` (archived on 2026-03-13 after removing the legacy OCPN pseudo-`pm4py` branch, making the deterministic `/process/mine` miner explicit, dropping the backend `pm4py` dependency, and validating with backend Ruff plus targeted process/AI tests)
+- `completed`: `docs/exec-plans/completed/ocdfg-clickhouse-native-replacement.md` (archived on 2026-03-13 after replacing backend `pm4py` OC-DFG discovery with ClickHouse-native mining over the existing history tables, preserving the OC-DFG API shape, adding metric-family counts on OC-DFG elements, and validating with targeted backend Ruff plus `cd seer-backend && uv run pytest tests/test_process_phase3.py`)
 - `completed`: `docs/exec-plans/completed/hero-card-removal-and-insights-top-tabs.md` (archived on 2026-03-13 after removing explanatory hero-card shells across current inspector/ontology hosts, flattening `/inspector/insights` to top-level `RCA` / `OC-DFG` tabs, updating contract coverage, and validating with targeted contract tests plus `cd seer-ui && npm run build`)
 - `completed`: `docs/exec-plans/completed/searchable-dropdown-audit-2026-03-13.md` (archived on 2026-03-13 after auditing the remaining plain dropdowns under `seer-ui/app/components`, converting ontology/runtime-backed long lists to `SearchableSelect`, and keeping short fixed enumerations as plain selects)
 - `completed`: `docs/exec-plans/completed/backend-frontend-lint-build-maintenance-2026-03-08.md` (archived on 2026-03-08 after re-running canonical backend Ruff/build and frontend ESLint/Next build commands and confirming all four passed without code changes)

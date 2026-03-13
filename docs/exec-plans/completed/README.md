@@ -45,3 +45,5 @@ Each completed plan should preserve:
 33. `backend-frontend-lint-build-maintenance-2026-03-08.md` - completed (2026-03-08)
 34. `hero-card-removal-and-insights-top-tabs.md` - completed (2026-03-13)
 35. `searchable-dropdown-audit-2026-03-13.md` - completed (2026-03-13)
+36. `ocdfg-clickhouse-native-replacement.md` - completed (2026-03-13)
+37. `ocpn-pm4py-placeholder-removal.md` - completed (2026-03-13)

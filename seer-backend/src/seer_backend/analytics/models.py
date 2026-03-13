@@ -104,6 +104,9 @@ class OcdfgNode(BaseModel):
     id: str
     activity: str
     count: int = Field(ge=0)
+    event_count: int = Field(ge=0)
+    unique_object_count: int = Field(ge=0)
+    total_object_count: int = Field(ge=0)
     trace_handle: str
 
 
@@ -115,6 +118,9 @@ class OcdfgEdge(BaseModel):
     target_activity: str
     object_type: str
     count: int = Field(ge=0)
+    event_couple_count: int = Field(ge=0)
+    unique_object_count: int = Field(ge=0)
+    total_object_count: int = Field(ge=0)
     share: float = Field(ge=0.0, le=1.0)
     p50_seconds: float | None = Field(default=None, ge=0.0)
     p95_seconds: float | None = Field(default=None, ge=0.0)
@@ -126,6 +132,9 @@ class OcdfgBoundaryActivity(BaseModel):
     object_type: str
     activity: str
     count: int = Field(ge=0)
+    event_count: int = Field(ge=0)
+    unique_object_count: int = Field(ge=0)
+    total_object_count: int = Field(ge=0)
     trace_handle: str
 
 
@@ -198,21 +207,40 @@ class ExtractedProcessFrames:
 
 
 @dataclass(slots=True)
-class ExtractedOcdfgFrames:
-    events: Any
-    objects: Any
-    relations: Any
+class OcdfgNodeMetrics:
+    activity: str
+    event_count: int
+    unique_object_count: int
+    total_object_count: int
 
 
 @dataclass(slots=True)
-class Pm4pyObjectCentricInput:
-    """Minimal object-centric payload shape for pm4py wrappers."""
+class OcdfgEdgeMetrics:
+    object_type: str
+    source_activity: str
+    target_activity: str
+    event_couple_count: int
+    unique_object_count: int
+    total_object_count: int
+    p50_seconds: float | None
+    p95_seconds: float | None
 
-    events: list[dict[str, Any]]
-    objects: list[dict[str, Any]]
-    relations: list[dict[str, Any]]
+
+@dataclass(slots=True)
+class OcdfgBoundaryMetrics:
+    object_type: str
+    activity: str
+    event_count: int
+    unique_object_count: int
+    total_object_count: int
 
 
+@dataclass(slots=True)
+class OcdfgQueryResult:
+    nodes: list[OcdfgNodeMetrics]
+    edges: list[OcdfgEdgeMetrics]
+    start_activities: list[OcdfgBoundaryMetrics]
+    end_activities: list[OcdfgBoundaryMetrics]
 def _validate_uri_identifier(field_name: str, value: str) -> str:
     cleaned = value.strip()
     if not cleaned:

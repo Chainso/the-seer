@@ -62,18 +62,19 @@ Mining request scope semantics:
 
 1. OC-DFG run request enforces required anchor and valid time window.
 2. OC-DFG response includes trace handles for `nodes`, `edges`, `start_activities`, and `end_activities`.
-3. OC-DFG mining is `pm4py`-backed; missing runtime surfaces actionable dependency errors (503) instead of silent fallback.
+3. OC-DFG mining is generated directly from ClickHouse-backed backend queries rather than a Python process-mining package handoff.
 4. Shared drill-down returns trace lists keyed by selected OC-DFG or OCPN model element.
 5. Empty/oversized/invalid requests produce actionable error messages surfaced in UI.
 6. Re-running against unchanged data snapshot produces deterministic ordering for OC-DFG payload arrays.
 7. Depth changes update included object scope immediately in the UI.
 8. OC-DFG and OCPN mining calls use the same resolved multi-object scope per run.
-9. OC-DFG UI includes object nodes and object-to-start-activity edges in the rendered node/edge model.
-10. OC-DFG object and activity node labels are ontology-display driven for user-facing names.
-11. A successful mining run creates an obvious visible completion state at the current viewport.
-12. Completed-state summaries and warning/empty-result states remain visible and understandable after the run finishes.
-13. URL-backed mining state restores tab, scope, and run-completed context across refresh and direct links.
-14. Invalid or partial mining query params normalize safely instead of breaking the view.
+9. OC-DFG response surfaces metric-family counts for nodes, edges, and start/end activities in addition to the existing `count` fields.
+10. OC-DFG UI includes object nodes and object-to-start-activity edges in the rendered node/edge model.
+11. OC-DFG object and activity node labels are ontology-display driven for user-facing names.
+12. A successful mining run creates an obvious visible completion state at the current viewport.
+13. Completed-state summaries and warning/empty-result states remain visible and understandable after the run finishes.
+14. URL-backed mining state restores tab, scope, and run-completed context across refresh and direct links.
+15. Invalid or partial mining query params normalize safely instead of breaking the view.
 
 ## Out of Scope (Phase 3)
 

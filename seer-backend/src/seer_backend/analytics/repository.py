@@ -10,12 +10,15 @@ from pathlib import Path
 from typing import Any, Protocol
 from uuid import UUID
 
-from sqlalchemy import column, func, select, table
+from sqlalchemy import column, func, select, table, text
 
 from seer_backend.analytics.errors import ProcessMiningError, ProcessMiningLimitExceededError
 from seer_backend.analytics.models import (
-    ExtractedOcdfgFrames,
     ExtractedProcessFrames,
+    OcdfgBoundaryMetrics,
+    OcdfgEdgeMetrics,
+    OcdfgNodeMetrics,
+    OcdfgQueryResult,
     ProcessEventRow,
     ProcessMiningRequest,
     ProcessObjectRow,
@@ -63,13 +66,13 @@ class ProcessMiningRepository(Protocol):
         max_relations: int,
     ) -> ExtractedProcessFrames: ...
 
-    async def extract_ocdfg_frames(
+    async def mine_ocdfg(
         self,
         payload: ProcessMiningRequest,
         *,
         max_events: int,
         max_relations: int,
-    ) -> ExtractedOcdfgFrames: ...
+    ) -> OcdfgQueryResult: ...
 
 
 @dataclass(slots=True)
@@ -238,39 +241,30 @@ class ClickHouseProcessMiningRepository:
             relations=relation_rows,
         )
 
-    async def extract_ocdfg_frames(
+    async def mine_ocdfg(
         self,
         payload: ProcessMiningRequest,
         *,
         max_events: int,
         max_relations: int,
-    ) -> ExtractedOcdfgFrames:
+    ) -> OcdfgQueryResult:
         include_object_types = _effective_include_object_types(payload)
-        scoped_events = _events_scope_subquery(
-            payload=payload,
-            include_object_types=include_object_types,
+        scope_counts = await self._select_rows(
+            _ocdfg_scope_counts_query(payload, include_object_types)
         )
-        events = _EVENT_HISTORY.alias("e")
-        links = _EVENT_OBJECT_LINKS.alias("l")
+        if scope_counts:
+            event_count = int(scope_counts[0].get("event_count", 0) or 0)
+            relation_count = int(scope_counts[0].get("relation_count", 0) or 0)
+        else:
+            event_count = 0
+            relation_count = 0
 
-        event_count_stmt = select(func.count().label("cnt")).select_from(scoped_events)
-        event_count_rows = await self._select_rows(event_count_stmt)
-        event_count = int(event_count_rows[0].get("cnt", 0)) if event_count_rows else 0
         if event_count > max_events:
             raise ProcessMiningLimitExceededError(
                 "process mining scope is too large: "
                 f"{event_count} events exceeds max_events={max_events}; "
                 "narrow time window or object-type filters"
             )
-
-        relation_source = links.join(scoped_events, scoped_events.c.event_id == links.c.event_id)
-        relation_count_stmt = (
-            select(func.count().label("cnt"))
-            .select_from(relation_source)
-            .where(links.c.object_type.in_(include_object_types))
-        )
-        relation_count_rows = await self._select_rows(relation_count_stmt)
-        relation_count = int(relation_count_rows[0].get("cnt", 0)) if relation_count_rows else 0
         if relation_count > max_relations:
             raise ProcessMiningLimitExceededError(
                 "process mining scope is too large: "
@@ -278,119 +272,25 @@ class ClickHouseProcessMiningRepository:
                 "narrow time window or include_object_types"
             )
 
-        events_stmt = (
-            select(
-                events.c.event_id.label("ocel_eid"),
-                events.c.event_type.label("ocel_activity"),
-                events.c.occurred_at.label("ocel_timestamp"),
-            )
-            .select_from(events.join(scoped_events, scoped_events.c.event_id == events.c.event_id))
-            .order_by(events.c.occurred_at, events.c.event_id)
+        node_rows = await self._select_rows(_ocdfg_nodes_query(payload, include_object_types))
+        boundary_rows = await self._select_rows(
+            _ocdfg_boundary_query(payload, include_object_types)
         )
+        edge_rows = await self._select_rows(_ocdfg_edges_query(payload, include_object_types))
 
-        relations_stmt = (
-            select(
-                links.c.event_id.label("ocel_eid"),
-                events.c.event_type.label("ocel_activity"),
-                events.c.occurred_at.label("ocel_timestamp"),
-                links.c.object_type.label("ocel_type"),
-                links.c.object_ref_hash.label("object_ref_hash"),
-            )
-            .select_from(
-                links.join(scoped_events, scoped_events.c.event_id == links.c.event_id).join(
-                    events,
-                    events.c.event_id == links.c.event_id,
-                )
-            )
-            .where(links.c.object_type.in_(include_object_types))
-            .order_by(
-                events.c.occurred_at,
-                links.c.event_id,
-                links.c.object_type,
-                links.c.object_ref_hash,
-            )
-        )
-
-        objects_stmt = (
-            select(
-                links.c.object_type.label("ocel_type"),
-                links.c.object_ref_hash.label("object_ref_hash"),
-            )
-            .select_from(links.join(scoped_events, scoped_events.c.event_id == links.c.event_id))
-            .where(links.c.object_type.in_(include_object_types))
-            .distinct()
-            .order_by(links.c.object_type, links.c.object_ref_hash)
-        )
-
-        event_frame = await self._select_dataframe(events_stmt)
-        relation_frame = await self._select_dataframe(relations_stmt)
-        object_frame = await self._select_dataframe(objects_stmt)
-
-        event_frame = _normalize_ocdfg_source_frame(
-            event_frame,
-            required_columns=["ocel_eid", "ocel_activity", "ocel_timestamp"],
-        ).rename(
-            columns={
-                "ocel_eid": "ocel:eid",
-                "ocel_activity": "ocel:activity",
-                "ocel_timestamp": "ocel:timestamp",
-            }
-        )
-        relation_frame = _normalize_ocdfg_source_frame(
-            relation_frame,
-            required_columns=[
-                "ocel_eid",
-                "ocel_activity",
-                "ocel_timestamp",
-                "ocel_type",
-                "object_ref_hash",
-            ],
-        ).rename(
-            columns={
-                "ocel_eid": "ocel:eid",
-                "ocel_activity": "ocel:activity",
-                "ocel_timestamp": "ocel:timestamp",
-                "ocel_type": "ocel:type",
-            }
-        )
-        relation_frame["ocel:oid"] = (
-            relation_frame["ocel:type"].astype(str)
-            + ":"
-            + relation_frame["object_ref_hash"].astype(str)
-        )
-        relation_frame = relation_frame.drop(columns=["object_ref_hash"])
-        object_frame = _normalize_ocdfg_source_frame(
-            object_frame,
-            required_columns=["ocel_type", "object_ref_hash"],
-        ).rename(
-            columns={
-                "ocel_type": "ocel:type",
-            }
-        )
-        object_frame["ocel:oid"] = (
-            object_frame["ocel:type"].astype(str)
-            + ":"
-            + object_frame["object_ref_hash"].astype(str)
-        )
-        object_frame = object_frame.drop(columns=["object_ref_hash"])
-
-        return ExtractedOcdfgFrames(
-            events=event_frame,
-            objects=object_frame,
-            relations=relation_frame,
+        nodes = [_ocdfg_node_metrics_from_clickhouse(row) for row in node_rows]
+        starts, ends = _ocdfg_boundaries_from_clickhouse(boundary_rows)
+        edges = [_ocdfg_edge_metrics_from_clickhouse(row) for row in edge_rows]
+        return OcdfgQueryResult(
+            nodes=nodes,
+            edges=edges,
+            start_activities=starts,
+            end_activities=ends,
         )
 
     async def _select_rows(self, query: Any) -> list[dict[str, Any]]:
         try:
             return await self._shared_clickhouse_client().select_rows(query)
-        except ClickHouseClientError as exc:
-            raise ProcessMiningError(
-                f"ClickHouse failed to execute ClickHouse query: {exc}"
-            ) from exc
-
-    async def _select_dataframe(self, query: Any) -> Any:
-        try:
-            return await self._shared_clickhouse_client().select_dataframe(query)
         except ClickHouseClientError as exc:
             raise ProcessMiningError(
                 f"ClickHouse failed to execute ClickHouse query: {exc}"
@@ -549,69 +449,19 @@ class InMemoryProcessMiningRepository:
             relations=selected_relations,
         )
 
-    async def extract_ocdfg_frames(
+    async def mine_ocdfg(
         self,
         payload: ProcessMiningRequest,
         *,
         max_events: int,
         max_relations: int,
-    ) -> ExtractedOcdfgFrames:
+    ) -> OcdfgQueryResult:
         frames = await self.extract_frames(
             payload,
             max_events=max_events,
             max_relations=max_relations,
         )
-
-        event_rows = [
-            {
-                "ocel:eid": str(row.event_id),
-                "ocel:activity": row.event_type,
-                "ocel:timestamp": _ensure_utc(row.occurred_at),
-            }
-            for row in frames.events
-        ]
-        event_index = {str(row.event_id): row for row in frames.events}
-        relation_rows: list[dict[str, Any]] = []
-        object_pairs: set[tuple[str, str]] = set()
-        for relation in frames.relations:
-            event = event_index.get(str(relation.event_id))
-            if event is None:
-                continue
-            object_id = _ocdfg_object_id(relation.object_type, relation.object_ref_hash)
-            object_pairs.add((relation.object_type, object_id))
-            relation_rows.append(
-                {
-                    "ocel:eid": str(relation.event_id),
-                    "ocel:activity": event.event_type,
-                    "ocel:timestamp": _ensure_utc(event.occurred_at),
-                    "ocel:oid": object_id,
-                    "ocel:type": relation.object_type,
-                }
-            )
-        object_rows = [
-            {
-                "ocel:oid": object_id,
-                "ocel:type": object_type,
-            }
-            for object_type, object_id in sorted(object_pairs)
-        ]
-        event_frame = _to_arrow_dataframe(
-            event_rows,
-            columns=["ocel:eid", "ocel:activity", "ocel:timestamp"],
-        )
-        relation_frame = _to_arrow_dataframe(
-            relation_rows,
-            columns=["ocel:eid", "ocel:activity", "ocel:timestamp", "ocel:oid", "ocel:type"],
-        )
-        object_frame = _to_arrow_dataframe(
-            object_rows,
-            columns=["ocel:oid", "ocel:type"],
-        )
-        return ExtractedOcdfgFrames(
-            events=event_frame,
-            objects=object_frame,
-            relations=relation_frame,
-        )
+        return _build_ocdfg_query_result(frames)
 
 
 def _events_scope_subquery(
@@ -682,8 +532,130 @@ def _relation_row_from_clickhouse(row: dict[str, Any]) -> ProcessRelationRow:
     )
 
 
-def _ocdfg_object_id(object_type: str, object_ref_hash: int) -> str:
-    return f"{object_type}:{object_ref_hash}"
+def _build_ocdfg_query_result(frames: ExtractedProcessFrames) -> OcdfgQueryResult:
+    event_index = {row.event_id: row for row in frames.events}
+
+    activity_events: dict[str, set[UUID]] = {}
+    activity_objects: dict[str, set[tuple[str, int]]] = {}
+    activity_total_objects: dict[str, int] = {}
+    object_sequences: dict[tuple[str, int], dict[UUID, ProcessEventRow]] = {}
+
+    for relation in frames.relations:
+        event = event_index.get(relation.event_id)
+        if event is None:
+            continue
+
+        activity_events.setdefault(event.event_type, set()).add(event.event_id)
+        activity_objects.setdefault(event.event_type, set()).add(
+            (relation.object_type, relation.object_ref_hash)
+        )
+        activity_total_objects[event.event_type] = (
+            activity_total_objects.get(event.event_type, 0) + 1
+        )
+
+        object_key = (relation.object_type, relation.object_ref_hash)
+        object_sequences.setdefault(object_key, {})[event.event_id] = event
+
+    nodes = [
+        OcdfgNodeMetrics(
+            activity=activity,
+            event_count=len(activity_events[activity]),
+            unique_object_count=len(activity_objects.get(activity, set())),
+            total_object_count=activity_total_objects.get(activity, 0),
+        )
+        for activity in sorted(activity_events)
+    ]
+
+    start_event_counts: dict[tuple[str, str], set[UUID]] = {}
+    start_total_counts: dict[tuple[str, str], int] = {}
+    end_event_counts: dict[tuple[str, str], set[UUID]] = {}
+    end_total_counts: dict[tuple[str, str], int] = {}
+    edge_event_pairs: dict[tuple[str, str, str], set[tuple[UUID, UUID]]] = {}
+    edge_objects: dict[tuple[str, str, str], set[int]] = {}
+    edge_totals: dict[tuple[str, str, str], int] = {}
+    edge_durations: dict[tuple[str, str, str], list[float]] = {}
+
+    for object_key, event_map in object_sequences.items():
+        object_type, object_ref_hash = object_key
+        ordered_events = sorted(
+            event_map.values(),
+            key=lambda row: (_ensure_utc(row.occurred_at), str(row.event_id)),
+        )
+        if not ordered_events:
+            continue
+
+        start_event = ordered_events[0]
+        start_key = (object_type, start_event.event_type)
+        start_event_counts.setdefault(start_key, set()).add(start_event.event_id)
+        start_total_counts[start_key] = start_total_counts.get(start_key, 0) + 1
+
+        end_event = ordered_events[-1]
+        end_key = (object_type, end_event.event_type)
+        end_event_counts.setdefault(end_key, set()).add(end_event.event_id)
+        end_total_counts[end_key] = end_total_counts.get(end_key, 0) + 1
+
+        for index in range(len(ordered_events) - 1):
+            source = ordered_events[index]
+            target = ordered_events[index + 1]
+            edge_key = (object_type, source.event_type, target.event_type)
+            edge_event_pairs.setdefault(edge_key, set()).add((source.event_id, target.event_id))
+            edge_objects.setdefault(edge_key, set()).add(object_ref_hash)
+            edge_totals[edge_key] = edge_totals.get(edge_key, 0) + 1
+            duration = (
+                _ensure_utc(target.occurred_at) - _ensure_utc(source.occurred_at)
+            ).total_seconds()
+            edge_durations.setdefault(edge_key, []).append(duration)
+
+    start_activities = [
+        OcdfgBoundaryMetrics(
+            object_type=object_type,
+            activity=activity,
+            event_count=len(start_event_counts[(object_type, activity)]),
+            unique_object_count=start_total_counts[(object_type, activity)],
+            total_object_count=start_total_counts[(object_type, activity)],
+        )
+        for object_type, activity in sorted(start_event_counts)
+    ]
+
+    end_activities = [
+        OcdfgBoundaryMetrics(
+            object_type=object_type,
+            activity=activity,
+            event_count=len(end_event_counts[(object_type, activity)]),
+            unique_object_count=end_total_counts[(object_type, activity)],
+            total_object_count=end_total_counts[(object_type, activity)],
+        )
+        for object_type, activity in sorted(end_event_counts)
+    ]
+
+    edges = [
+        OcdfgEdgeMetrics(
+            object_type=object_type,
+            source_activity=source_activity,
+            target_activity=target_activity,
+            event_couple_count=len(
+                edge_event_pairs[(object_type, source_activity, target_activity)]
+            ),
+            unique_object_count=len(edge_objects[(object_type, source_activity, target_activity)]),
+            total_object_count=edge_totals[(object_type, source_activity, target_activity)],
+            p50_seconds=_rounded_percentile(
+                edge_durations[(object_type, source_activity, target_activity)],
+                0.50,
+            ),
+            p95_seconds=_rounded_percentile(
+                edge_durations[(object_type, source_activity, target_activity)],
+                0.95,
+            ),
+        )
+        for object_type, source_activity, target_activity in sorted(edge_totals)
+    ]
+
+    return OcdfgQueryResult(
+        nodes=nodes,
+        edges=edges,
+        start_activities=start_activities,
+        end_activities=end_activities,
+    )
 
 
 def _parse_clickhouse_datetime(value: str) -> datetime:
@@ -715,48 +687,238 @@ def _to_optional_string(raw: Any) -> str | None:
     return value if value else None
 
 
-def _to_arrow_dataframe(rows: list[dict[str, Any]], *, columns: list[str]) -> Any:
-    pd = _load_pandas()
-    frame = pd.DataFrame(rows, columns=columns)
-    return frame.convert_dtypes(dtype_backend="pyarrow")
+def _rounded_percentile(values: list[float], q: float) -> float | None:
+    if not values:
+        return None
+    sorted_values = sorted(float(item) for item in values)
+    if len(sorted_values) == 1:
+        return round(sorted_values[0], 6)
+    index = (len(sorted_values) - 1) * q
+    lower = int(index)
+    upper = lower if index.is_integer() else lower + 1
+    if lower == upper:
+        return round(sorted_values[lower], 6)
+    fraction = index - lower
+    value = sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * fraction
+    return round(value, 6)
 
 
-def _normalize_ocdfg_source_frame(frame: Any, *, required_columns: list[str]) -> Any:
-    if frame is None or not hasattr(frame, "columns"):
-        raise ProcessMiningError("OC-DFG extraction returned non-dataframe payload")
-
-    normalized = frame.copy(deep=True)
-    columns = {str(name): name for name in normalized.columns}
-    rename_map: dict[Any, str] = {}
-    for column_name, original_name in columns.items():
-        if "." not in column_name:
-            continue
-        unqualified_name = column_name.rsplit(".", 1)[-1]
-        if unqualified_name in required_columns and unqualified_name not in columns:
-            rename_map[original_name] = unqualified_name
-    if rename_map:
-        normalized = normalized.rename(columns=rename_map)
-
-    normalized_column_names = {str(column) for column in normalized.columns}
-    missing_columns = [name for name in required_columns if name not in normalized_column_names]
-    if not missing_columns:
-        return normalized
-
-    if getattr(normalized, "empty", False):
-        return _to_arrow_dataframe([], columns=required_columns)
-
-    raise ProcessMiningError(
-        "OC-DFG extraction payload is missing required columns: "
-        + ", ".join(sorted(missing_columns))
+def _ocdfg_scope_counts_query(
+    payload: ProcessMiningRequest,
+    include_object_types: list[str],
+) -> Any:
+    return _ocdfg_text_query(
+        payload,
+        include_object_types,
+        """
+        SELECT
+            uniqExact(event_id) AS event_count,
+            count() AS relation_count
+        FROM scoped_relations
+        """,
     )
 
 
-def _load_pandas() -> Any:
-    try:
-        from chdb import datastore as pd
-    except ImportError as exc:
-        raise ProcessMiningError("chdb datastore is required for OC-DFG extraction") from exc
-    return pd
+def _ocdfg_nodes_query(payload: ProcessMiningRequest, include_object_types: list[str]) -> Any:
+    return _ocdfg_text_query(
+        payload,
+        include_object_types,
+        """
+        SELECT
+            event_type AS activity,
+            uniqExact(event_id) AS event_count,
+            uniqExact(tuple(object_type, object_ref_hash)) AS unique_object_count,
+            count() AS total_object_count
+        FROM scoped_relations
+        GROUP BY activity
+        ORDER BY activity
+        """,
+    )
+
+
+def _ocdfg_boundary_query(payload: ProcessMiningRequest, include_object_types: list[str]) -> Any:
+    return _ocdfg_text_query(
+        payload,
+        include_object_types,
+        """
+        , object_boundaries AS (
+            SELECT
+                object_type,
+                object_ref_hash,
+                argMin(event_id, tuple(occurred_at, event_id)) AS start_event_id,
+                argMin(event_type, tuple(occurred_at, event_id)) AS start_activity,
+                argMax(event_id, tuple(occurred_at, event_id)) AS end_event_id,
+                argMax(event_type, tuple(occurred_at, event_id)) AS end_activity
+            FROM scoped_relations
+            GROUP BY object_type, object_ref_hash
+        )
+        SELECT
+            boundary_kind,
+            object_type,
+            activity,
+            uniqExact(event_id) AS event_count,
+            count() AS unique_object_count,
+            count() AS total_object_count
+        FROM (
+            SELECT
+                'start' AS boundary_kind,
+                object_type,
+                start_activity AS activity,
+                start_event_id AS event_id
+            FROM object_boundaries
+            UNION ALL
+            SELECT
+                'end' AS boundary_kind,
+                object_type,
+                end_activity AS activity,
+                end_event_id AS event_id
+            FROM object_boundaries
+        )
+        GROUP BY boundary_kind, object_type, activity
+        ORDER BY boundary_kind, object_type, activity
+        """,
+    )
+
+
+def _ocdfg_edges_query(payload: ProcessMiningRequest, include_object_types: list[str]) -> Any:
+    return _ocdfg_text_query(
+        payload,
+        include_object_types,
+        """
+        , ordered_relations AS (
+            SELECT
+                object_type,
+                object_ref_hash,
+                event_id,
+                occurred_at,
+                event_type,
+                lagInFrame(event_id) OVER (
+                    PARTITION BY object_type, object_ref_hash
+                    ORDER BY occurred_at, event_id
+                ) AS previous_event_id,
+                lagInFrame(occurred_at) OVER (
+                    PARTITION BY object_type, object_ref_hash
+                    ORDER BY occurred_at, event_id
+                ) AS previous_occurred_at,
+                lagInFrame(event_type) OVER (
+                    PARTITION BY object_type, object_ref_hash
+                    ORDER BY occurred_at, event_id
+                ) AS previous_event_type
+            FROM scoped_relations
+        )
+        SELECT
+            object_type,
+            previous_event_type AS source_activity,
+            event_type AS target_activity,
+            uniqExact(tuple(previous_event_id, event_id)) AS event_couple_count,
+            uniqExact(object_ref_hash) AS unique_object_count,
+            count() AS total_object_count,
+            round(
+                quantileTDigest(0.5)(
+                    toFloat64(dateDiff('millisecond', previous_occurred_at, occurred_at)) / 1000.0
+                ),
+                6
+            ) AS p50_seconds,
+            round(
+                quantileTDigest(0.95)(
+                    toFloat64(dateDiff('millisecond', previous_occurred_at, occurred_at)) / 1000.0
+                ),
+                6
+            ) AS p95_seconds
+        FROM ordered_relations
+        WHERE previous_event_id IS NOT NULL
+        GROUP BY object_type, source_activity, target_activity
+        ORDER BY object_type, source_activity, target_activity
+        """,
+    )
+
+
+def _ocdfg_text_query(
+    payload: ProcessMiningRequest,
+    include_object_types: list[str],
+    query_suffix: str,
+) -> Any:
+    object_types_sql = ", ".join(_sql_string_literal(item) for item in include_object_types)
+    return text(
+        f"""
+        WITH scoped_events AS (
+            SELECT
+                event_id,
+                occurred_at,
+                event_type
+            FROM event_history
+            PREWHERE occurred_at >= :start_at AND occurred_at <= :end_at
+        ),
+        scoped_relations AS (
+            SELECT DISTINCT
+                l.object_type AS object_type,
+                toUInt64(l.object_ref_hash) AS object_ref_hash,
+                e.event_id AS event_id,
+                e.occurred_at AS occurred_at,
+                e.event_type AS event_type
+            FROM scoped_events AS e
+            INNER JOIN event_object_links AS l ON l.event_id = e.event_id
+            WHERE l.object_type IN ({object_types_sql})
+        )
+        {query_suffix}
+        """
+    ).bindparams(
+        start_at=_ensure_utc(payload.start_at),
+        end_at=_ensure_utc(payload.end_at),
+    )
+
+
+def _sql_string_literal(value: str) -> str:
+    return "'" + value.replace("\\", "\\\\").replace("'", "''") + "'"
+
+
+def _ocdfg_node_metrics_from_clickhouse(row: dict[str, Any]) -> OcdfgNodeMetrics:
+    return OcdfgNodeMetrics(
+        activity=str(row["activity"]),
+        event_count=int(row["event_count"]),
+        unique_object_count=int(row["unique_object_count"]),
+        total_object_count=int(row["total_object_count"]),
+    )
+
+
+def _ocdfg_edge_metrics_from_clickhouse(row: dict[str, Any]) -> OcdfgEdgeMetrics:
+    return OcdfgEdgeMetrics(
+        object_type=str(row["object_type"]),
+        source_activity=str(row["source_activity"]),
+        target_activity=str(row["target_activity"]),
+        event_couple_count=int(row["event_couple_count"]),
+        unique_object_count=int(row["unique_object_count"]),
+        total_object_count=int(row["total_object_count"]),
+        p50_seconds=_to_optional_float(row.get("p50_seconds")),
+        p95_seconds=_to_optional_float(row.get("p95_seconds")),
+    )
+
+
+def _ocdfg_boundaries_from_clickhouse(
+    rows: list[dict[str, Any]],
+) -> tuple[list[OcdfgBoundaryMetrics], list[OcdfgBoundaryMetrics]]:
+    starts: list[OcdfgBoundaryMetrics] = []
+    ends: list[OcdfgBoundaryMetrics] = []
+    for row in rows:
+        item = OcdfgBoundaryMetrics(
+            object_type=str(row["object_type"]),
+            activity=str(row["activity"]),
+            event_count=int(row["event_count"]),
+            unique_object_count=int(row["unique_object_count"]),
+            total_object_count=int(row["total_object_count"]),
+        )
+        if str(row["boundary_kind"]) == "start":
+            starts.append(item)
+        else:
+            ends.append(item)
+    return starts, ends
+
+
+def _to_optional_float(raw: Any) -> float | None:
+    if raw is None:
+        return None
+    value = float(raw)
+    return round(value, 6)
 
 
 def _ensure_utc(value: datetime) -> datetime:

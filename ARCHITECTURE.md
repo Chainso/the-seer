@@ -102,8 +102,7 @@ Expected internal service areas:
    - object reference normalization utilities
    - history query APIs for investigation and execution
 3. `analytics` domain:
-   - ClickHouse extraction (Arrow-backed dataframe path)
-   - object-centric process mining via `pm4py`
+   - ClickHouse-native process mining queries
    - root-cause pipeline (neighborhood extraction + ranking)
 4. `ai` domain:
    - unified AI gateway for ontology, investigation, process, RCA, and managed-agent reasoning tools
@@ -195,13 +194,12 @@ Design intent:
 
 ### Analytics Plane
 
-Stack: Python analytics services + `pm4py`.
+Stack: Python analytics services + ClickHouse-native analytics queries.
 
 Flow:
 
 1. query ClickHouse programmatically,
-2. load Arrow-backed dataframes,
-3. run process mining and RCA methods,
+2. run process mining and RCA methods over ClickHouse-backed query results,
 4. return structured evidence contracts for AI and UI surfaces.
 
 Design intent:

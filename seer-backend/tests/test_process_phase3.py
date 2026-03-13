@@ -8,8 +8,6 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
-from seer_backend.analytics import service as process_service_module
-from seer_backend.analytics.errors import ProcessMiningDependencyUnavailableError
 from seer_backend.analytics.models import ProcessMiningRequest
 from seer_backend.analytics.repository import (
     ClickHouseProcessMiningRepository,
@@ -392,6 +390,17 @@ def test_ocdfg_mining_returns_ui_payload_and_trace_handles() -> None:
     assert all(edge["trace_handle"] for edge in body["edges"])
     assert all(item["trace_handle"] for item in body["start_activities"])
     assert all(item["trace_handle"] for item in body["end_activities"])
+    assert all("event_count" in node for node in body["nodes"])
+    assert all("unique_object_count" in node for node in body["nodes"])
+    assert all("total_object_count" in node for node in body["nodes"])
+    assert all("event_couple_count" in edge for edge in body["edges"])
+    assert all("unique_object_count" in edge for edge in body["edges"])
+    assert all("total_object_count" in edge for edge in body["edges"])
+    assert all("event_count" in item for item in body["start_activities"])
+    assert all("total_object_count" in item for item in body["start_activities"])
+    assert body["edges"][0]["count"] == body["edges"][0]["total_object_count"]
+    assert body["start_activities"][0]["count"] == body["start_activities"][0]["total_object_count"]
+    assert body["end_activities"][0]["count"] == body["end_activities"][0]["total_object_count"]
 
     edge_handle = body["edges"][0]["trace_handle"]
     drilldown = client.get("/api/v1/process/traces", params={"handle": edge_handle, "limit": 10})
@@ -401,17 +410,11 @@ def test_ocdfg_mining_returns_ui_payload_and_trace_handles() -> None:
     assert drilldown_body["traces"]
 
 
-def test_clickhouse_ocdfg_extraction_preserves_schema_for_empty_dataframe_results() -> None:
-    from chdb import datastore as pd
-
+def test_clickhouse_ocdfg_repository_returns_metric_families() -> None:
     class StubClickHouseProcessMiningRepository(ClickHouseProcessMiningRepository):
-        async def _select_rows(self, query: object) -> list[dict[str, int]]:
+        async def _select_rows(self, query: object) -> list[dict[str, object]]:
             del query
-            return next(count_responses)
-
-        async def _select_dataframe(self, query: object) -> object:
-            del query
-            return next(dataframe_responses)
+            return next(row_responses)
 
     payload = ProcessMiningRequest(
         anchor_object_type=_ORDER_URI,
@@ -419,20 +422,47 @@ def test_clickhouse_ocdfg_extraction_preserves_schema_for_empty_dataframe_result
         end_at=datetime(2026, 2, 22, 11, 0, tzinfo=UTC),
     )
 
-    count_responses = iter([[{"cnt": 1}], [{"cnt": 0}]])
-    dataframe_responses = iter(
+    row_responses = iter(
         [
-            pd.DataFrame(
-                [
-                    {
-                        "ocel_eid": "evt-1",
-                        "ocel_activity": "order.created",
-                        "ocel_timestamp": "2026-02-22T10:00:00Z",
-                    }
-                ]
-            ).convert_dtypes(dtype_backend="pyarrow"),
-            pd.DataFrame([]).convert_dtypes(dtype_backend="pyarrow"),
-            pd.DataFrame([]).convert_dtypes(dtype_backend="pyarrow"),
+            [{"event_count": 2, "relation_count": 3}],
+            [
+                {
+                    "activity": _to_uri_identifier("order.created"),
+                    "event_count": 1,
+                    "unique_object_count": 1,
+                    "total_object_count": 1,
+                }
+            ],
+            [
+                {
+                    "boundary_kind": "start",
+                    "object_type": _ORDER_URI,
+                    "activity": _to_uri_identifier("order.created"),
+                    "event_count": 1,
+                    "unique_object_count": 1,
+                    "total_object_count": 1,
+                },
+                {
+                    "boundary_kind": "end",
+                    "object_type": _ORDER_URI,
+                    "activity": _to_uri_identifier("shipment.sent"),
+                    "event_count": 1,
+                    "unique_object_count": 1,
+                    "total_object_count": 1,
+                },
+            ],
+            [
+                {
+                    "object_type": _ORDER_URI,
+                    "source_activity": _to_uri_identifier("order.created"),
+                    "target_activity": _to_uri_identifier("shipment.sent"),
+                    "event_couple_count": 1,
+                    "unique_object_count": 1,
+                    "total_object_count": 1,
+                    "p50_seconds": 1800.0,
+                    "p95_seconds": 1800.0,
+                }
+            ],
         ]
     )
     repository = StubClickHouseProcessMiningRepository(
@@ -445,25 +475,26 @@ def test_clickhouse_ocdfg_extraction_preserves_schema_for_empty_dataframe_result
         migrations_dir=Path("/tmp"),
     )
 
-    frames = asyncio.run(
-        repository.extract_ocdfg_frames(
+    result = asyncio.run(
+        repository.mine_ocdfg(
             payload,
             max_events=5_000,
             max_relations=40_000,
         )
     )
 
-    assert list(frames.events.columns) == ["ocel:eid", "ocel:activity", "ocel:timestamp"]
-    assert list(frames.relations.columns) == [
-        "ocel:eid",
-        "ocel:activity",
-        "ocel:timestamp",
-        "ocel:type",
-        "ocel:oid",
-    ]
-    assert list(frames.objects.columns) == ["ocel:type", "ocel:oid"]
-    assert frames.relations.empty
-    assert frames.objects.empty
+    assert len(result.nodes) == 1
+    assert result.nodes[0].event_count == 1
+    assert result.nodes[0].unique_object_count == 1
+    assert result.nodes[0].total_object_count == 1
+    assert len(result.start_activities) == 1
+    assert len(result.end_activities) == 1
+    assert len(result.edges) == 1
+    assert result.edges[0].event_couple_count == 1
+    assert result.edges[0].unique_object_count == 1
+    assert result.edges[0].total_object_count == 1
+    assert result.edges[0].p50_seconds == 1800.0
+    assert result.edges[0].p95_seconds == 1800.0
 
 
 def test_ocdfg_mining_is_deterministic_for_same_snapshot() -> None:
@@ -578,25 +609,3 @@ def test_ocdfg_mining_no_data_returns_not_found() -> None:
 
     assert response.status_code == 404
     assert "no process-mining data" in response.text
-
-
-def test_ocdfg_returns_503_when_pm4py_runtime_is_unavailable(monkeypatch) -> None:
-    client = build_client()
-    _seed_phase2_style_dataset(client)
-
-    def _missing_pm4py() -> None:
-        raise ProcessMiningDependencyUnavailableError("pm4py is required for OC-DFG mining")
-
-    monkeypatch.setattr(process_service_module, "_load_pm4py_ocdfg_apply", _missing_pm4py)
-
-    response = client.post(
-        "/api/v1/process/ocdfg/mine",
-        json={
-            "anchor_object_type": _ORDER_URI,
-            "start_at": "2026-02-22T09:00:00Z",
-            "end_at": "2026-02-22T11:00:00Z",
-        },
-    )
-
-    assert response.status_code == 503
-    assert "pm4py is required for OC-DFG mining" in response.text

@@ -13,7 +13,6 @@ dependencies = [
   "rdflib>=7.1.0,<8",
   "xxhash>=3.6.0,<4",
   "uvicorn[standard]>=0.35.0,<1",
-  "pm4py>=2.7.19.8",
   "clickhouse-connect>=0.13.0",
   "sqlalchemy>=2.0.47,<3",
   "chdb>=4.0.2",

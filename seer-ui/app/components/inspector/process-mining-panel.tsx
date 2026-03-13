@@ -1337,7 +1337,7 @@ export function ProcessMiningPanel({ isActive }: ProcessMiningPanelProps) {
             <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.2em]">
               event
             </span>
-            Nodes are event activities from pm4py OC-DFG
+            Nodes are event activities from the OC-DFG run
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-border px-2 py-0.5 text-[0.6rem] font-semibold uppercase tracking-[0.2em]">

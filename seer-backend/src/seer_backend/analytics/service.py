@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,20 +13,19 @@ from uuid import UUID, uuid4
 
 from seer_backend.analytics.errors import (
     ProcessMiningDependencyUnavailableError,
-    ProcessMiningError,
     ProcessMiningNoDataError,
     ProcessMiningTraceHandleError,
     ProcessMiningValidationError,
 )
 from seer_backend.analytics.models import (
-    ExtractedOcdfgFrames,
     ExtractedProcessFrames,
     OcdfgBoundaryActivity,
+    OcdfgBoundaryMetrics,
     OcdfgEdge,
     OcdfgMiningRequest,
     OcdfgMiningResponse,
     OcdfgNode,
-    Pm4pyObjectCentricInput,
+    OcdfgQueryResult,
     ProcessEventRow,
     ProcessMiningRequest,
     ProcessMiningResponse,
@@ -56,24 +54,15 @@ class _ObjectCentricLog:
 
 
 class OcpnMiningWrapper:
-    """Wrapper that prefers pm4py and falls back to deterministic mining."""
+    """Deterministic OCPN-style miner for the legacy `/process/mine` path."""
 
     def mine(
         self,
         log: _ObjectCentricLog,
-        pm4py_payload: Pm4pyObjectCentricInput,
-    ) -> tuple[list[ProcessModelNode], list[ProcessModelEdge], list[ProcessPathStat], list[str]]:
-        warnings: list[str] = []
-        if not _pm4py_available():
-            warnings.append(
-                "pm4py is not installed in this runtime; using deterministic MVP fallback miner"
-            )
-
+    ) -> tuple[list[ProcessModelNode], list[ProcessModelEdge], list[ProcessPathStat]]:
         node_counts: dict[str, int] = defaultdict(int)
         edge_counts: dict[tuple[str, str, str], int] = defaultdict(int)
         path_counts: dict[tuple[str, str], int] = defaultdict(int)
-
-        del pm4py_payload  # reserved for pm4py integration when dependency is available
 
         for sequence_id in sorted(log.instance_sequences):
             sequence = log.instance_sequences[sequence_id]
@@ -125,40 +114,7 @@ class OcpnMiningWrapper:
             )
             for (object_type, path) in sorted(path_counts)
         ]
-        return nodes, edges, path_stats, warnings
-
-
-class OcdfgMiningWrapper:
-    """pm4py-backed OC-DFG discovery wrapper."""
-
-    def mine(
-        self,
-        frames: ExtractedOcdfgFrames,
-    ) -> tuple[
-        list[OcdfgNode],
-        list[OcdfgEdge],
-        list[OcdfgBoundaryActivity],
-        list[OcdfgBoundaryActivity],
-        list[str],
-    ]:
-        if _is_empty_frame(frames.events) or _is_empty_frame(frames.relations):
-            return [], [], [], [], []
-
-        ocel = _to_ocel(frames)
-        ocdfg_result = _run_ocdfg_discovery(ocel)
-        nodes = _normalize_ocdfg_nodes(ocdfg_result)
-        edges = _normalize_ocdfg_edges(ocdfg_result)
-        start_activities = _normalize_ocdfg_boundary_activities(
-            ocdfg_result,
-            field_name="start_activities",
-            prefix="start",
-        )
-        end_activities = _normalize_ocdfg_boundary_activities(
-            ocdfg_result,
-            field_name="end_activities",
-            prefix="end",
-        )
-        return nodes, edges, start_activities, end_activities, []
+        return nodes, edges, path_stats
 
 
 class ProcessMiningService:
@@ -169,14 +125,12 @@ class ProcessMiningService:
         *,
         repository: ProcessMiningRepository,
         miner: OcpnMiningWrapper,
-        ocdfg_miner: OcdfgMiningWrapper | None = None,
         max_events_default: int,
         max_relations_default: int,
         max_traces_per_handle_default: int,
     ) -> None:
         self._repository = repository
         self._miner = miner
-        self._ocdfg_miner = ocdfg_miner or OcdfgMiningWrapper()
         self._max_events_default = max_events_default
         self._max_relations_default = max_relations_default
         self._max_traces_per_handle_default = max_traces_per_handle_default
@@ -199,8 +153,8 @@ class ProcessMiningService:
             )
 
         log = _build_object_centric_log(frames)
-        pm4py_payload = _to_pm4py_input(frames)
-        nodes, edges, path_stats, warnings = self._miner.mine(log, pm4py_payload)
+        nodes, edges, path_stats = self._miner.mine(log)
+        warnings: list[str] = []
 
         run_id = str(uuid4())
         anchor_object_type = payload.anchor_object_type
@@ -271,17 +225,22 @@ class ProcessMiningService:
         max_events = payload.max_events or self._max_events_default
         max_relations = payload.max_relations or self._max_relations_default
 
-        frames = await self._repository.extract_ocdfg_frames(
+        result = await self._repository.mine_ocdfg(
             payload,
             max_events=max_events,
             max_relations=max_relations,
         )
-        if _is_empty_frame(frames.events) or _is_empty_frame(frames.relations):
-            raise ProcessMiningNoDataError(
-                "no process-mining data found for the provided anchor/time window"
-            )
-
-        nodes, edges, start_activities, end_activities, warnings = self._ocdfg_miner.mine(frames)
+        nodes = _normalize_ocdfg_nodes(result)
+        edges = _normalize_ocdfg_edges(result)
+        start_activities = _normalize_ocdfg_boundary_activities(
+            result.start_activities,
+            prefix="start",
+        )
+        end_activities = _normalize_ocdfg_boundary_activities(
+            result.end_activities,
+            prefix="end",
+        )
+        warnings: list[str] = []
         if not nodes and not edges and not start_activities and not end_activities:
             raise ProcessMiningNoDataError(
                 "no process-mining data found for the provided anchor/time window"
@@ -494,42 +453,6 @@ def _build_object_centric_log(frames: ExtractedProcessFrames) -> _ObjectCentricL
         object_instances=object_instances,
         instance_sequences=instance_sequences,
     )
-
-
-def _to_pm4py_input(frames: ExtractedProcessFrames) -> Pm4pyObjectCentricInput:
-    events = [
-        {
-            "event_id": str(row.event_id),
-            "activity": row.event_type,
-            "timestamp": _to_iso_utc(row.occurred_at),
-            "source": row.source,
-            "trace_id": row.trace_id,
-        }
-        for row in frames.events
-    ]
-    objects = [
-        {
-            "object_id": f"{row.object_type}:{row.object_ref_hash}",
-            "object_type": row.object_type,
-            "object_ref_hash": row.object_ref_hash,
-            "object_ref_canonical": row.object_ref_canonical,
-            "object_ref": row.object_ref,
-            "object_payload": row.object_payload,
-        }
-        for row in frames.objects
-    ]
-    relations = [
-        {
-            "event_id": str(row.event_id),
-            "object_id": f"{row.object_type}:{row.object_ref_hash}",
-            "object_type": row.object_type,
-            "relation_role": row.relation_role,
-        }
-        for row in frames.relations
-    ]
-    return Pm4pyObjectCentricInput(events=events, objects=objects, relations=relations)
-
-
 def _filter_traces(
     log: _ObjectCentricLog,
     selector: dict[str, Any],
@@ -678,268 +601,68 @@ def _ensure_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
-def _to_ocel(frames: ExtractedOcdfgFrames) -> Any:
-    pd = _load_pandas_arrow_backend()
-    ocel_cls = _load_pm4py_ocel_class()
-
-    events = _normalize_arrow_backed_frame(
-        pd,
-        frames.events,
-        required_columns=["ocel:eid", "ocel:activity", "ocel:timestamp"],
-    )
-    objects = _normalize_arrow_backed_frame(
-        pd,
-        frames.objects,
-        required_columns=["ocel:oid", "ocel:type"],
-    )
-    relations = _normalize_arrow_backed_frame(
-        pd,
-        frames.relations,
-        required_columns=["ocel:eid", "ocel:activity", "ocel:timestamp", "ocel:oid", "ocel:type"],
-    )
-
-    events["ocel:eid"] = events["ocel:eid"].astype(str)
-    events["ocel:activity"] = events["ocel:activity"].astype(str)
-    events["ocel:timestamp"] = pd.to_datetime(
-        events["ocel:timestamp"].astype(str),
-        utc=True,
-        errors="coerce",
-    )
-    events = events.dropna(subset=["ocel:eid", "ocel:activity", "ocel:timestamp"])
-    events = events.sort_values(["ocel:timestamp", "ocel:eid"], kind="mergesort").reset_index(
-        drop=True
-    )
-
-    objects["ocel:oid"] = objects["ocel:oid"].astype(str)
-    objects["ocel:type"] = objects["ocel:type"].astype(str)
-    objects = objects.dropna(subset=["ocel:oid", "ocel:type"])
-    objects = objects.drop_duplicates(subset=["ocel:oid", "ocel:type"], keep="first")
-    objects = objects.sort_values(["ocel:type", "ocel:oid"], kind="mergesort").reset_index(
-        drop=True
-    )
-
-    relations["ocel:eid"] = relations["ocel:eid"].astype(str)
-    relations["ocel:activity"] = relations["ocel:activity"].astype(str)
-    relations["ocel:oid"] = relations["ocel:oid"].astype(str)
-    relations["ocel:type"] = relations["ocel:type"].astype(str)
-    relations["ocel:timestamp"] = pd.to_datetime(
-        relations["ocel:timestamp"].astype(str),
-        utc=True,
-        errors="coerce",
-    )
-    relations = relations.dropna(
-        subset=["ocel:eid", "ocel:activity", "ocel:timestamp", "ocel:oid", "ocel:type"]
-    )
-    relations = relations.sort_values(
-        ["ocel:timestamp", "ocel:eid", "ocel:type", "ocel:oid"],
-        kind="mergesort",
-    ).reset_index(drop=True)
-
-    return ocel_cls(
-        events=events.to_df(),
-        objects=objects.to_df(),
-        relations=relations.to_df(),
-    )
-
-
-def _run_ocdfg_discovery(ocel: Any) -> dict[str, Any]:
-    apply_ocdfg = _load_pm4py_ocdfg_apply()
-    try:
-        output = apply_ocdfg(ocel)
-    except Exception as exc:  # pragma: no cover - covered by API-level behavior
-        raise ProcessMiningError(f"pm4py OC-DFG discovery failed: {exc}") from exc
-    if not isinstance(output, dict):
-        raise ProcessMiningError("pm4py OC-DFG discovery returned invalid payload")
-    return output
-
-
-def _normalize_arrow_backed_frame(
-    pd: Any,
-    frame: Any,
-    *,
-    required_columns: list[str],
-) -> Any:
-    if not hasattr(frame, "columns"):
-        raise ProcessMiningError("OC-DFG extraction returned non-dataframe payload")
-    normalized = frame.copy(deep=True)
-    missing_columns = [name for name in required_columns if name not in normalized.columns]
-    if missing_columns:
-        raise ProcessMiningError(
-            "OC-DFG extraction payload is missing required columns: "
-            + ", ".join(sorted(missing_columns))
+def _normalize_ocdfg_nodes(result: OcdfgQueryResult) -> list[OcdfgNode]:
+    return [
+        OcdfgNode(
+            id=_ocdfg_node_id(item.activity),
+            activity=item.activity,
+            count=item.event_count,
+            event_count=item.event_count,
+            unique_object_count=item.unique_object_count,
+            total_object_count=item.total_object_count,
+            trace_handle="",
         )
-    try:
-        return normalized.convert_dtypes(dtype_backend="pyarrow")
-    except Exception as exc:
-        raise ProcessMiningDependencyUnavailableError(
-            "chdb datastore pyarrow dtype backend is required for OC-DFG mining"
-        ) from exc
+        for item in result.nodes
+    ]
 
 
-def _is_empty_frame(frame: Any) -> bool:
-    if frame is None:
-        return True
-    empty = getattr(frame, "empty", None)
-    if isinstance(empty, bool):
-        return empty
-    return False
+def _normalize_ocdfg_edges(result: OcdfgQueryResult) -> list[OcdfgEdge]:
+    totals_per_object_type: dict[str, int] = defaultdict(int)
+    for item in result.edges:
+        totals_per_object_type[item.object_type] += item.total_object_count
 
-
-def _normalize_ocdfg_nodes(ocdfg_result: dict[str, Any]) -> list[OcdfgNode]:
-    activities_indep = _as_mapping(ocdfg_result.get("activities_indep"))
-    events_by_activity = _as_mapping(activities_indep.get("events"))
-    activities = set(_as_string_iterable(ocdfg_result.get("activities")))
-    activities.update(str(key) for key in events_by_activity)
-
-    nodes: list[OcdfgNode] = []
-    for activity in sorted(activities):
-        count = _association_size(events_by_activity.get(activity))
-        nodes.append(
-            OcdfgNode(
-                id=_ocdfg_node_id(activity),
-                activity=activity,
-                count=count,
+    edges: list[OcdfgEdge] = []
+    for item in result.edges:
+        total_for_type = totals_per_object_type.get(item.object_type, 0)
+        edges.append(
+            OcdfgEdge(
+                id=_ocdfg_edge_id(item.source_activity, item.target_activity, item.object_type),
+                source=_ocdfg_node_id(item.source_activity),
+                target=_ocdfg_node_id(item.target_activity),
+                source_activity=item.source_activity,
+                target_activity=item.target_activity,
+                object_type=item.object_type,
+                count=item.total_object_count,
+                event_couple_count=item.event_couple_count,
+                unique_object_count=item.unique_object_count,
+                total_object_count=item.total_object_count,
+                share=_rounded_ratio(item.total_object_count, total_for_type),
+                p50_seconds=item.p50_seconds,
+                p95_seconds=item.p95_seconds,
                 trace_handle="",
             )
         )
-    return nodes
-
-
-def _normalize_ocdfg_edges(ocdfg_result: dict[str, Any]) -> list[OcdfgEdge]:
-    edges_raw = _as_mapping(ocdfg_result.get("edges"))
-    edge_totals_by_type = _as_mapping(edges_raw.get("total_objects"))
-    performance_raw = _as_mapping(ocdfg_result.get("edges_performance"))
-    performance_by_type = _as_mapping(performance_raw.get("total_objects"))
-
-    totals_per_object_type: dict[str, int] = {}
-    for object_type, edge_map_raw in edge_totals_by_type.items():
-        edge_map = _as_mapping(edge_map_raw)
-        totals_per_object_type[str(object_type)] = sum(
-            _association_size(associations) for associations in edge_map.values()
-        )
-
-    edges: list[OcdfgEdge] = []
-    for object_type, edge_map_raw in sorted(
-        edge_totals_by_type.items(),
-        key=lambda item: str(item[0]),
-    ):
-        normalized_object_type = str(object_type)
-        edge_map = _as_mapping(edge_map_raw)
-        perf_map = _as_mapping(performance_by_type.get(object_type))
-        total_for_type = totals_per_object_type.get(normalized_object_type, 0)
-        normalized_pairs = sorted(_iter_edge_pairs(edge_map), key=lambda item: item[0])
-        for (source, target), associations in normalized_pairs:
-            count = _association_size(associations)
-            share = _rounded_ratio(count, total_for_type)
-            perf_values = _to_float_list(perf_map.get((source, target)))
-            edges.append(
-                OcdfgEdge(
-                    id=_ocdfg_edge_id(source, target, normalized_object_type),
-                    source=_ocdfg_node_id(source),
-                    target=_ocdfg_node_id(target),
-                    source_activity=source,
-                    target_activity=target,
-                    object_type=normalized_object_type,
-                    count=count,
-                    share=share,
-                    p50_seconds=_percentile(perf_values, 0.50),
-                    p95_seconds=_percentile(perf_values, 0.95),
-                    trace_handle="",
-                )
-            )
     return edges
 
 
 def _normalize_ocdfg_boundary_activities(
-    ocdfg_result: dict[str, Any],
+    items: list[OcdfgBoundaryMetrics],
     *,
-    field_name: str,
     prefix: str,
 ) -> list[OcdfgBoundaryActivity]:
-    root = _as_mapping(ocdfg_result.get(field_name))
-    total_objects = _as_mapping(root.get("total_objects"))
-    items: list[OcdfgBoundaryActivity] = []
-    for object_type, activity_map_raw in sorted(
-        total_objects.items(),
-        key=lambda item: str(item[0]),
-    ):
-        normalized_object_type = str(object_type)
-        activity_map = _as_mapping(activity_map_raw)
-        for activity, associations in sorted(activity_map.items(), key=lambda item: str(item[0])):
-            normalized_activity = str(activity)
-            items.append(
-                OcdfgBoundaryActivity(
-                    id=_ocdfg_boundary_id(prefix, normalized_object_type, normalized_activity),
-                    object_type=normalized_object_type,
-                    activity=normalized_activity,
-                    count=_association_size(associations),
-                    trace_handle="",
-                )
-            )
-    return items
-
-
-def _as_mapping(value: Any) -> dict[Any, Any]:
-    if isinstance(value, dict):
-        return value
-    return {}
-
-
-def _as_string_iterable(value: Any) -> list[str]:
-    if isinstance(value, (list, set, tuple)):
-        return [str(item) for item in value]
-    return []
-
-
-def _association_size(value: Any) -> int:
-    if value is None:
-        return 0
-    if isinstance(value, dict):
-        return len(value)
-    if isinstance(value, (list, set, tuple)):
-        return len(value)
-    return 0
-
-
-def _iter_edge_pairs(edge_map: dict[Any, Any]) -> list[tuple[tuple[str, str], Any]]:
-    pairs: list[tuple[tuple[str, str], Any]] = []
-    for raw_pair, associations in edge_map.items():
-        if not (isinstance(raw_pair, tuple) and len(raw_pair) == 2):
-            continue
-        source = str(raw_pair[0])
-        target = str(raw_pair[1])
-        pairs.append(((source, target), associations))
-    return pairs
-
-
-def _to_float_list(values: Any) -> list[float]:
-    if not isinstance(values, list):
-        return []
-    output: list[float] = []
-    for item in values:
-        try:
-            output.append(float(item))
-        except (TypeError, ValueError):
-            continue
-    output.sort()
-    return output
-
-
-def _percentile(values: list[float], q: float) -> float | None:
-    if not values:
-        return None
-    if len(values) == 1:
-        return round(values[0], 6)
-    index = (len(values) - 1) * q
-    lower = math.floor(index)
-    upper = math.ceil(index)
-    if lower == upper:
-        return round(values[lower], 6)
-    fraction = index - lower
-    result = values[lower] + (values[upper] - values[lower]) * fraction
-    return round(result, 6)
-
-
+    return [
+        OcdfgBoundaryActivity(
+            id=_ocdfg_boundary_id(prefix, item.object_type, item.activity),
+            object_type=item.object_type,
+            activity=item.activity,
+            count=item.total_object_count,
+            event_count=item.event_count,
+            unique_object_count=item.unique_object_count,
+            total_object_count=item.total_object_count,
+            trace_handle="",
+        )
+        for item in items
+    ]
 def _rounded_ratio(numerator: int, denominator: int) -> float:
     if denominator <= 0:
         return 0.0
@@ -956,41 +679,3 @@ def _ocdfg_edge_id(source: str, target: str, object_type: str) -> str:
 
 def _ocdfg_boundary_id(prefix: str, object_type: str, activity: str) -> str:
     return f"{prefix}:{object_type}:{activity}"
-
-
-def _load_pandas_arrow_backend() -> Any:
-    try:
-        from chdb import datastore as pd
-    except ImportError as exc:
-        raise ProcessMiningDependencyUnavailableError(
-            "chdb datastore is required for OC-DFG mining"
-        ) from exc
-    return pd
-
-
-def _load_pm4py_ocel_class() -> Any:
-    try:
-        from pm4py.objects.ocel.obj import OCEL
-    except ImportError as exc:
-        raise ProcessMiningDependencyUnavailableError(
-            "pm4py is required for OC-DFG mining"
-        ) from exc
-    return OCEL
-
-
-def _load_pm4py_ocdfg_apply() -> Any:
-    try:
-        from pm4py.algo.discovery.ocel.ocdfg import algorithm
-    except ImportError as exc:
-        raise ProcessMiningDependencyUnavailableError(
-            "pm4py is required for OC-DFG mining"
-        ) from exc
-    return algorithm.apply
-
-
-def _pm4py_available() -> bool:
-    try:
-        import pm4py  # noqa: F401
-    except ImportError:
-        return False
-    return True

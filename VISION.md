@@ -204,7 +204,7 @@ flowchart LR
   FE --> API["Seer Python API"]
 
   API --> ONT["Ontology Service\n(Prophet + Seer extension)"]
-  API --> HIS["History + Analytics Service\n(ClickHouse + pm4py)"]
+  API --> HIS["History + Analytics Service\n(ClickHouse-native analytics)"]
   API --> AI["AI Investigation + Agent Runtime"]
   API --> ACT["Action / Agent Control Plane"]
 

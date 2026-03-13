@@ -45,13 +45,19 @@ Mining requests require `anchor_object_type`, `start_at`, and `end_at`.
 Responses include the UI payload fields (`nodes`, `edges`, `object_types`, `path_stats`)
 plus trace drill-down handles for model elements.
 
+`POST /api/v1/process/mine` remains the legacy OCPN-style path and is backed by the
+deterministic backend miner directly.
+
 `POST /api/v1/process/ocdfg/mine` returns OC-DFG payload fields (`nodes`, `edges`,
 `start_activities`, `end_activities`, `object_types`, `warnings`) with trace handles
 compatible with `GET /api/v1/process/traces`.
 
-OC-DFG extraction uses the ClickHouse dataframe path (`select_dataframe`) with Arrow-backed
-`chdb.datastore` frames (`convert_dtypes(dtype_backend="pyarrow")`) with datastore-native
-transforms before OCEL handoff (`to_df()`) for pm4py OC-DFG discovery.
+OC-DFG mining is computed directly from ClickHouse query results in the backend repository path.
+The response preserves the existing diagram contract and now also includes richer metric-family
+counts on OC-DFG elements:
+1. nodes expose `event_count`, `unique_object_count`, and `total_object_count`,
+2. edges expose `event_couple_count`, `unique_object_count`, and `total_object_count`,
+3. start/end activities expose `event_count`, `unique_object_count`, and `total_object_count`.
 
 ## Phase 4 Root-Cause Analysis APIs
 
