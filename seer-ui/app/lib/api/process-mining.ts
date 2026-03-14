@@ -361,6 +361,29 @@ function buildOcdfgStartEdges(
   return startEdges;
 }
 
+function assertOcdfgGraphIntegrity(nodes: OcdfgNode[], edges: OcdfgEdge[]): void {
+  const nodeIds = new Set<string>();
+  for (const node of nodes) {
+    if (nodeIds.has(node.id)) {
+      throw new Error(`Invalid OC-DFG response: duplicate node id ${node.id}.`);
+    }
+    nodeIds.add(node.id);
+  }
+
+  for (const edge of edges) {
+    if (!nodeIds.has(edge.source)) {
+      throw new Error(
+        `Invalid OC-DFG response: edge ${edge.id} references missing source node ${edge.source}.`
+      );
+    }
+    if (!nodeIds.has(edge.target)) {
+      throw new Error(
+        `Invalid OC-DFG response: edge ${edge.id} references missing target node ${edge.target}.`
+      );
+    }
+  }
+}
+
 export function toOcdfgGraphFromContract(
   run: OcdfgMiningResponseContract,
   minShare?: number
@@ -372,13 +395,16 @@ export function toOcdfgGraphFromContract(
   const objectNodes = buildOcdfgObjectNodes(run.object_types, startActivities);
   const flowEdges = filteredEdges.map(toOcdfgEdge);
   const startEdges = buildOcdfgStartEdges(startActivities, activityNodes);
+  const nodes = [...objectNodes, ...activityNodes];
+  const edges = [...startEdges, ...flowEdges];
+  assertOcdfgGraphIntegrity(nodes, edges);
   return {
     runId: run.run_id,
     anchorObjectType: run.anchor_object_type,
     startAt: run.start_at,
     endAt: run.end_at,
-    nodes: [...objectNodes, ...activityNodes],
-    edges: [...startEdges, ...flowEdges],
+    nodes,
+    edges,
     startActivities,
     endActivities,
     objectTypes: run.object_types,

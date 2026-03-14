@@ -531,10 +531,20 @@ export async function buildOcdfgLayout(graph: OcdfgGraph): Promise<OcdfgLayoutRe
     edges: allEdges.map((edge) => {
       const sourcePort = portMap.get(edge.source);
       const targetPort = portMap.get(edge.target);
+      if (!sourcePort) {
+        throw new Error(
+          `Invalid OC-DFG layout input: edge ${edge.id} references missing source node ${edge.source}.`
+        );
+      }
+      if (!targetPort) {
+        throw new Error(
+          `Invalid OC-DFG layout input: edge ${edge.id} references missing target node ${edge.target}.`
+        );
+      }
       return {
         id: edge.renderId,
-        sources: [sourcePort?.right ?? edge.source],
-        targets: [targetPort?.left ?? edge.target],
+        sources: [sourcePort.right],
+        targets: [targetPort.left],
       };
     }),
   };

@@ -792,15 +792,15 @@ def _ocdfg_edges_query(payload: ProcessMiningRequest, include_object_types: list
                 event_id,
                 occurred_at,
                 event_type,
-                lagInFrame(event_id) OVER (
+                lagInFrame(toNullable(event_id)) OVER (
                     PARTITION BY object_type, object_ref_hash
                     ORDER BY occurred_at, event_id
                 ) AS previous_event_id,
-                lagInFrame(occurred_at) OVER (
+                lagInFrame(toNullable(occurred_at)) OVER (
                     PARTITION BY object_type, object_ref_hash
                     ORDER BY occurred_at, event_id
                 ) AS previous_occurred_at,
-                lagInFrame(event_type) OVER (
+                lagInFrame(toNullable(event_type)) OVER (
                     PARTITION BY object_type, object_ref_hash
                     ORDER BY occurred_at, event_id
                 ) AS previous_event_type

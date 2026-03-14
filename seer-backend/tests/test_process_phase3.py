@@ -12,6 +12,7 @@ from seer_backend.analytics.models import ProcessMiningRequest
 from seer_backend.analytics.repository import (
     ClickHouseProcessMiningRepository,
     InMemoryProcessMiningRepository,
+    _ocdfg_edges_query,
 )
 from seer_backend.analytics.service import OcpnMiningWrapper, ProcessMiningService
 from seer_backend.history.repository import InMemoryHistoryRepository
@@ -67,7 +68,7 @@ def build_client() -> TestClient:
     app.state.process_service = ProcessMiningService(
         repository=InMemoryProcessMiningRepository.from_phase2_history_repository(history_repo),
         miner=OcpnMiningWrapper(),
-        max_events_default=5_000,
+        max_events_default=100_000,
         max_relations_default=40_000,
         max_traces_per_handle_default=100,
     )
@@ -575,6 +576,21 @@ def test_ocdfg_mining_validation_errors_are_actionable() -> None:
 
     assert response.status_code == 422
     assert "start_at must be earlier than end_at" in response.text
+
+
+def test_ocdfg_edge_query_uses_nullable_lag_to_exclude_synthetic_start_edges() -> None:
+    payload = ProcessMiningRequest(
+        anchor_object_type=_ORDER_URI,
+        start_at=datetime(2026, 2, 22, 9, 0, tzinfo=UTC),
+        end_at=datetime(2026, 2, 22, 11, 0, tzinfo=UTC),
+    )
+
+    sql = str(_ocdfg_edges_query(payload, [_ORDER_URI]))
+
+    assert "lagInFrame(toNullable(event_id))" in sql
+    assert "lagInFrame(toNullable(occurred_at))" in sql
+    assert "lagInFrame(toNullable(event_type))" in sql
+    assert "WHERE previous_event_id IS NOT NULL" in sql
 
 
 def test_ocdfg_mining_oversized_scope_returns_guidance() -> None:

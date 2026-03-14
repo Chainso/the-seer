@@ -84,6 +84,7 @@ Current post-MVP execution state:
 
 - `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/ocdfg-edge-query-null-lag-fix.md` (archived on 2026-03-14 after fixing ClickHouse `lagInFrame` default leakage that emitted synthetic empty-source OC-DFG edges and epoch-scale durations, adding regression coverage, and validating with targeted backend pytest/Ruff plus the OC-DFG UI contract test)
 - `completed`: `docs/exec-plans/completed/ocpn-pm4py-placeholder-removal.md` (archived on 2026-03-13 after removing the legacy OCPN pseudo-`pm4py` branch, making the deterministic `/process/mine` miner explicit, dropping the backend `pm4py` dependency, and validating with backend Ruff plus targeted process/AI tests)
 - `completed`: `docs/exec-plans/completed/ocdfg-clickhouse-native-replacement.md` (archived on 2026-03-13 after replacing backend `pm4py` OC-DFG discovery with ClickHouse-native mining over the existing history tables, preserving the OC-DFG API shape, adding metric-family counts on OC-DFG elements, and validating with targeted backend Ruff plus `cd seer-backend && uv run pytest tests/test_process_phase3.py`)
 - `completed`: `docs/exec-plans/completed/object-store-model-locked-tabs.md` (archived on 2026-03-13 after turning `/inspector/history` into a model-locked workspace with live-object and embedded-insights tabs, adding model-specific live-object columns, preserving `/inspector/history/object` deep links, and validating with targeted history/insights contract tests plus `cd seer-ui && npm run build`)

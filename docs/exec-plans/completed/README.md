@@ -48,5 +48,6 @@ Each completed plan should preserve:
 36. `ocdfg-clickhouse-native-replacement.md` - completed (2026-03-13)
 37. `ocpn-pm4py-placeholder-removal.md` - completed (2026-03-13)
 38. `object-store-model-locked-tabs.md` - completed (2026-03-13)
-39. `execution-plan-policy-and-skill-alignment.md` - completed (2026-03-15)
-40. `phase-handoff-capsules-in-execution-plans.md` - completed (2026-03-15)
+39. `ocdfg-edge-query-null-lag-fix.md` - completed (2026-03-14)
+40. `execution-plan-policy-and-skill-alignment.md` - completed (2026-03-15)
+41. `phase-handoff-capsules-in-execution-plans.md` - completed (2026-03-15)

@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     actions_sweeper_advisory_lock_id: int = Field(default=104_729, ge=1, le=2_147_483_647)
     actions_sweeper_retry_delay_seconds: int = Field(default=2, ge=0, le=3600)
     actions_schema_bootstrap_on_startup: bool = False
-    process_mining_max_events: int = Field(default=5_000, ge=100, le=200_000)
+    process_mining_max_events: int = Field(default=100_000, ge=100, le=200_000)
     process_mining_max_relations: int = Field(default=40_000, ge=100, le=500_000)
     process_mining_max_traces_per_handle: int = Field(default=100, ge=10, le=500)
     root_cause_max_events: int = Field(default=10_000, ge=100, le=250_000)
