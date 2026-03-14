@@ -2,7 +2,7 @@
 
 **Status:** completed  
 **Owner:** UX-HISTORY-2  
-**Last updated:** 2026-03-13
+**Last updated:** 2026-03-14
 
 ---
 
@@ -67,3 +67,4 @@ Refactor Object Store into a model-locked workspace that:
 1. The old discovery-only history contract was intentionally removed in favor of a model-scoped investigation workspace.
 2. Embedded insights now reuse the existing RCA and OC-DFG components rather than creating a parallel implementation.
 3. The display-name column now appears only when the selected model exposes a preferred name field, and its header uses that field's real ontology label.
+4. 2026-03-14 follow-up ratified that models without a preferred name field should not show a placeholder display-name column.
