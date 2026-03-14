@@ -12,7 +12,7 @@ Refactor Object Store into a model-locked workspace that:
 
 1. always has one ontology object model selected,
 2. exposes top-level live-objects and insights tabs,
-3. makes live objects more model-specific with key-part, display-name, and state columns,
+3. makes live objects more model-specific with key-part, conditional display-name, and state columns,
 4. keeps the existing object-details route for per-object timeline and graph analysis.
 
 ## Delivery Stance
@@ -33,7 +33,7 @@ Refactor Object Store into a model-locked workspace that:
 
 1. Split the live-objects table into a dedicated model-scoped component.
 2. Removed the generic visible type column.
-3. Added dynamic key-part, display-name, and state columns derived from ontology metadata plus returned object payload/reference fields.
+3. Added dynamic key-part, conditional display-name, and state columns derived from ontology metadata plus returned object payload/reference fields.
 4. Kept property filtering scoped to the selected model and preserved row navigation into `/inspector/history/object`.
 
 ### Phase 3: Embedded Scoped Insights
@@ -52,7 +52,7 @@ Refactor Object Store into a model-locked workspace that:
 
 1. `/inspector/history` always resolves to a selected ontology object model.
 2. Object Store exposes exactly two top-level tabs: model-scoped live objects and insights.
-3. Live objects render model-specific columns for key parts, display name, and state fields.
+3. Live objects render model-specific columns for key parts, conditional display-name fields, and state fields.
 4. Embedded insights are locked to the selected model and do not expose an independent model selector.
 5. Clicking a live object row still opens `/inspector/history/object` with canonical identity params.
 6. Standalone `/inspector/insights` remains intact.
@@ -66,4 +66,4 @@ Refactor Object Store into a model-locked workspace that:
 
 1. The old discovery-only history contract was intentionally removed in favor of a model-scoped investigation workspace.
 2. Embedded insights now reuse the existing RCA and OC-DFG components rather than creating a parallel implementation.
-3. Display-name derivation falls back to summarized object reference text when no preferred payload name field exists.
+3. The display-name column now appears only when the selected model exposes a preferred name field, and its header uses that field's real ontology label.

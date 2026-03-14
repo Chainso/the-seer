@@ -56,14 +56,15 @@ Define user-facing behavior for the object-centric History Inspector:
 2. The table is model-specific rather than generic.
 3. The table includes:
    - key-part columns derived from object reference fields,
-   - `Display name`,
+   - a display-name field column only when the model has a preferred name field,
    - state/status columns when present for the model,
    - `Latest update`.
-4. `Display name` prefers payload fields in this order:
+4. When present, the display-name column header uses the ontology label of the actual selected field.
+5. The display-name field prefers payload fields in this order:
    - `display_name`,
    - `name`,
    - `<model-local-name>_name`,
-   - fallback to summarized object reference text.
+6. If none of those fields exist on the selected model, Object Store does not render a display-name column.
 
 ## Object Details Responsibilities
 
@@ -129,7 +130,7 @@ Define user-facing behavior for the object-centric History Inspector:
 1. No legacy `/objects/*` endpoint usage in History flows.
 2. `/inspector/history` always has a valid selected object model.
 3. `/inspector/history` exposes top-level live-objects and insights tabs.
-4. Live objects render model-specific key-part, display-name, and state columns when data exists.
+4. Live objects render model-specific key-part columns, conditional display-name field columns, and state columns when data exists.
 5. Clicking a live object row navigates to `/inspector/history/object` with required identity params.
 6. Object details route renders timeline and graph for the selected identity.
 7. Graph controls expose only object-centric time/depth controls; no trace/workflow controls are present.

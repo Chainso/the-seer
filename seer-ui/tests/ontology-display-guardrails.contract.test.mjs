@@ -18,7 +18,6 @@ const MIGRATED_PANEL_CONTRACTS = [
     requiredPatterns: [
       /useOntologyDisplay/,
       /\.displayFieldLabel\(/,
-      /\.summarizeObjectRef\(/,
       /\.fieldKindForKey\(/,
       /\.operatorOptionsForField\(/,
       /profile:\s*"history"/,

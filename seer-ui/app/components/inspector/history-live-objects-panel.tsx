@@ -166,11 +166,6 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
     Record<string, Record<string, OntologyDisplayFieldKind>>
   >({});
 
-  const summarizeObjectRef = useCallback(
-    (ref: Record<string, unknown>) => ontologyDisplay.summarizeObjectRef(ref, { objectType }),
-    [objectType, ontologyDisplay]
-  );
-
   const inferFieldKind = useCallback(
     (fieldKey: string, hints: Array<string | undefined>) =>
       ontologyDisplay.fieldKindForKey(fieldKey, {
@@ -442,9 +437,18 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
     }
     return Array.from(new Set(candidates));
   }, [selectedModel]);
+  const displayNameFieldKey = useMemo(
+    () =>
+      displayNameFieldCandidates.find((fieldKey) => selectedModel?.canonicalFieldKeys.includes(fieldKey)) ||
+      null,
+    [displayNameFieldCandidates, selectedModel]
+  );
 
   const stateFieldKeys = useMemo(() => {
-    const excludedFields = new Set([...keyPartFieldKeys, ...displayNameFieldCandidates]);
+    const excludedFields = new Set([
+      ...keyPartFieldKeys,
+      ...(displayNameFieldKey ? [displayNameFieldKey] : []),
+    ]);
     const orderedStateKeys: string[] = [];
     const seen = new Set<string>();
     const pushKey = (fieldKey: string | null | undefined) => {
@@ -462,7 +466,7 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
       }
     });
     return orderedStateKeys;
-  }, [displayNameFieldCandidates, keyPartFieldKeys, selectedModel]);
+  }, [displayNameFieldKey, keyPartFieldKeys, selectedModel]);
 
   const displayFieldValue = useCallback(
     (fieldKey: string, rawValue: unknown) =>
@@ -481,16 +485,14 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
 
   const renderDisplayName = useCallback(
     (item: LatestObjectItem) => {
-      for (const fieldKey of displayNameFieldCandidates) {
-        const payloadValue = item.object_payload?.[fieldKey];
-        if (isScalarValue(payloadValue) && String(payloadValue).trim()) {
-          return stringifyCellValue(payloadValue);
-        }
+      if (!displayNameFieldKey) {
+        return "—";
       }
-      return summarizeObjectRef(item.object_ref);
+      return stringifyCellValue(displayFieldValue(displayNameFieldKey, readFieldValue(item, displayNameFieldKey)));
     },
-    [displayNameFieldCandidates, summarizeObjectRef]
+    [displayFieldValue, displayNameFieldKey]
   );
+  const visibleColumnCount = keyPartFieldKeys.length + stateFieldKeys.length + (displayNameFieldKey ? 2 : 1);
 
   if (!selectedModel) {
     return (
@@ -669,7 +671,11 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
                     {ontologyDisplay.displayFieldLabel(fieldKey, { objectType })}
                   </Table.ColumnHeaderCell>
                 ))}
-                <Table.ColumnHeaderCell>Display name</Table.ColumnHeaderCell>
+                {displayNameFieldKey ? (
+                  <Table.ColumnHeaderCell>
+                    {ontologyDisplay.displayFieldLabel(displayNameFieldKey, { objectType })}
+                  </Table.ColumnHeaderCell>
+                ) : null}
                 {stateFieldKeys.map((fieldKey) => (
                   <Table.ColumnHeaderCell key={fieldKey}>
                     {ontologyDisplay.displayFieldLabel(fieldKey, { objectType })}
@@ -682,7 +688,7 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
               {latestLoading ? (
                 <Table.Row>
                   <Table.Cell
-                    colSpan={keyPartFieldKeys.length + stateFieldKeys.length + 2}
+                    colSpan={visibleColumnCount}
                     className="h-16 text-center text-sm text-muted-foreground"
                   >
                     Loading latest objects...
@@ -709,9 +715,11 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
                         {renderFieldValue(item, fieldKey)}
                       </Table.RowHeaderCell>
                     ))}
-                    <Table.Cell className="whitespace-normal break-words">
-                      {renderDisplayName(item)}
-                    </Table.Cell>
+                    {displayNameFieldKey ? (
+                      <Table.Cell className="whitespace-normal break-words">
+                        {renderDisplayName(item)}
+                      </Table.Cell>
+                    ) : null}
                     {stateFieldKeys.map((fieldKey) => (
                       <Table.Cell key={`${objectIdentityKey(item)}-${fieldKey}-state`} className="whitespace-normal">
                         {renderFieldValue(item, fieldKey)}
@@ -723,7 +731,7 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
               ) : (
                 <Table.Row>
                   <Table.Cell
-                    colSpan={keyPartFieldKeys.length + stateFieldKeys.length + 2}
+                    colSpan={visibleColumnCount}
                     className="h-16 text-center text-sm text-muted-foreground"
                   >
                     No objects match the active filters.

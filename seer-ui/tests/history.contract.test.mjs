@@ -34,7 +34,8 @@ test("inspector root and object store route expose model-locked object store tab
   assert.match(historyPanel, /queryKey="insights_tab"/);
   assert.match(historyPanel, /lockedAnchorModelUri=\{selectedObjectType\}/);
   assert.match(liveObjectsPanel, /History Filters/);
-  assert.match(liveObjectsPanel, /Display name/);
+  assert.match(liveObjectsPanel, /displayNameFieldKey/);
+  assert.match(liveObjectsPanel, /displayFieldLabel\(displayNameFieldKey/);
   assert.match(liveObjectsPanel, /router\.push\(`\/inspector\/history\/object\?/);
   assert.match(historyPanel, /object_type/);
   assert.match(liveObjectsPanel, /object_ref_canonical/);
@@ -80,7 +81,6 @@ test("history surfaces consume shared ontology display resolver contracts", () =
   assert.match(liveObjectsPanel, /\.displayFieldValue\(/);
   assert.match(liveObjectsPanel, /\.fieldKindForKey\(/);
   assert.match(liveObjectsPanel, /\.operatorOptionsForField\(/);
-  assert.match(liveObjectsPanel, /\.summarizeObjectRef\(/);
   assert.match(liveObjectsPanel, /profile:\s*"history"/);
 
   assert.match(detailsPanel, /useObjectHistoryDisplayData/);
