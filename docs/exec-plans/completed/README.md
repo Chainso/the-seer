@@ -47,5 +47,6 @@ Each completed plan should preserve:
 35. `searchable-dropdown-audit-2026-03-13.md` - completed (2026-03-13)
 36. `ocdfg-clickhouse-native-replacement.md` - completed (2026-03-13)
 37. `ocpn-pm4py-placeholder-removal.md` - completed (2026-03-13)
-38. `execution-plan-policy-and-skill-alignment.md` - completed (2026-03-15)
-39. `phase-handoff-capsules-in-execution-plans.md` - completed (2026-03-15)
+38. `object-store-model-locked-tabs.md` - completed (2026-03-13)
+39. `execution-plan-policy-and-skill-alignment.md` - completed (2026-03-15)
+40. `phase-handoff-capsules-in-execution-plans.md` - completed (2026-03-15)

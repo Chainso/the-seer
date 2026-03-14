@@ -12,27 +12,35 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
 }
 
-test("inspector root and object store route follow the forward-only history IA", () => {
+test("inspector root and object store route expose model-locked object store tabs plus object details", () => {
   const inspectorPage = read("app/inspector/page.tsx");
   const historyRoute = read("app/inspector/history/page.tsx");
   const objectRoute = read("app/inspector/history/object/page.tsx");
   const historyPanel = read("app/components/inspector/history-panel.tsx");
+  const liveObjectsPanel = read("app/components/inspector/history-live-objects-panel.tsx");
   const detailsPanel = read("app/components/inspector/object-history-details-panel.tsx");
   const displaySurface = read("app/components/inspector/object-history-display-surface.tsx");
   const nav = read("app/components/layout/nav-sidebar.tsx");
 
   assert.match(inspectorPage, /redirect\('\/inspector\/history'\)/);
-  assert.match(historyRoute, /return <HistoryPanel \/>/);
+  assert.match(historyRoute, /connection\(\)/);
+  assert.match(historyRoute, /<Suspense fallback=\{<HistoryPageFallback \/>}/);
+  assert.match(historyRoute, /<HistoryPanel \/>/);
   assert.match(objectRoute, /<ObjectHistoryDetailsPanel \/>/);
-  assert.match(historyPanel, /History Filters/);
-  assert.match(historyPanel, /Live Objects/);
-  assert.match(historyPanel, /router\.push\(`\/inspector\/history\/object\?/);
+  assert.match(historyPanel, /Object model/);
+  assert.match(historyPanel, /Object Store always stays scoped to one object model/);
+  assert.match(historyPanel, /value="objects"/);
+  assert.match(historyPanel, /value="insights"/);
+  assert.match(historyPanel, /queryKey="insights_tab"/);
+  assert.match(historyPanel, /lockedAnchorModelUri=\{selectedObjectType\}/);
+  assert.match(liveObjectsPanel, /History Filters/);
+  assert.match(liveObjectsPanel, /Display name/);
+  assert.match(liveObjectsPanel, /router\.push\(`\/inspector\/history\/object\?/);
   assert.match(historyPanel, /object_type/);
-  assert.match(historyPanel, /object_ref_canonical/);
-  assert.match(historyPanel, /<Table\.Root[\s\S]*striped/);
-  assert.doesNotMatch(historyPanel, /Graph Controls/);
-  assert.doesNotMatch(historyPanel, /Graph View/);
-  assert.doesNotMatch(historyPanel, /Load older/);
+  assert.match(liveObjectsPanel, /object_ref_canonical/);
+  assert.match(liveObjectsPanel, /<Table\.Root[\s\S]*striped/);
+  assert.match(liveObjectsPanel, /display_name/);
+  assert.match(liveObjectsPanel, /stateFilterFieldKey/);
   assert.match(detailsPanel, /ObjectHistoryDisplaySurface/);
   assert.match(detailsPanel, /Graph time source/);
   assert.match(detailsPanel, /Follow Timeline/);
@@ -58,16 +66,22 @@ test("history API client targets canonical history endpoints for object discover
 
 test("history surfaces consume shared ontology display resolver contracts", () => {
   const historyPanel = read("app/components/inspector/history-panel.tsx");
+  const liveObjectsPanel = read("app/components/inspector/history-live-objects-panel.tsx");
   const detailsPanel = read("app/components/inspector/object-history-details-panel.tsx");
   const displayHook = read("app/components/inspector/use-object-history-display-data.ts");
   const displaySurface = read("app/components/inspector/object-history-display-surface.tsx");
 
   assert.match(historyPanel, /useOntologyDisplay/);
-  assert.match(historyPanel, /\.displayObjectType\(/);
-  assert.match(historyPanel, /\.displayFieldLabel\(/);
-  assert.match(historyPanel, /\.fieldKindForKey\(/);
-  assert.match(historyPanel, /\.operatorOptionsForField\(/);
-  assert.match(historyPanel, /profile:\s*"history"/);
+  assert.match(historyPanel, /displayObjectType/);
+  assert.match(historyPanel, /SearchableSelect/);
+  assert.match(historyPanel, /mergeSearchParams/);
+  assert.match(liveObjectsPanel, /useOntologyDisplay/);
+  assert.match(liveObjectsPanel, /\.displayFieldLabel\(/);
+  assert.match(liveObjectsPanel, /\.displayFieldValue\(/);
+  assert.match(liveObjectsPanel, /\.fieldKindForKey\(/);
+  assert.match(liveObjectsPanel, /\.operatorOptionsForField\(/);
+  assert.match(liveObjectsPanel, /\.summarizeObjectRef\(/);
+  assert.match(liveObjectsPanel, /profile:\s*"history"/);
 
   assert.match(detailsPanel, /useObjectHistoryDisplayData/);
   assert.match(detailsPanel, /ObjectHistoryDisplaySurface/);

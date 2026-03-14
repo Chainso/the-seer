@@ -14,10 +14,9 @@ function read(relativePath) {
 
 const MIGRATED_PANEL_CONTRACTS = [
   {
-    path: "app/components/inspector/history-panel.tsx",
+    path: "app/components/inspector/history-live-objects-panel.tsx",
     requiredPatterns: [
       /useOntologyDisplay/,
-      /\.displayObjectType\(/,
       /\.displayFieldLabel\(/,
       /\.summarizeObjectRef\(/,
       /\.fieldKindForKey\(/,
@@ -68,7 +67,7 @@ const BANNED_PRETTY_HELPERS = [
 ];
 
 const IRI_FALLBACK_GUARDRAIL_PANELS = [
-  "app/components/inspector/history-panel.tsx",
+  "app/components/inspector/history-live-objects-panel.tsx",
   "app/components/inspector/process-mining-panel.tsx",
   "app/components/inspector/use-object-history-display-data.ts",
 ];

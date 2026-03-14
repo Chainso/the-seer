@@ -14,6 +14,8 @@ export type InsightsViewTab = "process-insights" | "process-mining";
 
 interface InsightsPanelProps {
   defaultTab?: InsightsViewTab;
+  queryKey?: string;
+  lockedAnchorModelUri?: string | null;
 }
 
 const INSIGHTS_MODES: Record<
@@ -36,7 +38,11 @@ const INSIGHTS_MODES: Record<
   },
 };
 
-export function InsightsPanel({ defaultTab = "process-insights" }: InsightsPanelProps) {
+export function InsightsPanel({
+  defaultTab = "process-insights",
+  queryKey = "tab",
+  lockedAnchorModelUri = null,
+}: InsightsPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -46,21 +52,21 @@ export function InsightsPanel({ defaultTab = "process-insights" }: InsightsPanel
     () => false,
   );
   const activeTab = useMemo<InsightsViewTab>(() => {
-    const raw = searchParams.get("tab");
+    const raw = searchParams.get(queryKey);
     return raw === "process-mining" ? "process-mining" : defaultTab;
-  }, [defaultTab, searchParams]);
+  }, [defaultTab, queryKey, searchParams]);
 
   const handleTabChange = useCallback((nextTab: string) => {
     if (nextTab !== "process-insights" && nextTab !== "process-mining") {
       return;
     }
     const nextQuery = mergeSearchParams(searchParams, {
-      tab: nextTab === defaultTab ? null : nextTab,
+      [queryKey]: nextTab === defaultTab ? null : nextTab,
     });
     startTransition(() => {
       router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname, { scroll: false });
     });
-  }, [defaultTab, pathname, router, searchParams]);
+  }, [defaultTab, pathname, queryKey, router, searchParams]);
 
   if (!mounted) {
     return <div className="h-24 w-full animate-pulse border-b border-border bg-muted/20" />;
@@ -100,10 +106,16 @@ export function InsightsPanel({ defaultTab = "process-insights" }: InsightsPanel
         })}
       </TabsList>
       <TabsContent value="process-insights" className="space-y-4">
-        <ProcessInsightsPanel isActive={activeTab === "process-insights"} />
+        <ProcessInsightsPanel
+          isActive={activeTab === "process-insights"}
+          lockedAnchorModelUri={lockedAnchorModelUri}
+        />
       </TabsContent>
       <TabsContent value="process-mining" className="space-y-4">
-        <ProcessMiningPanel isActive={activeTab === "process-mining"} />
+        <ProcessMiningPanel
+          isActive={activeTab === "process-mining"}
+          lockedModelUri={lockedAnchorModelUri}
+        />
       </TabsContent>
     </Tabs>
   );

@@ -318,7 +318,7 @@ test("ontology page host and assistant canvas host share the explorer display su
 });
 
 test("history details panel keeps object-local lifecycle naming in plain/default mode", () => {
-  const historySource = read("app/components/inspector/history-panel.tsx");
+  const historySource = read("app/components/inspector/history-live-objects-panel.tsx");
   const detailsSource = read("app/components/inspector/use-object-history-display-data.ts");
   const resolver = buildResolver();
 

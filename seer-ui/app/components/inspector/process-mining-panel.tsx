@@ -398,15 +398,23 @@ function resolveDepthScopedModels(options: {
 
 interface ProcessMiningPanelProps {
   isActive: boolean;
+  lockedModelUri?: string | null;
 }
 
-export function ProcessMiningPanel({ isActive }: ProcessMiningPanelProps) {
+export function ProcessMiningPanel({
+  isActive,
+  lockedModelUri = null,
+}: ProcessMiningPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const ontologyDisplay = useOntologyDisplay();
   const { graph: ontologyGraph } = useOntologyGraphContext();
-  const [modelUri, setModelUri] = useState(() => searchParams.get("pm_model") ?? "");
+  const normalizedLockedModelUri = lockedModelUri?.trim() || "";
+  const isModelLocked = Boolean(normalizedLockedModelUri);
+  const [modelUri, setModelUri] = useState(
+    () => normalizedLockedModelUri || (searchParams.get("pm_model") ?? "")
+  );
   const [depth, setDepth] = useState(() => searchParams.get("pm_depth") ?? "1");
   const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>(() => {
     const preset = searchParams.get("pm_preset");
@@ -474,14 +482,13 @@ export function ProcessMiningPanel({ isActive }: ProcessMiningPanelProps) {
   }, [ontologyDisplay]);
 
   useEffect(() => {
-    if (!modelUri && modelOptions.length > 0) {
-      setModelUri(modelOptions[0].uri);
-    }
-  }, [modelOptions, modelUri]);
+    setModelUri((current) => normalizedLockedModelUri || current || modelOptions[0]?.uri || "");
+  }, [modelOptions, normalizedLockedModelUri]);
 
   useEffect(() => {
     const fallbackWindow = defaultWindowRange();
-    const nextModelUri = searchParams.get("pm_model") ?? modelOptions[0]?.uri ?? "";
+    const nextModelUri =
+      normalizedLockedModelUri || searchParams.get("pm_model") || modelOptions[0]?.uri || "";
     const nextDepth = DEPTH_OPTIONS.includes(searchParams.get("pm_depth") ?? "")
       ? (searchParams.get("pm_depth") as string)
       : "1";
@@ -523,7 +530,7 @@ export function ProcessMiningPanel({ isActive }: ProcessMiningPanelProps) {
       clearMiningResults();
       autoRunSignatureRef.current = "";
     }
-  }, [clearMiningResults, modelOptions, searchParams]);
+  }, [clearMiningResults, modelOptions, normalizedLockedModelUri, searchParams]);
 
   useEffect(() => {
     if (filterSyncSourceRef.current === "url") {
@@ -939,6 +946,9 @@ export function ProcessMiningPanel({ isActive }: ProcessMiningPanelProps) {
   };
 
   const handleModelChange = (value: string) => {
+    if (isModelLocked) {
+      return;
+    }
     setModelUri(value);
     replaceQuery({
       pm_model: value,
@@ -1035,8 +1045,13 @@ export function ProcessMiningPanel({ isActive }: ProcessMiningPanelProps) {
             modelId="mining-model"
             modelLabel="Object model"
             modelValue={modelUri}
+            modelValueLabel={modelLabels[modelUri] ?? ontologyDisplay.displayObjectType(modelUri)}
             modelOptions={modelOptions.map((option) => ({ value: option.uri, label: option.name }))}
             onModelChange={handleModelChange}
+            modelLocked={isModelLocked}
+            modelLockedHelpText={
+              isModelLocked ? "Locked to the selected Object Store model." : undefined
+            }
             fromId="mining-from"
             fromValue={from}
             onFromChange={handleFromChange}

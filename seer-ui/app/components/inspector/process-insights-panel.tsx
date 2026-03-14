@@ -362,16 +362,24 @@ function areSerializedFiltersEqual(left: string[], right: string[]): boolean {
 
 interface ProcessInsightsPanelProps {
   isActive: boolean;
+  lockedAnchorModelUri?: string | null;
 }
 
-export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
+export function ProcessInsightsPanel({
+  isActive,
+  lockedAnchorModelUri = null,
+}: ProcessInsightsPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const ontologyDisplay = useOntologyDisplay();
+  const normalizedLockedAnchorModelUri = lockedAnchorModelUri?.trim() || "";
+  const isAnchorModelLocked = Boolean(normalizedLockedAnchorModelUri);
   const [ontologyGraph, setOntologyGraph] = useState<OntologyGraph | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
-  const [anchorModelUri, setAnchorModelUri] = useState(() => searchParams.get("rca_anchor") ?? "");
+  const [anchorModelUri, setAnchorModelUri] = useState(
+    () => normalizedLockedAnchorModelUri || (searchParams.get("rca_anchor") ?? "")
+  );
   const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>(() => {
     const preset = searchParams.get("rca_preset");
     return preset === "7d" || preset === "30d" || preset === "custom" ? preset : "24h";
@@ -465,9 +473,7 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
           })
           .sort((a, b) => a.name.localeCompare(b.name));
         setModels(options);
-        if (options.length > 0) {
-          setAnchorModelUri((current) => current || options[0].uri);
-        }
+        setAnchorModelUri((current) => normalizedLockedAnchorModelUri || current || options[0]?.uri || "");
       })
       .catch(() => {
         if (!active) {
@@ -479,11 +485,11 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
     return () => {
       active = false;
     };
-  }, []);
+  }, [normalizedLockedAnchorModelUri]);
 
   useEffect(() => {
     const fallbackWindow = defaultWindowRange();
-    const nextAnchorModelUri = searchParams.get("rca_anchor") ?? "";
+    const nextAnchorModelUri = normalizedLockedAnchorModelUri || (searchParams.get("rca_anchor") ?? "");
     const nextPreset = searchParams.get("rca_preset");
     const nextWindowPreset =
       nextPreset === "7d" || nextPreset === "30d" || nextPreset === "custom" ? nextPreset : "24h";
@@ -519,7 +525,7 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
       clearInsightResults();
       autoRunSignatureRef.current = "";
     }
-  }, [clearInsightResults, searchParams]);
+  }, [clearInsightResults, normalizedLockedAnchorModelUri, searchParams]);
 
   useEffect(() => {
     if (filterSyncSourceRef.current === "url") {
@@ -1002,6 +1008,9 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
   };
 
   const handleAnchorModelChange = (value: string) => {
+    if (isAnchorModelLocked) {
+      return;
+    }
     setAnchorModelUri(value);
     replaceQuery({
       rca_anchor: value,
@@ -1140,8 +1149,13 @@ export function ProcessInsightsPanel({ isActive }: ProcessInsightsPanelProps) {
           modelId="anchor-model"
           modelLabel="Anchor object model"
           modelValue={anchorModelUri}
+          modelValueLabel={selectedModel?.name || ontologyDisplay.displayObjectType(anchorModelUri)}
           modelOptions={models.map((model) => ({ value: model.uri, label: model.name }))}
           onModelChange={handleAnchorModelChange}
+          modelLocked={isAnchorModelLocked}
+          modelLockedHelpText={
+            isAnchorModelLocked ? "Locked to the selected Object Store model." : undefined
+          }
           fromId="insights-from"
           fromValue={from}
           onFromChange={handleFromChange}

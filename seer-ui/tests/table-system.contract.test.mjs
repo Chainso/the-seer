@@ -33,13 +33,13 @@ test("table primitive exposes Radix-style namespace API", () => {
 
 test("table primitive supports optional striped rows and history discovery opts in", () => {
   const table = read("app/components/ui/table.tsx");
-  const historyPanel = read("app/components/inspector/history-panel.tsx");
+  const historyLiveObjectsPanel = read("app/components/inspector/history-live-objects-panel.tsx");
 
   assert.match(table, /striped\?: boolean/);
   assert.match(table, /striped = false/);
   assert.match(table, /TableStyleContext\.Provider value=\{\{ size, variant, striped \}\}/);
   assert.match(table, /striped && "\[&_tr:nth-child\(even\)\]:bg-muted\/20"/);
-  assert.match(historyPanel, /<Table\.Root[\s\S]*striped/);
+  assert.match(historyLiveObjectsPanel, /<Table\.Root[\s\S]*striped/);
 });
 
 test("table consumers use namespace primitives and semantic header cells", () => {
@@ -47,14 +47,14 @@ test("table consumers use namespace primitives and semantic header cells", () =>
   const eventList = read("app/components/ontology/lists/event-list.tsx");
   const objectList = read("app/components/ontology/lists/object-list.tsx");
   const triggerList = read("app/components/ontology/lists/trigger-list.tsx");
-  const historyPanel = read("app/components/inspector/history-panel.tsx");
+  const historyLiveObjectsPanel = read("app/components/inspector/history-live-objects-panel.tsx");
 
   for (const fileText of [
     actionList,
     eventList,
     objectList,
     triggerList,
-    historyPanel,
+    historyLiveObjectsPanel,
   ]) {
     assert.match(fileText, /<Table\.Root/);
     assert.match(fileText, /<Table\.Header>/);

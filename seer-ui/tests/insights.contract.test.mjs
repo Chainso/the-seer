@@ -34,8 +34,10 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
   assert.match(insightsPanel, /value="process-mining"/);
   assert.match(insightsPanel, /label: "RCA"/);
   assert.match(insightsPanel, /label: "OC-DFG"/);
-  assert.match(insightsPanel, /<ProcessInsightsPanel isActive=\{activeTab === "process-insights"\} \/>/);
-  assert.match(insightsPanel, /<ProcessMiningPanel isActive=\{activeTab === "process-mining"\} \/>/);
+  assert.match(insightsPanel, /queryKey = "tab"/);
+  assert.match(insightsPanel, /lockedAnchorModelUri = null/);
+  assert.match(insightsPanel, /<ProcessInsightsPanel[\s\S]*isActive=\{activeTab === "process-insights"\}[\s\S]*lockedAnchorModelUri=\{lockedAnchorModelUri\}[\s\S]*\/>/);
+  assert.match(insightsPanel, /<ProcessMiningPanel[\s\S]*isActive=\{activeTab === "process-mining"\}[\s\S]*lockedModelUri=\{lockedAnchorModelUri\}[\s\S]*\/>/);
   assert.match(insightsPanel, /useSearchParams/);
   assert.match(insightsPanel, /mergeSearchParams/);
   assert.doesNotMatch(insightsPanel, /Investigate Process Behavior/);
@@ -71,6 +73,8 @@ test("process insights panel consumes shared ontology display resolver contract"
   const rootCausePanel = read("app/components/inspector/process-insights-panel.tsx");
 
   assert.match(rootCausePanel, /useOntologyDisplay/);
+  assert.match(rootCausePanel, /lockedAnchorModelUri/);
+  assert.match(rootCausePanel, /modelLocked=\{isAnchorModelLocked\}/);
   assert.match(rootCausePanel, /\.displayEventType\(/);
   assert.match(rootCausePanel, /\.displayObjectType\(/);
   assert.match(rootCausePanel, /\.displayFieldLabel\(/);
@@ -86,6 +90,8 @@ test("process mining panel consumes shared ontology display resolver contract", 
   const processApi = read("app/lib/api/process-mining.ts");
 
   assert.match(processMiningPanel, /useOntologyDisplay/);
+  assert.match(processMiningPanel, /lockedModelUri/);
+  assert.match(processMiningPanel, /modelLocked=\{isModelLocked\}/);
   assert.match(processMiningPanel, /buildReferenceEdges/);
   assert.match(processMiningPanel, /\.displayObjectType\(/);
   assert.match(processMiningPanel, /\.displayEventType\(/);

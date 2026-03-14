@@ -6,6 +6,12 @@
 
 ---
 
+## Supersession Note
+
+1. This plan remains the historical record for the first object-centric history consolidation delivered on 2026-02-28.
+2. Its "Object Store as discovery only" IA was later superseded on 2026-03-13 by `docs/exec-plans/completed/object-store-model-locked-tabs.md`.
+3. The dedicated `/inspector/history/object` deep-link route introduced here remains current; only the `/inspector/history` page responsibilities changed.
+
 ## Objective
 
 Consolidate inspector navigation and flows into an object-centric history experience by:

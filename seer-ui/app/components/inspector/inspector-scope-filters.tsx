@@ -21,8 +21,11 @@ type InspectorScopeFiltersProps = {
   modelId: string;
   modelLabel: string;
   modelValue: string;
+  modelValueLabel?: string;
   modelOptions: ScopeModelOption[];
   onModelChange: (value: string) => void;
+  modelLocked?: boolean;
+  modelLockedHelpText?: string;
   fromId: string;
   fromValue: string;
   onFromChange: (value: string) => void;
@@ -44,8 +47,11 @@ export function InspectorScopeFilters({
   modelId,
   modelLabel,
   modelValue,
+  modelValueLabel,
   modelOptions,
   onModelChange,
+  modelLocked = false,
+  modelLockedHelpText,
   fromId,
   fromValue,
   onFromChange,
@@ -95,14 +101,26 @@ export function InspectorScopeFilters({
       >
         <div className="space-y-2">
           <Label htmlFor={modelId}>{modelLabel}</Label>
-          <SearchableSelect
-            triggerId={modelId}
-            value={modelValue}
-            onValueChange={onModelChange}
-            groups={[{ label: "Object models", options: modelOptions }]}
-            placeholder="Select model"
-            searchPlaceholder="Search models..."
-          />
+          {modelLocked ? (
+            <div
+              id={modelId}
+              className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-sm text-foreground"
+            >
+              <div className="font-medium">{modelValueLabel || modelValue || "—"}</div>
+              {modelLockedHelpText ? (
+                <div className="mt-1 text-xs text-muted-foreground">{modelLockedHelpText}</div>
+              ) : null}
+            </div>
+          ) : (
+            <SearchableSelect
+              triggerId={modelId}
+              value={modelValue}
+              onValueChange={onModelChange}
+              groups={[{ label: "Object models", options: modelOptions }]}
+              placeholder="Select model"
+              searchPlaceholder="Search models..."
+            />
+          )}
         </div>
 
         <div className="space-y-2">
