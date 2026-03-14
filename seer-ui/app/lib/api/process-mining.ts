@@ -8,26 +8,17 @@ import type {
   OcdfgMiningResponseContract,
   OcdfgNode,
   OcdfgNodeContract,
-  OcpnEdge,
-  OcpnGraph,
-  OcpnNode,
-  ProcessMineResponseContract,
   ProcessMiningRequestContract,
   ProcessTraceDrilldownResponseContract,
 } from '@/app/types/process-mining';
-
-export type { ProcessMineResponseContract } from '@/app/types/process-mining';
 
 export interface ProcessMiningRequest {
   modelUri?: string;
   modelUris?: string[];
   from?: string;
   to?: string;
-  traceId?: string;
-  workflowId?: string;
   filters?: Record<string, string>;
   minShare?: number;
-  collapseObjects?: boolean;
   maxEvents?: number;
   maxRelations?: number;
   maxTracesPerHandle?: number;
@@ -86,108 +77,6 @@ function normalizeModelUris(modelUris: string[] | undefined): string[] | undefin
   return normalized.length > 0 ? normalized : undefined;
 }
 
-function toTransitionNode(node: ProcessMineResponseContract['nodes'][number]): OcpnNode {
-  return {
-    id: node.id,
-    label: node.label,
-    type: 'TRANSITION',
-    eventUri: node.label,
-    count: Number(node.frequency) || 0,
-    firstSeen: null,
-    lastSeen: null,
-    medianSeen: null,
-    modelUri: null,
-    stateUri: null,
-    avgSeconds: null,
-    p50Seconds: null,
-    p95Seconds: null,
-  };
-}
-
-function buildObjectTypeCounts(
-  edges: Array<{ object_type: string; count: number }>
-): Map<string, number> {
-  const counts = new Map<string, number>();
-  edges.forEach((edge) => {
-    counts.set(edge.object_type, (counts.get(edge.object_type) || 0) + (Number(edge.count) || 0));
-  });
-  return counts;
-}
-
-function buildOcpnEdges(
-  run: ProcessMineResponseContract,
-  options: {
-    collapseObjects: boolean;
-    minShare: number | undefined;
-  }
-): OcpnEdge[] {
-  const { collapseObjects, minShare } = options;
-  const totalsByObjectType = buildObjectTypeCounts(run.edges);
-  const minShareThreshold = typeof minShare === 'number' ? Math.max(0, minShare) : 0;
-  const edges: OcpnEdge[] = [];
-
-  run.edges.forEach((edge) => {
-    const total = totalsByObjectType.get(edge.object_type) || 0;
-    const share = total > 0 ? edge.count / total : 0;
-    if (share < minShareThreshold) {
-      return;
-    }
-
-    if (collapseObjects) {
-      edges.push({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        modelUri: edge.object_type,
-        count: Number(edge.count) || 0,
-        share,
-      });
-      return;
-    }
-
-    const objectNodeId = `object:${edge.object_type}`;
-    edges.push(
-      {
-        id: `${edge.id}:in`,
-        source: edge.source,
-        target: objectNodeId,
-        modelUri: edge.object_type,
-        count: Number(edge.count) || 0,
-        share,
-      },
-      {
-        id: `${edge.id}:out`,
-        source: objectNodeId,
-        target: edge.target,
-        modelUri: edge.object_type,
-        count: Number(edge.count) || 0,
-        share,
-      }
-    );
-  });
-
-  return edges;
-}
-
-function buildPlaceNodes(run: ProcessMineResponseContract): OcpnNode[] {
-  const countsByObjectType = buildObjectTypeCounts(run.edges);
-  return run.object_types.map((objectType) => ({
-    id: `object:${objectType}`,
-    label: objectType,
-    type: 'PLACE',
-    modelUri: objectType,
-    count: countsByObjectType.get(objectType) || 0,
-    firstSeen: null,
-    lastSeen: null,
-    medianSeen: null,
-    stateUri: null,
-    eventUri: null,
-    avgSeconds: null,
-    p50Seconds: null,
-    p95Seconds: null,
-  }));
-}
-
 function toMineRequestContract(payload: ProcessMiningRequest): ProcessMiningRequestContract {
   const modelUri = payload.modelUri || payload.modelUris?.[0];
   if (!modelUri) {
@@ -218,14 +107,6 @@ function toMineRequestContract(payload: ProcessMiningRequest): ProcessMiningRequ
     max_relations: maxRelations,
     max_traces_per_handle: maxTracesPerHandle,
   };
-}
-
-export async function mineProcess(payload: ProcessMiningRequest): Promise<ProcessMineResponseContract> {
-  const contract = toMineRequestContract(payload);
-  return fetchApi<ProcessMineResponseContract>('/process/mine', {
-    method: 'POST',
-    body: JSON.stringify(contract),
-  });
 }
 
 export async function mineOcdfg(payload: ProcessMiningRequest): Promise<OcdfgMiningResponseContract> {
@@ -417,54 +298,6 @@ export async function getOcdfgGraph(payload: ProcessMiningRequest): Promise<Ocdf
   return toOcdfgGraphFromContract(run, payload.minShare);
 }
 
-export function toOcpnGraphFromOcdfg(graph: OcdfgGraph): OcpnGraph {
-  const activityNodes = graph.nodes.filter((node) => node.kind === 'activity' && node.activity);
-  const flowEdges = graph.edges.filter((edge) => edge.kind === 'flow');
-
-  return {
-    nodes: activityNodes.map((node) => ({
-      id: node.id,
-      label: node.activity as string,
-      type: 'TRANSITION',
-      eventUri: node.activity as string,
-      count: node.count,
-      firstSeen: null,
-      lastSeen: null,
-      medianSeen: null,
-      modelUri: null,
-      stateUri: null,
-      avgSeconds: null,
-      p50Seconds: null,
-      p95Seconds: null,
-    })),
-    edges: flowEdges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      target: edge.target,
-      modelUri: edge.objectType,
-      count: edge.count,
-      share: edge.share,
-    })),
-  };
-}
-
-export async function getOcpnGraph(payload: ProcessMiningRequest): Promise<OcpnGraph> {
-  const run = await mineProcess(payload);
-  const collapseObjects = payload.collapseObjects ?? true;
-
-  const transitionNodes = run.nodes.map(toTransitionNode);
-  const placeNodes = collapseObjects ? [] : buildPlaceNodes(run);
-  const edges = buildOcpnEdges(run, {
-    collapseObjects,
-    minShare: payload.minShare,
-  });
-
-  return {
-    nodes: [...placeNodes, ...transitionNodes],
-    edges,
-  };
-}
-
 export async function getProcessTraceDrilldown(
   handle: string,
   limit = 25
@@ -474,11 +307,4 @@ export async function getProcessTraceDrilldown(
     limit: String(limit),
   }).toString();
   return fetchApi<ProcessTraceDrilldownResponseContract>(`/process/traces?${query}`);
-}
-
-export async function interpretProcessRun(run: ProcessMineResponseContract) {
-  return fetchApi<unknown>('/ai/process/interpret', {
-    method: 'POST',
-    body: JSON.stringify({ run }),
-  });
 }

@@ -54,7 +54,7 @@ class _ObjectCentricLog:
 
 
 class OcpnMiningWrapper:
-    """Deterministic OCPN-style miner for the legacy `/process/mine` path."""
+    """Deterministic process-map miner retained for internal backend analysis flows."""
 
     def mine(
         self,

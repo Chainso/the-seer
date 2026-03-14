@@ -1,35 +1,3 @@
-export type OcpnNodeType = "PLACE" | "TRANSITION";
-
-export interface OcpnNode {
-  id: string;
-  label: string;
-  type: OcpnNodeType;
-  modelUri?: string | null;
-  stateUri?: string | null;
-  eventUri?: string | null;
-  firstSeen?: string | null;
-  lastSeen?: string | null;
-  medianSeen?: string | null;
-  count?: number | null;
-  avgSeconds?: number | null;
-  p50Seconds?: number | null;
-  p95Seconds?: number | null;
-}
-
-export interface OcpnEdge {
-  id: string;
-  source: string;
-  target: string;
-  modelUri?: string | null;
-  count: number;
-  share: number;
-}
-
-export interface OcpnGraph {
-  nodes: OcpnNode[];
-  edges: OcpnEdge[];
-}
-
 export interface ProcessMiningRequestContract {
   anchor_object_type: string;
   start_at: string;
@@ -38,42 +6,6 @@ export interface ProcessMiningRequestContract {
   max_events?: number;
   max_relations?: number;
   max_traces_per_handle?: number;
-}
-
-export interface ProcessMineNodeContract {
-  id: string;
-  label: string;
-  node_type: string;
-  frequency: number;
-  trace_handle: string;
-}
-
-export interface ProcessMineEdgeContract {
-  id: string;
-  source: string;
-  target: string;
-  object_type: string;
-  count: number;
-  trace_handle: string;
-}
-
-export interface ProcessPathStatContract {
-  object_type: string;
-  path: string;
-  count: number;
-  trace_handle: string;
-}
-
-export interface ProcessMineResponseContract {
-  run_id: string;
-  anchor_object_type: string;
-  start_at: string;
-  end_at: string;
-  nodes: ProcessMineNodeContract[];
-  edges: ProcessMineEdgeContract[];
-  object_types: string[];
-  path_stats: ProcessPathStatContract[];
-  warnings: string[];
 }
 
 export interface OcdfgNodeContract {

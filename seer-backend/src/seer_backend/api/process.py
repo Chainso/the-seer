@@ -18,8 +18,6 @@ from seer_backend.analytics.errors import (
 from seer_backend.analytics.models import (
     OcdfgMiningRequest,
     OcdfgMiningResponse,
-    ProcessMiningRequest,
-    ProcessMiningResponse,
     ProcessTraceDrilldownResponse,
 )
 from seer_backend.analytics.repository import ClickHouseProcessMiningRepository
@@ -80,26 +78,6 @@ def build_process_service(
 
 def get_process_service(request: Request) -> ProcessMiningService | UnavailableProcessMiningService:
     return request.app.state.process_service
-
-
-@router.post("/mine", response_model=ProcessMiningResponse)
-async def mine_process(
-    payload: ProcessMiningRequest,
-    request: Request,
-) -> ProcessMiningResponse:
-    service = get_process_service(request)
-    try:
-        return await service.mine(payload)
-    except ProcessMiningValidationError as exc:
-        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
-    except ProcessMiningLimitExceededError as exc:
-        raise _http_error(HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
-    except ProcessMiningNoDataError as exc:
-        raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    except ProcessMiningDependencyUnavailableError as exc:
-        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
-    except ProcessMiningError as exc:
-        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 
 @router.post("/ocdfg/mine", response_model=OcdfgMiningResponse)

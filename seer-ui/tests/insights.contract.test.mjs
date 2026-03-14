@@ -100,9 +100,17 @@ test("process mining panel consumes shared ontology display resolver contract", 
   assert.match(processMiningPanel, /Included object models/);
   assert.match(processMiningPanel, /modelUris:\s*resolvedModelUris/);
   assert.match(processMiningPanel, /Object-Centric Directly-Follows Graph \(Primary\)/);
-  assert.match(processMiningPanel, /Object-Centric Petri Net \(Secondary\)/);
   assert.match(processApi, /include_object_types:\s*includeObjectTypes/);
   assert.match(processMiningPanel, /getOcdfgGraph/);
+  assert.match(processApi, /\/process\/ocdfg\/mine/);
+  assert.doesNotMatch(processApi, /\/process\/mine/);
+  assert.doesNotMatch(processMiningPanel, /Object-Centric Petri Net \(Secondary\)/);
+  assert.doesNotMatch(processMiningPanel, /Inductive Miner \(BPMN\)/);
+  assert.doesNotMatch(processMiningPanel, /Secondary OCPN options/);
+  assert.doesNotMatch(processMiningPanel, /Trace ID \(optional\)/);
+  assert.doesNotMatch(processMiningPanel, /Workflow ID \(optional\)/);
+  assert.doesNotMatch(processApi, /traceId\?:/);
+  assert.doesNotMatch(processApi, /workflowId\?:/);
   assert.doesNotMatch(processMiningPanel, /showIntro\?:/);
   assert.doesNotMatch(processMiningPanel, /Object-Centric Process Explorer/);
   assert.doesNotMatch(processMiningPanel, /const iriLocalName =/);

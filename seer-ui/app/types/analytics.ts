@@ -18,8 +18,6 @@ export interface RuntimeOverlayQuery {
   from?: string;
   to?: string;
   filters?: Record<string, string>;
-  traceId?: string;
-  workflowId?: string;
 }
 
 export interface RuntimeOverlayStats {

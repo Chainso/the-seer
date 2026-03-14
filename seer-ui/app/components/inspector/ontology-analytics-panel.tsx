@@ -68,8 +68,6 @@ export function OntologyAnalyticsPanel() {
   const [modelUri, setModelUri] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [traceId, setTraceId] = useState("");
-  const [workflowId, setWorkflowId] = useState("");
   const [edgeMetricMode, setEdgeMetricMode] = useState<"share" | "count">("share");
   const [stateDurationMetric, setStateDurationMetric] = useState<"avgSeconds" | "p50Seconds" | "p95Seconds">("p95Seconds");
   const [filters, setFilters] = useState<FilterPair[]>([{ id: "filter-0", key: "", value: "" }]);
@@ -375,8 +373,6 @@ export function OntologyAnalyticsPanel() {
         from: resolvedFrom,
         to: resolvedTo,
         filters: filterMap,
-        traceId: traceId || undefined,
-        workflowId: workflowId || undefined,
       });
       setOverlay(nextOverlay);
     } catch (err) {
@@ -465,17 +461,6 @@ export function OntologyAnalyticsPanel() {
             <Button className="w-full" onClick={loadAnalytics} disabled={!modelUri || loading}>
               {loading ? "Loading..." : "Run analysis"}
             </Button>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="trace">Trace ID (optional)</Label>
-            <Input id="trace" placeholder="UUID" value={traceId} onChange={e => setTraceId(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="workflow">Workflow ID (optional)</Label>
-            <Input id="workflow" placeholder="UUID" value={workflowId} onChange={e => setWorkflowId(e.target.value)} />
           </div>
         </div>
 

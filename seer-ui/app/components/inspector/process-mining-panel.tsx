@@ -12,164 +12,14 @@ import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 
-import { getOcdfgGraph, getOcpnGraph } from "@/app/lib/api/process-mining";
+import { getOcdfgGraph } from "@/app/lib/api/process-mining";
 import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import { buildReferenceEdges } from "@/app/components/ontology/graph-reference-edges";
 import { useOntologyGraphContext } from "@/app/components/providers/ontology-graph-provider";
 import type { OntologyGraph } from "@/app/types/ontology";
-import type { OcdfgGraph, OcpnGraph } from "@/app/types/process-mining";
-import { OcpnGraph as OcpnGraphView } from "./ocpn-graph";
+import type { OcdfgGraph } from "@/app/types/process-mining";
 import { OcdfgGraph as OcdfgGraphView } from "./ocdfg-graph";
-import { BpmnGraph as BpmnGraphView } from "./bpmn-graph";
-import { mergeSearchParams, parseBooleanSearchParam } from "@/app/lib/url-state";
-
-type ProcessTreeNode = {
-  id: string;
-  operator: string | null;
-  label: string | null;
-  children: ProcessTreeNode[];
-};
-
-type BpmnNode = {
-  id: string;
-  name: string;
-  type: string | null;
-  incoming: Record<string, unknown>;
-  outgoing: Record<string, unknown>;
-  level?: number;
-};
-
-type BpmnEdge = {
-  id: string;
-  source: BpmnNode;
-  target: BpmnNode;
-};
-
-type BpmnGraph = {
-  nodes: Record<string, BpmnNode>;
-  edges: Record<string, BpmnEdge>;
-  getOrderedNodesAndEdges?: () => {
-    nodesId: string[];
-    edgesId: [string, string][];
-    invMap: Record<string, string>;
-  };
-};
-
-type Pm4jsGlobal = typeof globalThis & {
-  __pm4jsReady?: boolean;
-  global?: typeof globalThis;
-  FrequencyDfg?: new (
-    activities: Record<string, number>,
-    startActivities: Record<string, number>,
-    endActivities: Record<string, number>,
-    pathsFrequency: Record<string, number>
-  ) => unknown;
-  InductiveMiner?: { applyDfg: (dfg: unknown, threshold?: number, removeNoise?: boolean) => ProcessTreeNode };
-  ProcessTreeToPetriNetConverter?: { apply: (tree: ProcessTreeNode) => unknown };
-  WfNetToBpmnConverter?: { apply: (net: unknown) => BpmnGraph };
-};
-
-const ensurePm4js = async (): Promise<Pm4jsGlobal> => {
-  const globalRef = globalThis as Pm4jsGlobal;
-  if (!globalRef.global) {
-    globalRef.global = globalRef;
-  }
-  if (!globalRef.__pm4jsReady) {
-    await import("pm4js");
-    globalRef.__pm4jsReady = true;
-  }
-  return globalRef;
-};
-
-const buildFrequencyDfg = (graph: OcpnGraph) => {
-  const transitions = graph.nodes.filter(node => node.type === "TRANSITION");
-  const activityByNodeId = new Map<string, string>();
-  transitions.forEach(node => {
-    activityByNodeId.set(node.id, node.eventUri ?? node.label ?? node.id);
-  });
-
-  const activityCounts: Record<string, number> = {};
-  const incoming: Record<string, number> = {};
-  const outgoing: Record<string, number> = {};
-  const pathsFrequency: Record<string, number> = {};
-
-  transitions.forEach(node => {
-    const activity = activityByNodeId.get(node.id);
-    if (!activity) return;
-    const count = node.count ?? 0;
-    if (count > 0) {
-      activityCounts[activity] = count;
-    }
-  });
-
-  graph.edges.forEach(edge => {
-    const source = activityByNodeId.get(edge.source);
-    const target = activityByNodeId.get(edge.target);
-    if (!source || !target) return;
-    const key = `${source},${target}`;
-    pathsFrequency[key] = (pathsFrequency[key] ?? 0) + edge.count;
-    outgoing[source] = (outgoing[source] ?? 0) + edge.count;
-    incoming[target] = (incoming[target] ?? 0) + edge.count;
-  });
-
-  activityByNodeId.forEach(activity => {
-    if (!(activity in activityCounts)) {
-      activityCounts[activity] = (incoming[activity] ?? 0) + (outgoing[activity] ?? 0);
-    }
-    if (activityCounts[activity] <= 0) {
-      activityCounts[activity] = 1;
-    }
-  });
-
-  const startActivities: Record<string, number> = {};
-  const endActivities: Record<string, number> = {};
-
-  Object.keys(activityCounts).forEach(activity => {
-    const inCount = incoming[activity] ?? 0;
-    const outCount = outgoing[activity] ?? 0;
-    if (inCount === 0 && outCount > 0) {
-      startActivities[activity] = outCount;
-    }
-    if (outCount === 0 && inCount > 0) {
-      endActivities[activity] = inCount;
-    }
-  });
-
-  if (Object.keys(startActivities).length === 0 && Object.keys(activityCounts).length > 0) {
-    const startFallback = Object.entries(outgoing).sort((a, b) => b[1] - a[1])[0];
-    const activity = startFallback ? startFallback[0] : Object.keys(activityCounts)[0];
-    startActivities[activity] = outgoing[activity] ?? activityCounts[activity] ?? 1;
-  }
-
-  if (Object.keys(endActivities).length === 0 && Object.keys(activityCounts).length > 0) {
-    const endFallback = Object.entries(incoming).sort((a, b) => b[1] - a[1])[0];
-    const activity = endFallback ? endFallback[0] : Object.keys(activityCounts)[0];
-    endActivities[activity] = incoming[activity] ?? activityCounts[activity] ?? 1;
-  }
-
-  return { activityCounts, startActivities, endActivities, pathsFrequency };
-};
-
-const mineBpmnGraph = async (graph: OcpnGraph): Promise<BpmnGraph | null> => {
-  if (!graph.edges.length) {
-    return null;
-  }
-  const globalRef = await ensurePm4js();
-  if (
-    !globalRef.FrequencyDfg ||
-    !globalRef.InductiveMiner ||
-    !globalRef.ProcessTreeToPetriNetConverter ||
-    !globalRef.WfNetToBpmnConverter
-  ) {
-    throw new Error("pm4js failed to initialize.");
-  }
-
-  const { activityCounts, startActivities, endActivities, pathsFrequency } = buildFrequencyDfg(graph);
-  const frequencyDfg = new globalRef.FrequencyDfg(activityCounts, startActivities, endActivities, pathsFrequency);
-  const processTree = globalRef.InductiveMiner.applyDfg(frequencyDfg, 0.0, false);
-  const petriNet = globalRef.ProcessTreeToPetriNetConverter.apply(processTree);
-  return globalRef.WfNetToBpmnConverter.apply(petriNet);
-};
+import { mergeSearchParams } from "@/app/lib/url-state";
 
 interface FilterPair {
   id: string;
@@ -426,27 +276,15 @@ export function ProcessMiningPanel({
   const [to, setTo] = useState(() =>
     normalizeDateTimeLocalValue(searchParams.get("pm_to"), defaultWindowRange().to)
   );
-  const [traceId, setTraceId] = useState(() => searchParams.get("pm_trace") ?? "");
-  const [workflowId, setWorkflowId] = useState(() => searchParams.get("pm_workflow") ?? "");
   const [minShare, setMinShare] = useState(() => searchParams.get("pm_min_share") ?? "0");
-  const [collapseObjects, setCollapseObjects] = useState(() =>
-    parseBooleanSearchParam(searchParams.get("pm_collapse"), true)
-  );
   const [filters, setFilters] = useState<FilterPair[]>(() => parseMiningFilters(searchParams));
 
   const [ocdfgGraph, setOcdfgGraph] = useState<OcdfgGraph | null>(null);
-  const [ocpnGraph, setOcpnGraph] = useState<OcpnGraph | null>(null);
-  const [ocpnGraphCollapsed, setOcpnGraphCollapsed] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [mining, setMining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(() => searchParams.get("pm_node"));
-  const [bpmnGraph, setBpmnGraph] = useState<BpmnGraph | null>(null);
-  const [bpmnError, setBpmnError] = useState<string | null>(null);
   const resultsSummaryRef = useRef<HTMLDivElement | null>(null);
   const ocdfgSectionRef = useRef<HTMLDivElement | null>(null);
-  const ocpnSectionRef = useRef<HTMLDivElement | null>(null);
-  const bpmnSectionRef = useRef<HTMLDivElement | null>(null);
   const autoRunSignatureRef = useRef("");
   const completionSignatureRef = useRef("");
   const filterSyncSourceRef = useRef<"local" | "url">("local");
@@ -464,11 +302,7 @@ export function ProcessMiningPanel({
 
   const clearMiningResults = useCallback(() => {
     setOcdfgGraph(null);
-    setOcpnGraph(null);
-    setOcpnGraphCollapsed(false);
     setSelectedNodeId(null);
-    setBpmnGraph(null);
-    setBpmnError(null);
     completionSignatureRef.current = "";
   }, []);
 
@@ -495,10 +329,7 @@ export function ProcessMiningPanel({
     const nextPreset = searchParams.get("pm_preset");
     const nextWindowPreset =
       nextPreset === "7d" || nextPreset === "30d" || nextPreset === "custom" ? nextPreset : "24h";
-    const nextTraceId = searchParams.get("pm_trace") ?? "";
-    const nextWorkflowId = searchParams.get("pm_workflow") ?? "";
     const nextMinShare = searchParams.get("pm_min_share") ?? "0";
-    const nextCollapseObjects = parseBooleanSearchParam(searchParams.get("pm_collapse"), true);
     const nextSelectedNodeId = searchParams.get("pm_node");
     const nextFilters = parseMiningFilters(searchParams);
     const nextRunRequested = searchParams.get("pm_run") === "1";
@@ -514,10 +345,7 @@ export function ProcessMiningPanel({
       const nextTo = normalizeDateTimeLocalValue(searchParams.get("pm_to"), fallbackWindow.to);
       return current === nextTo ? current : nextTo;
     });
-    setTraceId((current) => (current === nextTraceId ? current : nextTraceId));
-    setWorkflowId((current) => (current === nextWorkflowId ? current : nextWorkflowId));
     setMinShare((current) => (current === nextMinShare ? current : nextMinShare));
-    setCollapseObjects((current) => (current === nextCollapseObjects ? current : nextCollapseObjects));
     setSelectedNodeId((current) => (current === nextSelectedNodeId ? current : nextSelectedNodeId));
     setFilters((current) => {
       if (areMiningFiltersEqual(current, nextFilters)) {
@@ -600,25 +428,6 @@ export function ProcessMiningPanel({
     }, {});
   }, [ocdfgGraph, ontologyDisplay]);
 
-  const ocpnEventLabels = useMemo(() => {
-    if (!ocpnGraph) {
-      return {};
-    }
-    return ocpnGraph.nodes.reduce<Record<string, string>>((acc, node) => {
-      if (node.type !== "TRANSITION") {
-        return acc;
-      }
-      const label = ontologyDisplay.displayEventType(node.eventUri ?? node.label ?? node.id);
-      if (node.eventUri) {
-        acc[node.eventUri] = label;
-      }
-      if (node.label) {
-        acc[node.label] = label;
-      }
-      return acc;
-    }, {});
-  }, [ocpnGraph, ontologyDisplay]);
-
   const resolvedFrom = useMemo(() => toIsoDateTime(from), [from]);
   const resolvedTo = useMemo(() => toIsoDateTime(to), [to]);
 
@@ -648,6 +457,7 @@ export function ProcessMiningPanel({
       pm_preset: preset,
       pm_from: nextFrom,
       pm_to: nextTo,
+      pm_collapse: null,
       pm_run: null,
       pm_node: null,
     });
@@ -660,15 +470,13 @@ export function ProcessMiningPanel({
       pm_preset: windowPreset,
       pm_from: from,
       pm_to: to,
-      pm_trace: traceId || null,
-      pm_workflow: workflowId || null,
       pm_min_share: minShare,
-      pm_collapse: collapseObjects ? "1" : "0",
+      pm_collapse: null,
       pm_filter: serializeMiningFilters(filters),
       pm_run: "1",
       pm_node: nodeId || null,
     });
-  }, [collapseObjects, depth, filters, from, minShare, modelUri, replaceQuery, to, traceId, windowPreset, workflowId]);
+  }, [depth, filters, from, minShare, modelUri, replaceQuery, to, windowPreset]);
 
   const loadProcessMining = useCallback(async () => {
     if (!modelUri) return;
@@ -689,27 +497,17 @@ export function ProcessMiningPanel({
         modelUris: resolvedModelUris,
         from: resolvedFrom,
         to: resolvedTo,
-        traceId: traceId || undefined,
-        workflowId: workflowId || undefined,
         filters: filterPayload,
         minShare: Number.isNaN(Number(minShare)) ? undefined : Number(minShare) / 100,
-        collapseObjects,
       };
-      const [ocdfgData, ocpnData] = await Promise.all([
-        getOcdfgGraph(requestPayload),
-        getOcpnGraph(requestPayload),
-      ]);
+      const ocdfgData = await getOcdfgGraph(requestPayload);
       const nextSelectedNodeId =
         requestedNodeId &&
         ocdfgData.nodes.some((node) => node.id === requestedNodeId && node.kind === "activity")
           ? requestedNodeId
           : null;
       setOcdfgGraph(ocdfgData);
-      setOcpnGraph(ocpnData);
-      setOcpnGraphCollapsed(collapseObjects);
       setSelectedNodeId(nextSelectedNodeId);
-      setBpmnGraph(null);
-      setBpmnError(null);
       persistRunQuery(nextSelectedNodeId);
     } catch (err) {
       replaceQuery({
@@ -721,7 +519,6 @@ export function ProcessMiningPanel({
       setLoading(false);
     }
   }, [
-    collapseObjects,
     filterPayload,
     minShare,
     modelUri,
@@ -731,42 +528,7 @@ export function ProcessMiningPanel({
     resolvedModelUris,
     resolvedTo,
     searchParams,
-    traceId,
-    workflowId,
   ]);
-
-  useEffect(() => {
-    let active = true;
-    if (!ocpnGraph || !ocpnGraphCollapsed) {
-      setBpmnGraph(null);
-      setBpmnError(null);
-      return () => {
-        active = false;
-      };
-    }
-
-    const runMining = async () => {
-      setMining(true);
-      try {
-        const bpmn = await mineBpmnGraph(ocpnGraph);
-        if (!active) return;
-        setBpmnGraph(bpmn);
-        setBpmnError(null);
-      } catch (err) {
-        if (!active) return;
-        setBpmnGraph(null);
-        setBpmnError(err instanceof Error ? err.message : "Failed to run inductive miner");
-      } finally {
-        if (!active) return;
-        setMining(false);
-      }
-    };
-
-    runMining();
-    return () => {
-      active = false;
-    };
-  }, [ocpnGraph, ocpnGraphCollapsed]);
 
   useEffect(() => {
     if (!isActive) {
@@ -784,10 +546,7 @@ export function ProcessMiningPanel({
       depth,
       from,
       to,
-      traceId,
-      workflowId,
       minShare,
-      collapseObjects,
       serializeMiningFilters(filters).join("|"),
     ].join("|");
     if (autoRunSignatureRef.current === signature) {
@@ -796,7 +555,6 @@ export function ProcessMiningPanel({
     autoRunSignatureRef.current = signature;
     void loadProcessMining();
   }, [
-    collapseObjects,
     depth,
     from,
     isActive,
@@ -810,8 +568,6 @@ export function ProcessMiningPanel({
     resolvedTo,
     searchParams,
     to,
-    traceId,
-    workflowId,
     filters,
   ]);
 
@@ -836,10 +592,7 @@ export function ProcessMiningPanel({
       from,
       to,
       depth,
-      traceId,
-      workflowId,
       minShare,
-      collapseObjects,
       serializeMiningFilters(filters).join("|"),
       ocdfgGraph.nodes.length,
       ocdfgGraph.edges.length,
@@ -851,7 +604,7 @@ export function ProcessMiningPanel({
     window.requestAnimationFrame(() => {
       resultsSummaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
-  }, [collapseObjects, depth, filters, from, isActive, loading, minShare, modelUri, ocdfgGraph, to, traceId, workflowId]);
+  }, [depth, filters, from, isActive, loading, minShare, modelUri, ocdfgGraph, to]);
 
   const selectedNode = useMemo(() => {
     if (!ocdfgGraph || !selectedNodeId) return null;
@@ -988,37 +741,10 @@ export function ProcessMiningPanel({
     });
   };
 
-  const handleTraceIdChange = (value: string) => {
-    setTraceId(value);
-    replaceQuery({
-      pm_trace: value,
-      pm_run: null,
-      pm_node: null,
-    });
-  };
-
-  const handleWorkflowIdChange = (value: string) => {
-    setWorkflowId(value);
-    replaceQuery({
-      pm_workflow: value,
-      pm_run: null,
-      pm_node: null,
-    });
-  };
-
   const handleMinShareChange = (value: string) => {
     setMinShare(value);
     replaceQuery({
       pm_min_share: value,
-      pm_run: null,
-      pm_node: null,
-    });
-  };
-
-  const handleCollapseObjectsChange = (checked: boolean) => {
-    setCollapseObjects(checked);
-    replaceQuery({
-      pm_collapse: checked ? "1" : "0",
       pm_run: null,
       pm_node: null,
     });
@@ -1107,18 +833,7 @@ export function ProcessMiningPanel({
           )}
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="trace">Trace ID (optional)</Label>
-            <Input id="trace" placeholder="UUID" value={traceId} onChange={e => handleTraceIdChange(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="workflow">Workflow ID (optional)</Label>
-            <Input id="workflow" placeholder="UUID" value={workflowId} onChange={e => handleWorkflowIdChange(e.target.value)} />
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="mt-4 lg:max-w-sm">
           <div className="space-y-2">
             <Label htmlFor="minShare">Min edge share (%)</Label>
             <Input
@@ -1130,18 +845,6 @@ export function ProcessMiningPanel({
               value={minShare}
               onChange={e => handleMinShareChange(e.target.value)}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="collapseObjects">Secondary OCPN options</Label>
-            <div className="flex items-center gap-3 rounded-xl border border-border bg-background px-3 py-2 text-sm">
-              <input
-                id="collapseObjects"
-                type="checkbox"
-                checked={collapseObjects}
-                onChange={e => handleCollapseObjectsChange(e.target.checked)}
-              />
-              <span>Collapse object places for OCPN and enable BPMN conversion</span>
-            </div>
           </div>
         </div>
 
@@ -1195,18 +898,12 @@ export function ProcessMiningPanel({
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">Results Ready</p>
                 <h2 className="mt-2 font-display text-2xl">Mining completed for {modelLabels[modelUri] ?? "selected model"}</h2>
                 <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                  Review the OC-DFG first, then inspect the secondary OCPN and BPMN views if needed.
+                  Review the OC-DFG and use trace drill-down on activities and edges to inspect supporting evidence.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button size="sm" onClick={() => ocdfgSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
                   Jump to OC-DFG
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => ocpnSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-                  Jump to OCPN
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => bpmnSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}>
-                  Jump to BPMN
                 </Button>
               </div>
             </div>
@@ -1216,11 +913,11 @@ export function ProcessMiningPanel({
                 <p className="mt-2 text-sm font-medium">{includedModels.length}</p>
               </div>
               <div className="rounded-xl border border-border bg-background px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">OC-DFG nodes</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Nodes</p>
                 <p className="mt-2 text-sm font-medium">{ocdfgGraph.nodes.length}</p>
               </div>
               <div className="rounded-xl border border-border bg-background px-4 py-3">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">OC-DFG edges</p>
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Edges</p>
                 <p className="mt-2 text-sm font-medium">{ocdfgGraph.edges.length}</p>
               </div>
               <div className="rounded-xl border border-border bg-background px-4 py-3">
@@ -1374,94 +1071,6 @@ export function ProcessMiningPanel({
             ))}
           </div>
         )}
-      </Card>
-      </div>
-
-      <div ref={ocpnSectionRef}>
-      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          <Layers className="h-4 w-4" />
-          Object-Centric Petri Net (Secondary)
-        </div>
-        <div className="mt-4">
-          {ocpnGraph ? (
-            <OcpnGraphView
-              graph={ocpnGraph}
-              modelLabels={modelLabels}
-              eventLabels={ocpnEventLabels}
-              selectedNodeId={null}
-              onNodeSelect={() => {}}
-              collapseObjects={collapseObjects}
-            />
-          ) : (
-            <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-              Run mining to render the secondary OCPN view.
-            </div>
-          )}
-        </div>
-        {ocpnGraph && ocpnGraph.edges.length === 0 && (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            No OCPN edges yet. This usually means events are missing object links in `event_object_links`.
-          </div>
-        )}
-      </Card>
-      </div>
-
-      <div ref={bpmnSectionRef}>
-      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-          <Layers className="h-4 w-4" />
-          Inductive Miner (BPMN)
-        </div>
-        <div className="mt-4">
-          {!ocpnGraph || !ocpnGraphCollapsed ? (
-            <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-              Enable OCPN collapse and run mining to generate the secondary BPMN model.
-            </div>
-          ) : mining ? (
-            <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-              Running inductive miner...
-            </div>
-          ) : bpmnGraph ? (
-            <BpmnGraphView graph={bpmnGraph} labelMap={ocpnEventLabels} />
-          ) : bpmnError ? (
-            <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-              {bpmnError}
-            </div>
-          ) : (
-            <div className="flex h-[520px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-              No inductive model yet. Try lowering the minimum edge share.
-            </div>
-          )}
-        </div>
-        <div className="mt-4 flex flex-wrap gap-4 text-xs text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-4 w-6 items-center justify-center rounded-md border border-[color:var(--graph-node-action-border)] bg-[color:var(--graph-node-action-bg)]" />
-            Task (business step)
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="relative inline-flex h-4 w-4 rotate-45 items-center justify-center rounded border border-[color:var(--graph-node-trigger-border)] bg-[color:var(--graph-node-trigger-bg)] text-[0.5rem] font-semibold text-foreground">
-              X
-            </span>
-            Decision gateway
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="relative inline-flex h-4 w-4 rotate-45 items-center justify-center rounded border border-[color:var(--graph-node-trigger-border)] bg-[color:var(--graph-node-trigger-bg)] text-[0.5rem] font-semibold text-foreground">
-              +
-            </span>
-            Parallel gateway
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-[color:var(--graph-node-default-border)] bg-[color:var(--graph-node-default-bg)]" />
-            Event (start or end)
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-0.5 w-6 items-center justify-center rounded-full bg-[color:var(--graph-edge-default)]">
-              <span className="ml-5 h-0 w-0 border-y-4 border-l-4 border-y-transparent border-l-[color:var(--graph-edge-default)]" />
-            </span>
-            Sequence flow
-          </div>
-        </div>
       </Card>
       </div>
     </div>

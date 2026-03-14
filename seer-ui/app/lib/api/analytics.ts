@@ -1,6 +1,6 @@
 import { recordPerformanceMetric } from '@/app/lib/performance-budget';
 import { getOntologyGraph } from './ontology';
-import { mineProcess, type ProcessMineResponseContract } from './process-mining';
+import { mineOcdfg, type ProcessMiningRequest } from './process-mining';
 import type {
   FlowMetric,
   OntologyRuntimeOverlay,
@@ -8,6 +8,7 @@ import type {
   StateDurationMetric,
 } from '@/app/types/analytics';
 import type { OntologyEdge, OntologyGraph, OntologyNode } from '@/app/types/ontology';
+import type { OcdfgMiningResponseContract } from '@/app/types/process-mining';
 
 interface TransitionStateMapping {
   fromState: string;
@@ -145,19 +146,19 @@ function buildTransitionIndex(graph: OntologyGraph, modelUri: string): Transitio
 }
 
 function deriveFlowMetrics(
-  run: ProcessMineResponseContract,
+  run: OcdfgMiningResponseContract,
   transitionIndex: TransitionIndex
 ): FlowMetric[] {
   const counts = new Map<string, number>();
 
   run.nodes.forEach((node) => {
-    const count = Number(node.frequency) || 0;
+    const count = Number(node.count) || 0;
     if (count <= 0) {
       return;
     }
 
     const candidates = [
-      normalizeMatchKey(node.label),
+      normalizeMatchKey(node.activity),
       normalizeMatchKey(node.id.replace(/^event:/i, '')),
     ];
 
@@ -195,7 +196,7 @@ function deriveFlowMetrics(
 }
 
 function deriveStateDurations(
-  run: ProcessMineResponseContract,
+  run: OcdfgMiningResponseContract,
   transitionIndex: TransitionIndex,
   flows: FlowMetric[]
 ): StateDurationMetric[] {
@@ -239,17 +240,15 @@ async function deriveCanonicalOverlayData(query: RuntimeOverlayQuery): Promise<{
   flows: FlowMetric[];
   stateDurations: StateDurationMetric[];
 }> {
+  const miningPayload: ProcessMiningRequest = {
+    modelUri: query.modelUri,
+    from: query.from,
+    to: query.to,
+    filters: query.filters,
+  };
   const [graph, run] = await Promise.all([
     getOntologyGraph(),
-    mineProcess({
-      modelUri: query.modelUri,
-      from: query.from,
-      to: query.to,
-      traceId: query.traceId,
-      workflowId: query.workflowId,
-      filters: query.filters,
-      collapseObjects: true,
-    }),
+    mineOcdfg(miningPayload),
   ]);
 
   const transitionIndex = buildTransitionIndex(graph, query.modelUri);

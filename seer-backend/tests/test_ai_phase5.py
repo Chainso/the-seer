@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -22,6 +23,7 @@ from seer_backend.ai.ontology_copilot import (
     OntologyCopilotService,
 )
 from seer_backend.ai.skills import AssistantSkillRegistry
+from seer_backend.analytics.models import ProcessMiningRequest
 from seer_backend.analytics.rca_repository import InMemoryRootCauseRepository
 from seer_backend.analytics.rca_service import RootCauseService, UnavailableRootCauseService
 from seer_backend.analytics.repository import InMemoryProcessMiningRepository
@@ -705,19 +707,21 @@ def test_ai_gateway_process_interpretation_returns_analytical_caveats() -> None:
     client = build_client()
     seed_fixture_dataset(client)
 
-    run = client.post(
-        "/api/v1/process/mine",
-        json={
-            "anchor_object_type": _ORDER_URI,
-            "start_at": "2026-02-22T07:00:00Z",
-            "end_at": "2026-02-22T11:00:00Z",
-        },
+    run = asyncio.run(
+        client.app.state.process_service.mine(
+            ProcessMiningRequest.model_validate(
+                {
+                    "anchor_object_type": _ORDER_URI,
+                    "start_at": "2026-02-22T07:00:00Z",
+                    "end_at": "2026-02-22T11:00:00Z",
+                }
+            )
+        )
     )
-    assert run.status_code == 200, run.text
 
     response = client.post(
         "/api/v1/ai/process/interpret",
-        json={"run": run.json()},
+        json={"run": run.model_dump(mode="json")},
     )
 
     assert response.status_code == 200, response.text

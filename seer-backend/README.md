@@ -37,16 +37,13 @@ and are applied lazily on first history API usage.
 
 ## Phase 3 Process Mining APIs
 
-1. `POST /api/v1/process/mine`
-2. `POST /api/v1/process/ocdfg/mine`
-3. `GET /api/v1/process/traces`
+1. `POST /api/v1/process/ocdfg/mine`
+2. `GET /api/v1/process/traces`
 
 Mining requests require `anchor_object_type`, `start_at`, and `end_at`.
-Responses include the UI payload fields (`nodes`, `edges`, `object_types`, `path_stats`)
-plus trace drill-down handles for model elements.
-
-`POST /api/v1/process/mine` remains the legacy OCPN-style path and is backed by the
-deterministic backend miner directly.
+They do not accept `traceId` or `workflowId` request fields; clients must use
+object-model scope plus time window, then use trace drill-down handles for deeper inspection.
+Responses include the UI payload fields plus trace drill-down handles for model elements.
 
 `POST /api/v1/process/ocdfg/mine` returns OC-DFG payload fields (`nodes`, `edges`,
 `start_activities`, `end_activities`, `object_types`, `warnings`) with trace handles

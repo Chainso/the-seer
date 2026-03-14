@@ -105,8 +105,6 @@ export function HistoryPanel() {
       pm_filter: null,
       pm_run: null,
       pm_node: null,
-      pm_trace: null,
-      pm_workflow: null,
     });
   };
 
