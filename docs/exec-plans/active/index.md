@@ -84,6 +84,7 @@ Current post-MVP execution state:
 
 - `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/object-store-combined-rca-ocdfg-workspace.md` (archived on 2026-03-14 after replacing Object Store's embedded RCA/OC-DFG tabs with one combined workspace, adding anchor-only OC-DFG comparison support for RCA results, updating the relevant specs, and validating with backend Ruff/pytest plus targeted UI contract tests and `npm run build`)
 - `completed`: `docs/exec-plans/completed/remove-ocpn-and-inductive-miner.md` (archived on 2026-03-14 after removing the legacy OCPN/BPMN process-mining UI path, migrating the remaining frontend analytics overlay off `/process/mine`, deleting the unused route, and validating with targeted UI contract/build plus backend pytest/Ruff)
 - `completed`: `docs/exec-plans/completed/ocdfg-trace-workflow-scope-removal.md` (archived on 2026-03-14 after removing stale `traceId` / `workflowId` process-mining scope inputs from the inspector and analytics UI, tightening shared frontend contracts, and validating with targeted UI contract/build plus backend pytest/Ruff)
 - `completed`: `docs/exec-plans/completed/ocdfg-edge-query-null-lag-fix.md` (archived on 2026-03-14 after fixing ClickHouse `lagInFrame` default leakage that emitted synthetic empty-source OC-DFG edges and epoch-scale durations, adding regression coverage, and validating with targeted backend pytest/Ruff plus the OC-DFG UI contract test)

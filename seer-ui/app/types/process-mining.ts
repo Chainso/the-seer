@@ -3,9 +3,16 @@ export interface ProcessMiningRequestContract {
   start_at: string;
   end_at: string;
   include_object_types?: string[];
+  anchor_filters?: ProcessMiningAnchorFilterContract[];
   max_events?: number;
   max_relations?: number;
   max_traces_per_handle?: number;
+}
+
+export interface ProcessMiningAnchorFilterContract {
+  field: string;
+  op: "eq" | "ne" | "contains" | "gt" | "gte" | "lt" | "lte";
+  value: string;
 }
 
 export interface OcdfgNodeContract {

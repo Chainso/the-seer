@@ -53,7 +53,10 @@ Mining request scope semantics:
 2. Backend mines events in the time window where at least one included object type participates.
 3. Relation/object extraction is filtered to included object types.
 4. If `include_object_types` is omitted, backend falls back to anchor-only behavior (`anchor_object_type`).
-5. Mining scope does not accept user-supplied `traceId` or `workflowId`; narrowing happens through object-model scope, time window, and trace drill-down after the run.
+5. `POST /api/v1/process/ocdfg/mine` may additionally accept optional `anchor_filters[]` for anchor-object payload filtering.
+6. `anchor_filters[]` currently supports only `anchor.<field>` payload paths for the Object Store RCA comparison flow.
+7. Non-anchor RCA rule families are intentionally out of scope for OC-DFG comparison v1 and must not be silently approximated.
+8. Mining scope does not accept user-supplied `traceId` or `workflowId`; narrowing happens through object-model scope, time window, anchor filters when present, and trace drill-down after the run.
 
 ## Acceptance Expectations
 
@@ -71,9 +74,11 @@ Mining request scope semantics:
 12. Completed-state summaries and warning/empty-result states remain visible and understandable after the run finishes.
 13. URL-backed mining state restores tab, scope, and run-completed context across refresh and direct links.
 14. Invalid or partial mining query params normalize safely instead of breaking the view.
+15. Trace handles preserve `anchor_filters[]` context when filtered OC-DFG runs are used for comparison.
 
 ## Out of Scope (Phase 3)
 
 1. Conformance checking and simulation.
 2. Large-dataset tuning beyond configured guardrails.
 3. Non-object-centric mining methods.
+4. OC-DFG comparison support for non-anchor RCA rule families such as event-count/presence or depth-neighbor payload features.

@@ -51,5 +51,6 @@ Each completed plan should preserve:
 39. `ocdfg-edge-query-null-lag-fix.md` - completed (2026-03-14)
 40. `ocdfg-trace-workflow-scope-removal.md` - completed (2026-03-14)
 41. `remove-ocpn-and-inductive-miner.md` - completed (2026-03-14)
-42. `execution-plan-policy-and-skill-alignment.md` - completed (2026-03-15)
-43. `phase-handoff-capsules-in-execution-plans.md` - completed (2026-03-15)
+42. `object-store-combined-rca-ocdfg-workspace.md` - completed (2026-03-14)
+43. `execution-plan-policy-and-skill-alignment.md` - completed (2026-03-15)
+44. `phase-handoff-capsules-in-execution-plans.md` - completed (2026-03-15)

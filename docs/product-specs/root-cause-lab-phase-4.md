@@ -2,7 +2,7 @@
 
 **Status:** completed  
 **Owner phase:** `docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`  
-**Last updated:** 2026-02-22
+**Last updated:** 2026-03-14
 
 ---
 
@@ -35,6 +35,18 @@ Define user-facing behavior for MVP Root-Cause Lab configuration, ranked insight
 2. `GET /api/v1/root-cause/evidence`
 3. `POST /api/v1/root-cause/assist/setup`
 4. `POST /api/v1/root-cause/assist/interpret`
+
+## Object Store Embedding Notes
+
+1. Object Store does not embed the full standalone RCA surface.
+2. Inside Object Store, RCA is reduced to:
+   - shared time/depth scope,
+   - outcome selection,
+   - manual run,
+   - ranked result table,
+   - optional OC-DFG comparison for anchor-field-only insights.
+3. Object Store does not render RCA evidence traces or AI interpretation panels in this combined workspace.
+4. If a selected RCA insight contains non-anchor rule families, Object Store keeps the result selectable but does not render a comparison OC-DFG for it.
 
 ## Acceptance Expectations
 

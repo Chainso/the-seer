@@ -17,6 +17,7 @@ test("inspector root and object store route expose model-locked object store tab
   const historyRoute = read("app/inspector/history/page.tsx");
   const objectRoute = read("app/inspector/history/object/page.tsx");
   const historyPanel = read("app/components/inspector/history-panel.tsx");
+  const insightsWorkspace = read("app/components/inspector/object-store-insights-workspace.tsx");
   const liveObjectsPanel = read("app/components/inspector/history-live-objects-panel.tsx");
   const detailsPanel = read("app/components/inspector/object-history-details-panel.tsx");
   const displaySurface = read("app/components/inspector/object-history-display-surface.tsx");
@@ -31,8 +32,15 @@ test("inspector root and object store route expose model-locked object store tab
   assert.match(historyPanel, /Object Store always stays scoped to one object model/);
   assert.match(historyPanel, /value="objects"/);
   assert.match(historyPanel, /value="insights"/);
-  assert.match(historyPanel, /queryKey="insights_tab"/);
-  assert.match(historyPanel, /lockedAnchorModelUri=\{selectedObjectType\}/);
+  assert.match(historyPanel, /ObjectStoreInsightsWorkspace/);
+  assert.doesNotMatch(historyPanel, /InsightsPanel/);
+  assert.match(insightsWorkspace, /runRootCause/);
+  assert.match(insightsWorkspace, /getOcdfgGraph/);
+  assert.match(insightsWorkspace, /Run RCA/);
+  assert.match(insightsWorkspace, /Primary OC-DFG reruns automatically/);
+  assert.match(insightsWorkspace, /Comparison graph currently supports anchor-field RCA rules only/);
+  assert.match(insightsWorkspace, /heightClass="h-\[360px\]"/);
+  assert.match(insightsWorkspace, /anchorFilters:/);
   assert.match(liveObjectsPanel, /History Filters/);
   assert.match(liveObjectsPanel, /displayNameFieldKey/);
   assert.match(liveObjectsPanel, /displayFieldLabel\(displayNameFieldKey/);

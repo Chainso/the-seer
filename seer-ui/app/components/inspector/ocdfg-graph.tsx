@@ -41,6 +41,7 @@ interface OcdfgGraphProps {
   eventLabels?: Record<string, string>;
   selectedNodeId?: string | null;
   onNodeSelect?: (nodeId: string) => void;
+  heightClass?: string;
 }
 
 interface EdgeData extends Record<string, unknown> {
@@ -175,7 +176,14 @@ function ObjectNode({ data }: { data: ObjectNodeData }) {
   );
 }
 
-function OcdfgGraphInner({ graph, modelLabels, eventLabels, selectedNodeId, onNodeSelect }: OcdfgGraphProps) {
+function OcdfgGraphInner({
+  graph,
+  modelLabels,
+  eventLabels,
+  selectedNodeId,
+  onNodeSelect,
+  heightClass = 'h-[680px]',
+}: OcdfgGraphProps) {
   const [layout, setLayout] = useState<OcdfgLayoutResult | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [edgeTooltip, setEdgeTooltip] = useState<{
@@ -329,15 +337,15 @@ function OcdfgGraphInner({ graph, modelLabels, eventLabels, selectedNodeId, onNo
   }, [layout, modelLabels]);
 
   if (layoutError) {
-    return (
-      <div className="flex h-[680px] items-center justify-center rounded-2xl border border-destructive/40 bg-destructive/10 px-6 text-sm text-destructive">
+      return (
+      <div className={`flex ${heightClass} items-center justify-center rounded-2xl border border-destructive/40 bg-destructive/10 px-6 text-sm text-destructive`}>
         {layoutError}
       </div>
     );
   }
 
   return (
-    <div className="relative h-[680px] w-full rounded-2xl border border-border bg-card">
+    <div className={`relative ${heightClass} w-full rounded-2xl border border-border bg-card`}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

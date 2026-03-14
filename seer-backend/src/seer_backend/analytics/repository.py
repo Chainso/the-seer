@@ -14,6 +14,7 @@ from sqlalchemy import column, func, select, table, text
 
 from seer_backend.analytics.errors import ProcessMiningError, ProcessMiningLimitExceededError
 from seer_backend.analytics.models import (
+    AnchorFilterCondition,
     ExtractedProcessFrames,
     OcdfgBoundaryMetrics,
     OcdfgEdgeMetrics,
@@ -52,6 +53,7 @@ _OBJECT_HISTORY = table(
     column("object_ref_canonical"),
     column("object_ref"),
     column("object_payload"),
+    column("recorded_at"),
 )
 
 
@@ -215,6 +217,7 @@ class ClickHouseProcessMiningRepository:
                 objects.c.object_ref_canonical,
                 objects.c.object_ref,
                 objects.c.object_payload,
+                objects.c.recorded_at,
             )
             .select_from(
                 objects.join(
@@ -222,7 +225,12 @@ class ClickHouseProcessMiningRepository:
                     relation_objects.c.object_history_id == objects.c.object_history_id,
                 )
             )
-            .order_by(objects.c.object_type, objects.c.object_ref_hash, objects.c.object_history_id)
+            .order_by(
+                objects.c.object_type,
+                objects.c.object_ref_hash,
+                objects.c.recorded_at,
+                objects.c.object_history_id,
+            )
         )
 
         event_rows = [
@@ -235,10 +243,13 @@ class ClickHouseProcessMiningRepository:
             _object_row_from_clickhouse(row) for row in await self._select_rows(objects_stmt)
         ]
 
-        return ExtractedProcessFrames(
-            events=event_rows,
-            objects=object_rows,
-            relations=relation_rows,
+        return _apply_anchor_filters_to_frames(
+            ExtractedProcessFrames(
+                events=event_rows,
+                objects=object_rows,
+                relations=relation_rows,
+            ),
+            payload=payload,
         )
 
     async def mine_ocdfg(
@@ -248,6 +259,14 @@ class ClickHouseProcessMiningRepository:
         max_events: int,
         max_relations: int,
     ) -> OcdfgQueryResult:
+        if payload.anchor_filters:
+            frames = await self.extract_frames(
+                payload,
+                max_events=max_events,
+                max_relations=max_relations,
+            )
+            return _build_ocdfg_query_result(frames)
+
         include_object_types = _effective_include_object_types(payload)
         scope_counts = await self._select_rows(
             _ocdfg_scope_counts_query(payload, include_object_types)
@@ -351,6 +370,7 @@ class InMemoryProcessMiningRepository:
                 object_ref_canonical=row.object_ref_canonical,
                 object_ref=row.object_ref,
                 object_payload=row.object_payload,
+                recorded_at=row.recorded_at,
             )
             for row in list(getattr(self._history_repo, "_object_by_id", {}).values())
         ]
@@ -439,14 +459,18 @@ class InMemoryProcessMiningRepository:
             key=lambda row: (
                 row.object_type,
                 row.object_ref_hash,
+                _ensure_utc(row.recorded_at),
                 str(row.object_history_id),
             )
         )
 
-        return ExtractedProcessFrames(
-            events=selected_events,
-            objects=selected_objects,
-            relations=selected_relations,
+        return _apply_anchor_filters_to_frames(
+            ExtractedProcessFrames(
+                events=selected_events,
+                objects=selected_objects,
+                relations=selected_relations,
+            ),
+            payload=payload,
         )
 
     async def mine_ocdfg(
@@ -491,6 +515,182 @@ def _effective_include_object_types(payload: ProcessMiningRequest) -> list[str]:
     return [payload.anchor_object_type]
 
 
+def _apply_anchor_filters_to_frames(
+    frames: ExtractedProcessFrames,
+    *,
+    payload: ProcessMiningRequest,
+) -> ExtractedProcessFrames:
+    if not payload.anchor_filters:
+        return frames
+
+    latest_anchor_payload_by_instance: dict[tuple[str, int, str], dict[str, str]] = {}
+    latest_anchor_sort_key_by_instance: dict[tuple[str, int, str], tuple[float, str]] = {}
+    for row in frames.objects:
+        if row.object_type != payload.anchor_object_type or not row.object_payload:
+            continue
+        instance_key = (row.object_type, row.object_ref_hash, row.object_ref_canonical)
+        sort_key = (_ensure_utc(row.recorded_at).timestamp(), str(row.object_history_id))
+        existing_key = latest_anchor_sort_key_by_instance.get(instance_key)
+        if existing_key is not None and existing_key >= sort_key:
+            continue
+        latest_anchor_sort_key_by_instance[instance_key] = sort_key
+        latest_anchor_payload_by_instance[instance_key] = _flatten_payload_to_feature_map(
+            row.object_payload
+        )
+
+    allowed_anchor_instances = {
+        instance_key
+        for instance_key, payload_fields in latest_anchor_payload_by_instance.items()
+        if _matches_anchor_filters(payload_fields, payload.anchor_filters)
+    }
+    if not allowed_anchor_instances:
+        return ExtractedProcessFrames(events=[], objects=[], relations=[])
+
+    selected_event_ids = {
+        relation.event_id
+        for relation in frames.relations
+        if relation.object_type == payload.anchor_object_type
+        and (
+            relation.object_type,
+            relation.object_ref_hash,
+            relation.object_ref_canonical,
+        )
+        in allowed_anchor_instances
+    }
+    if not selected_event_ids:
+        return ExtractedProcessFrames(events=[], objects=[], relations=[])
+
+    selected_events = [
+        event for event in frames.events if event.event_id in selected_event_ids
+    ]
+    selected_relations = [
+        relation for relation in frames.relations if relation.event_id in selected_event_ids
+    ]
+    selected_object_ids = {
+        relation.object_history_id for relation in selected_relations
+    }
+    selected_objects = [
+        row for row in frames.objects if row.object_history_id in selected_object_ids
+    ]
+    return ExtractedProcessFrames(
+        events=selected_events,
+        objects=selected_objects,
+        relations=selected_relations,
+    )
+
+
+def _flatten_payload_to_feature_map(
+    payload: dict[str, Any],
+    prefix: str = "",
+) -> dict[str, str]:
+    flattened: dict[str, str] = {}
+    for key in sorted(payload):
+        if key == "object_type":
+            continue
+        value = payload[key]
+        path = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            flattened.update(_flatten_payload_to_feature_map(value, prefix=path))
+            continue
+        normalized = _normalize_scalar(value)
+        if normalized is None:
+            continue
+        flattened[path] = normalized
+    return flattened
+
+
+def _normalize_scalar(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return cleaned or None
+    if isinstance(value, list):
+        if not value:
+            return None
+        normalized_items = [
+            item for item in (_normalize_scalar(item) for item in value[:6]) if item
+        ]
+        if not normalized_items:
+            return None
+        return "|".join(normalized_items)
+    return str(value).strip() or None
+
+
+def _matches_anchor_filters(
+    payload_fields: dict[str, str],
+    anchor_filters: Sequence[AnchorFilterCondition],
+) -> bool:
+    for item in anchor_filters:
+        field_key = item.field.removeprefix("anchor.")
+        current = payload_fields.get(field_key)
+        if current is None:
+            return False
+        if item.op == "eq" and current != item.value:
+            return False
+        if item.op == "ne" and current == item.value:
+            return False
+        if item.op == "contains" and item.value.lower() not in current.lower():
+            return False
+        if item.op in {"gt", "gte", "lt", "lte"}:
+            current_value = _as_comparable_scalar(current)
+            filter_value = _as_comparable_scalar(item.value)
+            if current_value is None or filter_value is None:
+                return False
+            if current_value[0] != filter_value[0]:
+                return False
+            current_number = current_value[1]
+            filter_number = filter_value[1]
+            if item.op == "gt" and not current_number > filter_number:
+                return False
+            if item.op == "gte" and not current_number >= filter_number:
+                return False
+            if item.op == "lt" and not current_number < filter_number:
+                return False
+            if item.op == "lte" and not current_number <= filter_number:
+                return False
+    return True
+
+
+def _as_comparable_scalar(value: str) -> tuple[str, float] | None:
+    numeric = _as_comparable_number(value)
+    if numeric is not None:
+        return ("number", numeric)
+
+    timestamp = _as_comparable_datetime(value)
+    if timestamp is not None:
+        return ("temporal", timestamp)
+
+    return None
+
+
+def _as_comparable_number(value: str) -> float | None:
+    try:
+        return float(value.strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_comparable_datetime(value: str) -> float | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    normalized = cleaned.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    else:
+        parsed = parsed.astimezone(UTC)
+    return parsed.timestamp()
+
+
 def _split_sql_statements(sql_text: str) -> list[str]:
     statements = []
     for chunk in sql_text.split(";"):
@@ -518,6 +718,7 @@ def _object_row_from_clickhouse(row: dict[str, Any]) -> ProcessObjectRow:
         object_ref_canonical=str(row["object_ref_canonical"]),
         object_ref=_load_json_object(row.get("object_ref")),
         object_payload=_load_json_object(row.get("object_payload"), default=None),
+        recorded_at=_parse_clickhouse_datetime(str(row["recorded_at"])),
     )
 
 

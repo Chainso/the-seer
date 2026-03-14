@@ -59,6 +59,7 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
   assert.match(processApi, /max_relations/);
   assert.match(processApi, /max_traces_per_handle/);
   assert.match(processApi, /include_object_types/);
+  assert.match(processApi, /anchor_filters/);
   assert.match(processApi, /\/process\/ocdfg\/mine/);
   assert.match(rootCauseApi, /\/root-cause\/run/);
   assert.match(rootCauseApi, /\/root-cause\/evidence/);

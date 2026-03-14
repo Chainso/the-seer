@@ -83,11 +83,23 @@ Define user-facing behavior for the object-centric History Inspector:
 
 ## Insights Tab Responsibilities
 
-1. The insights tab embeds the existing RCA and OC-DFG insights surface inside `/inspector/history`.
-2. Embedded insights are locked to the currently selected object model.
-3. Embedded insights do not expose an independent anchor/model selector.
-4. RCA and OC-DFG continue to use their existing time-window, depth, run, and result interactions.
-5. Standalone `/inspector/insights` remains available for broader non-history entry.
+1. The insights tab renders one combined investigation workspace inside `/inspector/history`.
+2. The workspace is locked to the currently selected object model and does not expose an independent anchor/model selector.
+3. Shared Object Store insights controls are limited to:
+   - `From`,
+   - `To`,
+   - `Depth`,
+   - RCA `Outcome event`,
+   - manual `Run RCA`.
+4. The primary OC-DFG auto-runs on first load of the insights tab and reruns whenever the shared time/depth scope changes.
+5. RCA remains manual and uses the same shared scope plus selected outcome event.
+6. After RCA completes:
+   - the left side shows the ranked RCA results table,
+   - the right side shows the baseline scoped OC-DFG on top,
+   - the bottom right shows a comparison OC-DFG only when the selected RCA result uses anchor-field rules only.
+7. If a selected RCA result contains non-anchor rule families, the comparison region shows an explicit unsupported message rather than a misleading graph.
+8. Changing the shared Object Store insight scope clears stale RCA result state and returns the page to the single-graph baseline mode.
+9. Standalone `/inspector/insights` remains available for broader non-history entry.
 
 ## Graph Time Source Behavior
 
@@ -134,7 +146,7 @@ Define user-facing behavior for the object-centric History Inspector:
 5. Clicking a live object row navigates to `/inspector/history/object` with required identity params.
 6. Object details route renders timeline and graph for the selected identity.
 7. Graph controls expose only object-centric time/depth controls; no trace/workflow controls are present.
-8. Embedded insights stay locked to the selected object model.
+8. Object Store insights stay locked to the selected object model and use the combined RCA + OC-DFG workspace.
 9. `Follow Timeline` and `Custom Range` produce deterministic, user-visible graph window behavior.
 10. Latest objects and timeline pagination remain server-driven and deterministic.
 11. Filter controls never expose fields from unrelated object types.

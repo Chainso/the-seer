@@ -4,13 +4,43 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 JsonObject = dict[str, Any]
+
+AnchorFilterOperator = Literal["eq", "ne", "contains", "gt", "gte", "lt", "lte"]
+
+
+class AnchorFilterCondition(BaseModel):
+    """Anchor-object payload filter condition for OC-DFG comparison runs."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str = Field(min_length=1, max_length=240)
+    op: AnchorFilterOperator = "eq"
+    value: str = Field(min_length=1, max_length=300)
+
+    @field_validator("field")
+    @classmethod
+    def validate_anchor_field(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("anchor filter field must not be blank")
+        if not cleaned.startswith("anchor.") or cleaned == "anchor.":
+            raise ValueError("anchor filter field must start with 'anchor.'")
+        return cleaned
+
+    @field_validator("value")
+    @classmethod
+    def strip_value(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("anchor filter value must not be blank")
+        return cleaned
 
 
 class ProcessMiningRequest(BaseModel):
@@ -22,6 +52,7 @@ class ProcessMiningRequest(BaseModel):
     start_at: datetime
     end_at: datetime
     include_object_types: list[str] | None = None
+    anchor_filters: list[AnchorFilterCondition] = Field(default_factory=list)
     max_events: int | None = Field(default=None, ge=1, le=200_000)
     max_relations: int | None = Field(default=None, ge=1, le=500_000)
     max_traces_per_handle: int | None = Field(default=None, ge=1, le=500)
@@ -187,6 +218,7 @@ class ProcessObjectRow:
     object_ref_canonical: str
     object_ref: JsonObject
     object_payload: JsonObject | None
+    recorded_at: datetime
 
 
 @dataclass(slots=True)

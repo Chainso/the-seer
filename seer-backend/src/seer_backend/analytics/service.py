@@ -164,6 +164,9 @@ class ProcessMiningService:
             "start_at": _to_iso_utc(payload.start_at),
             "end_at": _to_iso_utc(payload.end_at),
             "include_object_types": include_object_types,
+            "anchor_filters": [
+                item.model_dump(mode="json") for item in payload.anchor_filters
+            ],
         }
 
         for node in nodes:
@@ -254,6 +257,9 @@ class ProcessMiningService:
             "start_at": _to_iso_utc(payload.start_at),
             "end_at": _to_iso_utc(payload.end_at),
             "include_object_types": include_object_types,
+            "anchor_filters": [
+                item.model_dump(mode="json") for item in payload.anchor_filters
+            ],
         }
 
         for node in nodes:
@@ -345,6 +351,7 @@ class ProcessMiningService:
         start_at = context.get("start_at")
         end_at = context.get("end_at")
         include_object_types = context.get("include_object_types")
+        anchor_filters = context.get("anchor_filters")
         if not isinstance(anchor_object_type, str):
             raise ProcessMiningTraceHandleError("trace handle is missing anchor_object_type")
         if not isinstance(start_at, str) or not isinstance(end_at, str):
@@ -358,6 +365,11 @@ class ProcessMiningService:
                 list(include_object_types)
                 if isinstance(include_object_types, list)
                 else None
+            ),
+            anchor_filters=(
+                list(anchor_filters)
+                if isinstance(anchor_filters, list)
+                else []
             ),
             max_events=self._max_events_default,
             max_relations=self._max_relations_default,

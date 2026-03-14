@@ -18,6 +18,11 @@ export interface ProcessMiningRequest {
   from?: string;
   to?: string;
   filters?: Record<string, string>;
+  anchorFilters?: Array<{
+    field: string;
+    op: 'eq' | 'ne' | 'contains' | 'gt' | 'gte' | 'lt' | 'lte';
+    value: string;
+  }>;
   minShare?: number;
   maxEvents?: number;
   maxRelations?: number;
@@ -103,6 +108,7 @@ function toMineRequestContract(payload: ProcessMiningRequest): ProcessMiningRequ
     start_at: startAt,
     end_at: endAt,
     include_object_types: includeObjectTypes,
+    anchor_filters: payload.anchorFilters,
     max_events: maxEvents,
     max_relations: maxRelations,
     max_traces_per_handle: maxTracesPerHandle,

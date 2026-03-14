@@ -88,7 +88,7 @@ def _seed_phase2_style_dataset(client: TestClient) -> None:
                 {
                     "object_type": "Order",
                     "object_ref": {"tenant": "acme", "order_id": "O-100"},
-                    "object": {"object_type": "Order", "status": "created"},
+                    "object": {"object_type": "Order", "status": "created", "region": "west"},
                     "relation_role": "primary",
                 }
             ],
@@ -110,7 +110,7 @@ def _seed_phase2_style_dataset(client: TestClient) -> None:
                 {
                     "object_type": "Order",
                     "object_ref": {"tenant": "acme", "order_id": "O-100"},
-                    "object": {"object_type": "Order", "status": "invoiced"},
+                    "object": {"object_type": "Order", "status": "invoiced", "region": "west"},
                     "relation_role": "context",
                 },
             ],
@@ -126,7 +126,7 @@ def _seed_phase2_style_dataset(client: TestClient) -> None:
                 {
                     "object_type": "Order",
                     "object_ref": {"tenant": "acme", "order_id": "O-100"},
-                    "object": {"object_type": "Order", "status": "approved"},
+                    "object": {"object_type": "Order", "status": "approved", "region": "west"},
                     "relation_role": "primary",
                 },
                 {
@@ -154,7 +154,11 @@ def _seed_phase2_style_dataset(client: TestClient) -> None:
                 {
                     "object_type": "Order",
                     "object_ref": {"tenant": "acme", "order_id": "O-100"},
-                    "object": {"object_type": "Order", "status": "ready_for_ship"},
+                    "object": {
+                        "object_type": "Order",
+                        "status": "ready_for_ship",
+                        "region": "west",
+                    },
                     "relation_role": "context",
                 },
             ],
@@ -170,7 +174,7 @@ def _seed_phase2_style_dataset(client: TestClient) -> None:
                 {
                     "object_type": "Order",
                     "object_ref": {"tenant": "acme", "order_id": "O-100"},
-                    "object": {"object_type": "Order", "status": "shipped"},
+                    "object": {"object_type": "Order", "status": "shipped", "region": "west"},
                     "relation_role": "primary",
                 },
                 {
@@ -193,6 +197,38 @@ def _seed_phase2_style_dataset(client: TestClient) -> None:
                     "object_type": "Invoice",
                     "object_ref": {"tenant": "acme", "invoice_id": "INV-100"},
                     "object": {"object_type": "Invoice", "status": "reminded"},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T10:40:00Z",
+            "event_type": "order.created",
+            "source": "erp",
+            "trace_id": "trace-order-200",
+            "payload": {"order_id": "O-200", "status": "created"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"tenant": "acme", "order_id": "O-200"},
+                    "object": {"object_type": "Order", "status": "created", "region": "east"},
+                    "relation_role": "primary",
+                }
+            ],
+        },
+        {
+            "event_id": str(uuid4()),
+            "occurred_at": "2026-02-22T10:45:00Z",
+            "event_type": "order.cancelled",
+            "source": "erp",
+            "trace_id": "trace-order-200",
+            "payload": {"order_id": "O-200", "status": "cancelled"},
+            "updated_objects": [
+                {
+                    "object_type": "Order",
+                    "object_ref": {"tenant": "acme", "order_id": "O-200"},
+                    "object": {"object_type": "Order", "status": "cancelled", "region": "east"},
                     "relation_role": "primary",
                 }
             ],
@@ -402,6 +438,51 @@ def test_ocdfg_mining_include_object_types_expands_event_scope() -> None:
     assert set(include_body["object_types"]) == {_ORDER_URI, _INVOICE_URI}
 
 
+def test_ocdfg_mining_anchor_filters_narrow_comparison_graph_and_trace_scope() -> None:
+    client = build_client()
+    _seed_phase2_style_dataset(client)
+
+    response = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+            "anchor_filters": [
+                {
+                    "field": "anchor.region",
+                    "op": "eq",
+                    "value": "west",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    activities = {node["activity"] for node in body["nodes"]}
+    assert _to_uri_identifier("shipment.sent") in activities
+    assert _to_uri_identifier("order.cancelled") not in activities
+
+    selected_edge = next(
+        edge
+        for edge in body["edges"]
+        if edge["source_activity"] == _to_uri_identifier("order.created")
+        and edge["target_activity"] == _to_uri_identifier("invoice.created")
+        and edge["object_type"] == _ORDER_URI
+    )
+    drilldown = client.get(
+        "/api/v1/process/traces",
+        params={"handle": selected_edge["trace_handle"], "limit": 10},
+    )
+    assert drilldown.status_code == 200, drilldown.text
+    drilldown_body = drilldown.json()
+    assert drilldown_body["matched_count"] == 1
+    assert drilldown_body["traces"][0]["object_ref_canonical"] == (
+        '{"order_id":"O-100","tenant":"acme"}'
+    )
+
+
 def test_ocdfg_mining_validation_errors_are_actionable() -> None:
     client = build_client()
 
@@ -416,6 +497,30 @@ def test_ocdfg_mining_validation_errors_are_actionable() -> None:
 
     assert response.status_code == 422
     assert "start_at must be earlier than end_at" in response.text
+
+
+def test_ocdfg_mining_rejects_non_anchor_filter_fields() -> None:
+    client = build_client()
+    _seed_phase2_style_dataset(client)
+
+    response = client.post(
+        "/api/v1/process/ocdfg/mine",
+        json={
+            "anchor_object_type": _ORDER_URI,
+            "start_at": "2026-02-22T09:00:00Z",
+            "end_at": "2026-02-22T11:00:00Z",
+            "anchor_filters": [
+                {
+                    "field": f"event.present.{_INVOICE_REMINDER_EVENT_URI}",
+                    "op": "eq",
+                    "value": "true",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "anchor filter field must start with 'anchor.'" in response.text
 
 
 def test_ocdfg_edge_query_uses_nullable_lag_to_exclude_synthetic_start_edges() -> None:

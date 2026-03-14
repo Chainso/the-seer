@@ -9,7 +9,7 @@ import { mergeSearchParams } from "@/app/lib/url-state";
 import { cn } from "@/app/lib/utils";
 
 import { HistoryLiveObjectsPanel } from "./history-live-objects-panel";
-import { InsightsPanel } from "./insights-panel";
+import { ObjectStoreInsightsWorkspace } from "./object-store-insights-workspace";
 import { Card } from "../ui/card";
 import { Label } from "../ui/label";
 import { SearchableSelect } from "../ui/searchable-select";
@@ -80,8 +80,6 @@ export function HistoryPanel() {
     const nextQuery = mergeSearchParams(searchParams, {
       object_type: selectedObjectType,
       tab: activeTab === "objects" ? null : activeTab,
-      rca_anchor: selectedObjectType,
-      pm_model: selectedObjectType,
     });
     const currentQuery = searchParams.toString();
     if (nextQuery === currentQuery) {
@@ -96,15 +94,13 @@ export function HistoryPanel() {
   const handleObjectTypeChange = (nextObjectType: string) => {
     replaceQuery({
       object_type: nextObjectType,
-      rca_anchor: nextObjectType,
-      pm_model: nextObjectType,
-      rca_outcome: null,
-      rca_filter: null,
-      rca_run: null,
-      rca_insight: null,
-      pm_filter: null,
-      pm_run: null,
-      pm_node: null,
+      os_preset: null,
+      os_from: null,
+      os_to: null,
+      os_depth: null,
+      os_outcome: null,
+      os_rca_run: null,
+      os_rca_insight: null,
     });
   };
 
@@ -189,7 +185,7 @@ export function HistoryPanel() {
                 Scoped Investigation
               </p>
               <p className="hidden text-xs leading-5 text-muted-foreground md:block">
-                Run RCA and OC-DFG without leaving Object Store. The selected object model stays locked.
+                Compare RCA results against the scoped OC-DFG without leaving Object Store.
               </p>
             </div>
           </TabsTrigger>
@@ -199,11 +195,10 @@ export function HistoryPanel() {
           <HistoryLiveObjectsPanel key={selectedObjectType} objectType={selectedObjectType} />
         </TabsContent>
         <TabsContent value="insights" className="space-y-4">
-          <InsightsPanel
+          <ObjectStoreInsightsWorkspace
             key={`history-insights-${selectedObjectType}`}
-            defaultTab="process-insights"
-            queryKey="insights_tab"
-            lockedAnchorModelUri={selectedObjectType}
+            objectType={selectedObjectType}
+            isActive={activeTab === "insights"}
           />
         </TabsContent>
       </Tabs>
