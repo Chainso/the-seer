@@ -121,7 +121,7 @@ Expected internal service areas:
    - LLM-backed execution for ontology-defined `seer:AgenticWorkflow` runs
    - canonical agent transcript persistence and resume from saved `completion_messages`
    - runtime tool policy (`load_skill` limited to deep ontology, object store, and object history, plus `load_action`)
-   - dedicated agentic workflow execution list/detail/message/SSE APIs
+   - dedicated managed-agent execution list/detail/message/SSE APIs
    - audit-oriented run detail composed from generic actions plus produced-event history
 7. `api` / `transport` domain:
    - request/response contracts
@@ -145,7 +145,7 @@ Primary responsibilities relative to Seer:
 
 1. provide ontology authoring and base metamodel context,
 2. provide local ontology output consumed by Seer,
-3. provide base `Action` / `Workflow` / `Event` / `Trigger` semantics that Seer extends rather than replaces.
+3. provide base `Action` / `Event` / `EventTrigger` semantics plus state-carrier field metadata that Seer extends rather than replaces.
 
 Architecture boundary:
 
@@ -175,7 +175,7 @@ Flow:
 Design intent:
 
 - the ontology is both the business meaning layer and the executable capability catalog.
-- Seer extends Prophet with `seer:AgenticWorkflow`, which remains a subtype of `prophet:Workflow` rather than a parallel capability model.
+- Seer extends Prophet with `seer:AgenticWorkflow`, which remains a subtype of `prophet:Action` rather than a parallel capability model.
 
 ### History Plane
 
@@ -229,7 +229,7 @@ Stack: Python action/orchestration services + SQLAlchemy Core + PostgreSQL plus 
 Flow:
 
 1. discover ontology-defined executable capabilities,
-2. validate action or agentic workflow invocation against current ontology metadata,
+2. validate action or managed-agent action invocation against current ontology metadata,
 3. persist durable generic lifecycle state in PostgreSQL,
 4. persist canonical agent transcript `completion_messages` in ClickHouse,
 5. enforce lease ownership, runtime tool policy, and execution safety,
@@ -258,8 +258,8 @@ Design intent:
    - backend analytical tools callable by UI and AI orchestration paths
 7. Action execution contract:
    - ontology-defined input validation, pull/lease execution, lifecycle visibility, lineage, and at-least-once delivery semantics
-8. Agentic workflow execution contract:
-   - ontology-defined `seer:AgenticWorkflow` identity extending `prophet:Workflow`
+8. Managed-agent action execution contract:
+   - ontology-defined `seer:AgenticWorkflow` identity extending `prophet:Action`
    - generic action execution rows with `action_kind=agentic_workflow`
    - canonical append-only transcript `completion_messages` stored in ClickHouse
    - runtime tool policy based on restricted `load_skill` plus `load_action`
@@ -273,7 +273,7 @@ The following invariants are deliberate and must hold unless explicitly changed 
 2. Backend is Python; frontend is React + Next.js.
 3. Ontology authoring remains outside Seer; Seer ingests and validates ontology definitions.
 4. The ontology is the executable capability catalog; Seer should not introduce a separate action catalog concept.
-5. Managed agentic workflows are modeled as ontology-defined workflow/actions; `seer:AgenticWorkflow` extends `prophet:Workflow`.
+5. Managed-agent actions are modeled as ontology-defined actions; `seer:AgenticWorkflow` extends `prophet:Action`.
 6. SHACL validation is mandatory for ontology ingestion.
 7. History storage is immutable and historical, not latest-state only.
 8. The immutable operational history model centers on `event_history`, `object_history`, and `event_object_links`; ClickHouse also stores append-only agent transcript `completion_messages`.
@@ -289,7 +289,7 @@ The following invariants are deliberate and must hold unless explicitly changed 
 18. Submit-time ontology validation is mandatory for execution.
 19. Action delivery remains pull-based claim with lease ownership and at-least-once semantics.
 20. Duplicate action delivery is acceptable; side-effect dedupe is executor-owned and keyed by `action_id`.
-21. Every agentic workflow execution is also a generic action execution, and child executions are linked through `parent_execution_id`.
+21. Every managed-agent execution is also a generic action execution, and child executions are linked through `parent_execution_id`.
 22. Produced events may carry optional `produced_by_execution_id` provenance when runtime execution emitted them.
 23. Backend owns execution governance, runtime guardrail enforcement, and audit trails for managed agents.
 24. UI remains read-only for ontology definitions and should not become a general workflow compiler/editor.

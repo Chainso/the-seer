@@ -32,7 +32,7 @@ In the current trusted-mode phase, that trust comes from:
 
 At any point, the user should be able to answer:
 
-1. what workflow capability this run represents,
+1. what managed-agent action this run represents,
 2. what has it done recently,
 3. what actions and events are linked to it,
 4. whether it is still running,
@@ -44,10 +44,10 @@ At any point, the user should be able to answer:
 
 1. User opens `/inspector/agentic-workflows`.
 2. User filters execution history by runtime state such as running, completed, failed, or dead-letter.
-3. User can also narrow by time window and ontology-backed workflow capability selection.
+3. User can also narrow by time window and ontology-backed action selection.
 4. User opens one execution from a browseable inspector card rather than an action-column-only table flow.
 4. User sees:
-   - workflow identity,
+   - managed-agent action identity,
    - current lifecycle state,
    - execution-chain orientation before transcript deep-reading,
    - recent decisions,
@@ -62,7 +62,7 @@ At any point, the user should be able to answer:
 
 1. User opens one execution detail page.
 2. The page shows child actions and produced events in dedicated tables.
-3. Workflow, action, and event names resolve through shared ontology display helpers.
+3. Managed-agent action, child action, and event names resolve through shared ontology display helpers.
 4. Raw identifiers remain available as supporting detail when needed for audit/debug work.
 
 ## Control Surface Requirements
@@ -101,7 +101,7 @@ Audit records should show:
 4. canonical persisted transcript messages in execution order,
 5. failures and retries,
 6. returned results,
-7. and ontology-resolved labels for workflow/action/event identity.
+7. and ontology-resolved labels for managed-agent action / child action / event identity.
 
 ## Default Safety Posture
 
@@ -120,7 +120,7 @@ The product should connect investigation and control.
 
 That means:
 
-1. a user can inspect an agentic workflow run with the same ontology-aware display patterns used elsewhere in Seer,
+1. a user can inspect a managed-agent run with the same ontology-aware display patterns used elsewhere in Seer,
 2. a user can inspect an agent's reasoning through canonical transcript history,
 3. and a user can jump from execution detail into action/event evidence rather than reading only raw logs.
 
@@ -130,9 +130,9 @@ That means:
 2. Users can list/filter agent executions and drill into one execution's transcript, child actions, and produced events.
 3. Users can watch a running execution through persisted-message live tailing rather than a token-only debug stream.
 4. The execution list read surface works without `user_id`, while generic action control-plane write/claim semantics remain user-scoped.
-5. Workflow, action, and event identity are shown with ontology-resolved labels as the primary presentation.
+5. Managed-agent action, child action, and event identity are shown with ontology-resolved labels as the primary presentation.
 6. Audit history is sufficient to explain what happened to a non-author of the agent.
-7. Raw workflow/action/event identifiers remain available for audit/debug work, but do not dominate the primary hierarchy.
+7. Raw action/event identifiers remain available for audit/debug work, but do not dominate the primary hierarchy.
 8. The control model is understandable to someone who does not already know Seer's internal architecture.
 
 ## Out Of Scope For This Spec

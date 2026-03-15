@@ -65,7 +65,7 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. none
+1. `docs/exec-plans/active/prophet-action-only-alignment.md` - active (`opened 2026-03-15 to align Seer with Prophet's action-only executable model, replace `workflow_uri` with `action_uri`, remove stale process/workflow/signal/transition assumptions, migrate lifecycle display to state-carrier field semantics, and complete the final docs/validation ratification pass; archive-ready pending move to completed/`)
 
 ## Post-MVP Status Tracking
 
@@ -82,7 +82,7 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: none
+- `in_progress`: `docs/exec-plans/active/prophet-action-only-alignment.md` (opened on 2026-03-15 to remove obsolete Prophet executable/lifecycle taxonomy from Seer, migrate managed-agent contracts to `action_uri`, rebase lifecycle display/analytics on state-carrier field semantics, and complete the final docs/validation ratification pass; archive-ready pending move to completed/)
 - `blocked`: none
 - `completed`: `docs/exec-plans/completed/object-store-combined-rca-ocdfg-workspace.md` (archived on 2026-03-14 after replacing Object Store's embedded RCA/OC-DFG tabs with one combined workspace, adding anchor-only OC-DFG comparison support for RCA results, updating the relevant specs, and validating with backend Ruff/pytest plus targeted UI contract tests and `npm run build`)
 - `completed`: `docs/exec-plans/completed/remove-ocpn-and-inductive-miner.md` (archived on 2026-03-14 after removing the legacy OCPN/BPMN process-mining UI path, migrating the remaining frontend analytics overlay off `/process/mine`, deleting the unused route, and validating with targeted UI contract/build plus backend pytest/Ruff)

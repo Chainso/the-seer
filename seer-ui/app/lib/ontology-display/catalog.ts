@@ -1,7 +1,7 @@
 import { mapPropertyDefinitions } from "../ontology-helpers";
 import type { OntologyEdge, OntologyGraph, OntologyNode } from "../../types/ontology";
 
-const EVENT_NODE_LABELS = new Set(["Event", "Signal", "Transition"]);
+const LIVE_EVENT_NODE_LABELS = new Set(["Event"]);
 
 export type OntologyDisplayStateOption = { value: string; label: string };
 
@@ -25,8 +25,6 @@ export type OntologyDisplayCatalog = {
   objectModelByToken: Map<string, OntologyDisplayObjectModel>;
   stateOwnerObjectByUri: Map<string, OntologyDisplayObjectModel>;
   stateOwnerObjectByToken: Map<string, OntologyDisplayObjectModel>;
-  transitionOwnerObjectByUri: Map<string, OntologyDisplayObjectModel>;
-  transitionOwnerObjectByToken: Map<string, OntologyDisplayObjectModel>;
   conceptLabelByToken: Map<string, string>;
   conceptFieldLabelsByToken: Map<string, Map<string, string>>;
   globalFieldLabelByKey: Map<string, string>;
@@ -118,9 +116,6 @@ function toPascalToken(value: string): string {
 }
 
 function deriveEventTypeFromLocalName(localName: string): string {
-  if (localName.startsWith("trans_")) {
-    return `${toPascalToken(localName.slice("trans_".length))}Transition`;
-  }
   if (localName.startsWith("aout_")) {
     return `${toPascalToken(localName.slice("aout_".length))}Result`;
   }
@@ -150,9 +145,6 @@ function eventTypeValue(node: OntologyNode): string {
 
   const localName = iriLocalName(node.uri);
   const localDerived = deriveEventTypeFromLocalName(localName);
-  if (localName.startsWith("trans_") && localDerived) {
-    return localDerived;
-  }
 
   const fromProphetName = canonicalFromField(node.properties?.["prophet:name"]);
   if (fromProphetName) {
@@ -455,8 +447,6 @@ export function buildOntologyDisplayCatalog(graph: OntologyGraph | null): Ontolo
       objectModelByToken: new Map(),
       stateOwnerObjectByUri: new Map(),
       stateOwnerObjectByToken: new Map(),
-      transitionOwnerObjectByUri: new Map(),
-      transitionOwnerObjectByToken: new Map(),
       conceptLabelByToken: new Map(),
       conceptFieldLabelsByToken: new Map(),
       globalFieldLabelByKey: new Map(),
@@ -486,8 +476,6 @@ export function buildOntologyDisplayCatalog(graph: OntologyGraph | null): Ontolo
 
   const stateOwnerObjectByUri = new Map<string, OntologyDisplayObjectModel>();
   const stateOwnerObjectByToken = new Map<string, OntologyDisplayObjectModel>();
-  const transitionOwnerObjectByUri = new Map<string, OntologyDisplayObjectModel>();
-  const transitionOwnerObjectByToken = new Map<string, OntologyDisplayObjectModel>();
 
   for (const edge of edges) {
     if (edge.type === "hasPossibleState") {
@@ -516,66 +504,6 @@ export function buildOntologyDisplayCatalog(graph: OntologyGraph | null): Ontolo
       }
       continue;
     }
-    if (edge.type === "transitionOf") {
-      const owner = objectModelByUri.get(edge.toUri);
-      if (owner) {
-        setOwnerLookupIfMissing(
-          transitionOwnerObjectByUri,
-          transitionOwnerObjectByToken,
-          edge.fromUri,
-          owner,
-          nodesByUri
-        );
-      }
-      continue;
-    }
-    if (edge.type === "hasPossibleTransition") {
-      const owner = objectModelByUri.get(edge.fromUri);
-      if (owner) {
-        setOwnerLookupIfMissing(
-          transitionOwnerObjectByUri,
-          transitionOwnerObjectByToken,
-          edge.toUri,
-          owner,
-          nodesByUri
-        );
-      }
-    }
-  }
-
-  const inferredTransitionOwners = new Map<string, OntologyDisplayObjectModel>();
-  const ambiguousTransitionUris = new Set<string>();
-  for (const edge of edges) {
-    if (edge.type !== "fromState" && edge.type !== "toState") {
-      continue;
-    }
-    if (transitionOwnerObjectByUri.has(edge.fromUri)) {
-      continue;
-    }
-    const owner = stateOwnerObjectByUri.get(edge.toUri);
-    if (!owner) {
-      continue;
-    }
-    const currentOwner = inferredTransitionOwners.get(edge.fromUri);
-    if (!currentOwner) {
-      inferredTransitionOwners.set(edge.fromUri, owner);
-      continue;
-    }
-    if (currentOwner.uri !== owner.uri) {
-      ambiguousTransitionUris.add(edge.fromUri);
-    }
-  }
-  for (const [transitionUri, owner] of inferredTransitionOwners.entries()) {
-    if (ambiguousTransitionUris.has(transitionUri)) {
-      continue;
-    }
-    setOwnerLookupIfMissing(
-      transitionOwnerObjectByUri,
-      transitionOwnerObjectByToken,
-      transitionUri,
-      owner,
-      nodesByUri
-    );
   }
 
   const conceptLabelByToken = new Map<string, string>();
@@ -622,7 +550,7 @@ export function buildOntologyDisplayCatalog(graph: OntologyGraph | null): Ontolo
       );
     }
 
-    if (EVENT_NODE_LABELS.has(node.label)) {
+    if (LIVE_EVENT_NODE_LABELS.has(node.label)) {
       const eventKeys = [node.uri, iriLocalName(node.uri), eventTypeValue(node)];
       setLookupIfMissing(
         eventTypeLabelByToken,
@@ -638,8 +566,6 @@ export function buildOntologyDisplayCatalog(graph: OntologyGraph | null): Ontolo
     objectModelByToken,
     stateOwnerObjectByUri,
     stateOwnerObjectByToken,
-    transitionOwnerObjectByUri,
-    transitionOwnerObjectByToken,
     conceptLabelByToken,
     conceptFieldLabelsByToken,
     globalFieldLabelByKey,

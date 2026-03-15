@@ -23,8 +23,8 @@ Catalog user-facing product specs and make implementation state obvious.
 8. `action-orchestration-backend-service.md` - completed
 9. `assistant-primary-surface.md` - completed (`current canonical /assistant surface`)
 10. `ai-investigation-workbench.md` - completed (`historical delivered workbench snapshot`)
-11. `managed-agentic-workflows.md` - completed (`current managed-agent runtime and execution surface`)
-12. `managed-agent-controls-and-approvals.md` - completed (`trusted-mode execution inspection surface; approvals deferred`)
+11. `managed-agentic-workflows.md` - completed (`current managed-agent action runtime and execution surface`)
+12. `managed-agent-controls-and-approvals.md` - completed (`trusted-mode managed-agent execution inspection surface; approvals deferred`)
 
 ## Draft Specs
 

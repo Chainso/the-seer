@@ -32,7 +32,7 @@ The product goal is to give businesses an AI-native operating layer that can und
 ## 2.1 What Seer Is
 
 1. An AI-first investigation product for understanding business operations.
-2. A managed runtime for ontology-defined actions and workflows.
+2. A managed runtime for ontology-defined actions, including managed-agent actions.
 3. A product that uses complete operational history as evidence.
 4. A product where analytics exist to improve investigation quality and execution quality.
 
@@ -57,8 +57,8 @@ It defines:
 
 1. business objects,
 2. business events,
-3. lifecycle states and transitions,
-4. executable actions and workflows,
+3. enum-backed lifecycle state carrier fields,
+4. executable actions,
 5. typed inputs and produced events,
 6. and Seer-specific execution concepts layered on top of Prophet.
 
@@ -96,12 +96,12 @@ Seer should decide how to investigate:
 
 Execution is action-first.
 
-Managed agentic workflows are treated as executable ontology-defined workflows/actions.
+Managed-agent actions are treated as executable ontology-defined actions.
 
 From the rest of the platform's point of view:
 
-1. atomic actions are executable capabilities,
-2. agentic workflows are also executable capabilities,
+1. ordinary actions are executable capabilities,
+2. managed-agent actions are also executable capabilities,
 3. both live in the ontology,
 4. and Seer provides the runtime that can execute them safely.
 
@@ -141,7 +141,7 @@ Examples:
 
 The managed agent is not compiled into a rigid workflow graph.
 
-The definition is the ontology-defined workflow capability plus its operating instruction and runtime guardrails inside Seer.
+The definition is the ontology-defined action plus its operating instruction and runtime guardrails inside Seer.
 
 ## 4.3 Expert Drill-Down
 
@@ -168,7 +168,7 @@ They are important product modules, but they are no longer the primary product i
 5. Event, object, and relationship history persistence in ClickHouse.
 6. Managed action orchestration and agent runtime control-plane state in PostgreSQL.
 7. AI-first investigation workflows.
-8. Ontology-defined executable actions and managed workflow execution.
+8. Ontology-defined executable actions and managed-agent action execution.
 9. Evidence-backed analytical tooling such as process mining and RCA.
 10. Shared UI for evidence, caveats, runtime guardrails, and execution visibility.
 
@@ -241,13 +241,13 @@ Seer extends Prophet with a Seer execution ontology.
 
 That extension should define the concepts needed for managed AI execution, including:
 
-1. managed agentic workflow shape,
+1. managed-agent action shape,
 2. runtime guardrail metadata,
 3. execution-safety semantics,
 4. allowed evidence/tool access,
 5. and runtime outcome semantics.
 
-The extension should build on Prophet `Action` and `Workflow` primitives rather than creating a disconnected execution model.
+The extension should build on Prophet `Action`, `Event`, and `EventTrigger` primitives rather than creating a disconnected execution model.
 
 ## 7.4 Ontology Identity Contract
 
@@ -361,7 +361,7 @@ They are not the product's primary entry point.
 
 ## 10.1 Managed Agent Definition
 
-A managed agent is a Seer-run executable workflow that is defined in the ontology and operates over business evidence inside Seer's runtime.
+A managed agent is a Seer-run executable action that is defined in the ontology and operates over business evidence inside Seer's runtime.
 
 The agent should be able to:
 
@@ -375,7 +375,7 @@ The agent should be able to:
 
 Seer should persist:
 
-1. the ontology-defined workflow/action identity,
+1. the ontology-defined action identity,
 2. the operating instruction,
 3. runtime guardrails and execution limits,
 4. trusted-mode operating settings for the current phase,
@@ -399,12 +399,12 @@ The runtime must provide:
 
 ## 10.4 Agents As Actions
 
-From the rest of the system's point of view, a managed agentic workflow is just another executable action/workflow capability.
+From the rest of the system's point of view, a managed agent is just another executable action.
 
 That keeps the model clean:
 
-1. atomic processes are actions,
-2. higher-order managed agents are also actions,
+1. ordinary ontology actions are actions,
+2. managed agents are specialized actions,
 3. the ontology remains the single executable catalog,
 4. and Seer remains the runtime, not a separate ontology-independent workflow authoring system.
 

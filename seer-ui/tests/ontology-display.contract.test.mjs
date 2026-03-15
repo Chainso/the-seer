@@ -281,12 +281,12 @@ test("explorer taxonomy stays on live Prophet concepts without lifecycle relabel
   assert.match(explorerSource, /labels:\s*\['ObjectModel', 'Action', 'Event', 'EventTrigger'\]/);
   assert.match(explorerSource, /const RELATIONSHIP_SCOPE_LABEL: Record<RelationshipScope, string> = \{\s*structure:/);
   assert.doesNotMatch(explorerSource, /lifecycleLabelMode:\s*['"]explicit['"]/);
-  assert.doesNotMatch(explorerSource, /\bState\b|\bProcess\b|\bWorkflow\b|\bSignal\b|\bTransition\b/);
+  assert.doesNotMatch(explorerSource, /\b(state|process|workflow|signal)\b/i);
   assert.match(explorerSource, /displayNodeName=\{displayNameForNode\}/);
   assert.match(graphSource, /'ObjectModel',\s*'Action',\s*'Event',\s*'EventTrigger'/);
   assert.match(graphSource, /displayNodeName\?:\s*\(node:\s*OntologyGraphNode\)\s*=>\s*string/);
   assert.match(graphSource, /displayNodeName\?\.\(node\)/);
-  assert.doesNotMatch(graphSource, /\bProcess\b|\bWorkflow\b|\bSignal\b|\bTransition\b/);
+  assert.doesNotMatch(graphSource, /\b(process|workflow|signal)\b/i);
 });
 
 test("ontology page host and assistant canvas host share the explorer display surface", () => {

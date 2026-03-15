@@ -33,9 +33,9 @@ Define user-facing behavior for the object-centric History Inspector:
 1. `Object model` is always selected; there is no `All object types` option.
 2. Property filter field dropdown is scoped to the selected object type only.
 3. Changing object model clears model-specific analysis/filter run state and reseeds scoped insights to the new model.
-4. For object types with ontology states:
+4. For object types with a state-carrier field:
    - `State` appears as a filter field option.
-   - State value input is a dropdown of ontology states.
+   - State value input is a dropdown of the state-carrier enum options.
    - State filter applies as exact match (`eq`) only.
 
 ## Object Store Responsibilities
@@ -115,13 +115,13 @@ Define user-facing behavior for the object-centric History Inspector:
 
 1. Field and state label resolution must use the shared ontology display resolver as the single source of truth.
 2. Field labels should use ontology property labels where available.
-3. State-like payload values (`status`, `state`, `*_status`, `*_state`) should use ontology state labels where available.
+3. State-carrier payload values should use ontology-derived enum labels where available.
 4. If no ontology label exists, raw key/value is shown.
 5. Timeline rendering is event-card based and grouped by day:
    - day headers separate loaded event history into chronological sections,
    - each event card shows ontology-aware event name, timestamp, relation role, and source.
 6. Event cards must prioritize ontology-first signal over raw payload dumps:
-   - state transitions render as explicit `from -> to` badges when present,
+   - lifecycle changes render as explicit `from -> to` badges when derived from adjacent state-carrier snapshots,
    - highlights are limited to a small set of ontology-relevant fields (for scanability),
    - payload summary text is generated via ontology display summarization.
 7. Object reference display should remain compact and human-readable via ontology summarization helpers.
@@ -150,7 +150,7 @@ Define user-facing behavior for the object-centric History Inspector:
 9. `Follow Timeline` and `Custom Range` produce deterministic, user-visible graph window behavior.
 10. Latest objects and timeline pagination remain server-driven and deterministic.
 11. Filter controls never expose fields from unrelated object types.
-12. State dropdown appears only when the selected object type has possible states.
+12. State dropdown appears only when the selected object type exposes state-carrier options.
 
 ## Out of Scope (Phase 3A)
 

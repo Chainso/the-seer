@@ -49,7 +49,7 @@ def test_actions_create_and_get_round_trip() -> None:
     assert loaded is not None
     assert loaded.action_id == created.action_id
     assert loaded.status == ActionStatus.QUEUED
-    assert loaded.action_kind == ActionKind.WORKFLOW
+    assert loaded.action_kind == ActionKind.ACTION
     assert loaded.parent_execution_id is None
     assert loaded.attempt_count == 0
     assert loaded.lease_owner_instance_id is None
@@ -78,7 +78,7 @@ def test_actions_create_and_get_round_trip_preserves_parent_execution() -> None:
             ActionCreate(
                 user_id="user-lineage-1",
                 action_uri="urn:seer:test:action.child",
-                action_kind=ActionKind.PROCESS,
+                action_kind=ActionKind.ACTION,
                 parent_execution_id=parent.action_id,
                 input_payload={"invoice_id": "INV-1"},
                 ontology_release_id="rel-2026-03-01",
@@ -91,7 +91,7 @@ def test_actions_create_and_get_round_trip_preserves_parent_execution() -> None:
     loaded = _run_async(service.get_action(child.action_id))
 
     assert loaded is not None
-    assert loaded.action_kind == ActionKind.PROCESS
+    assert loaded.action_kind == ActionKind.ACTION
     assert loaded.parent_execution_id == parent.action_id
 
 

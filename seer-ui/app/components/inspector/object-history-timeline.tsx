@@ -8,7 +8,7 @@ export type ObjectHistoryTimelineHighlight = {
   value: string;
 };
 
-export type ObjectHistoryTimelineStateTransition = {
+export type ObjectHistoryTimelineLifecycleChange = {
   from: string;
   to: string;
 };
@@ -22,7 +22,7 @@ export type ObjectHistoryTimelineEntry = {
   shortEventId: string;
   payloadSummary: string;
   highlights: ObjectHistoryTimelineHighlight[];
-  stateTransition: ObjectHistoryTimelineStateTransition | null;
+  lifecycleChange: ObjectHistoryTimelineLifecycleChange | null;
 };
 
 export type ObjectHistoryTimelineGroup = {
@@ -72,15 +72,15 @@ export function ObjectHistoryTimeline({ groups, hasAnyEvents, loading }: ObjectH
                     </Badge>
                   </header>
 
-                  {entry.stateTransition && (
+                  {entry.lifecycleChange && (
                     <div className="mt-3 flex items-center gap-2 text-xs">
                       <span className="font-medium text-muted-foreground">State</span>
                       <Badge variant="outline" className="rounded-full">
-                        {entry.stateTransition.from}
+                        {entry.lifecycleChange.from}
                       </Badge>
                       <span className="text-muted-foreground">to</span>
                       <Badge variant="outline" className="rounded-full">
-                        {entry.stateTransition.to}
+                        {entry.lifecycleChange.to}
                       </Badge>
                     </div>
                   )}

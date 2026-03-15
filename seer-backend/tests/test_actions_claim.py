@@ -88,7 +88,7 @@ def test_claim_excludes_other_instances_during_active_lease() -> None:
     second_body = second.json()
     assert first_body["claimed_count"] == 1
     assert first_body["actions"][0]["lease_owner_instance_id"] == "instance-a"
-    assert first_body["actions"][0]["action_kind"] == ActionKind.WORKFLOW.value
+    assert first_body["actions"][0]["action_kind"] == ActionKind.ACTION.value
     assert first_body["actions"][0]["parent_execution_id"] is None
     assert second_body["claimed_count"] == 0
     assert second_body["actions"] == []

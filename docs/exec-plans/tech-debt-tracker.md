@@ -47,3 +47,13 @@ Track known debt explicitly and prioritize cleanup without losing product moment
 7. Proposed Fix: Add compact/mobile OC-DFG treatment and dedicated assistant canvas renderers for remaining artifact families when the `/assistant` experience is next hardened.
 8. Target Window: `Next /assistant experience hardening cycle`
 9. Status: `open`
+
+1. ID: `TD-2026-03-15-004`
+2. Date Added: `2026-03-15`
+3. Area: `Managed-agent transcript persistence`
+4. Description: The public/runtime contract now uses `action_uri`, but the internal ClickHouse transcript storage schema and repository adapter still use the historical column name `workflow_uri`.
+5. Impact: Product/API terminology is correct, but broad stale-concept grep still surfaces the storage column and repository mapping as an intentional residual.
+6. Owner: `AGENT-ACTION-MODEL-1`
+7. Proposed Fix: Run a focused persistence cleanup to rename the transcript column and repository SQL wiring to `action_uri`, including the required migration/backfill strategy for existing environments.
+8. Target Window: `Next managed-agent persistence hardening cycle`
+9. Status: `open`

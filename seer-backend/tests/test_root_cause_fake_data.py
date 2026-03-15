@@ -37,18 +37,18 @@ _EVENT_LOCAL_NAME_BY_KEY: dict[str, str] = {
     "adjust_inventory_result": "aout_adjust_inventory",
     "create_purchase_order_result": "aout_create_purchase_order",
     "create_sales_order_result": "aout_create_sales_order",
-    "invoice_mark_overdue_transition": "trans_invoice_mark_overdue",
-    "invoice_mark_paid_transition": "trans_invoice_mark_paid",
+    "invoice_mark_overdue_transition": "evt_invoice_marked_overdue",
+    "invoice_mark_paid_transition": "evt_invoice_marked_paid",
     "invoice_payment_recorded": "sig_invoice_payment_recorded",
     "low_stock_detected": "sig_low_stock_detected",
-    "purchase_order_close_transition": "trans_purchase_order_close",
-    "purchase_order_receive_transition": "trans_purchase_order_receive",
-    "purchase_order_submit_transition": "trans_purchase_order_submit",
+    "purchase_order_close_transition": "evt_purchase_order_closed",
+    "purchase_order_receive_transition": "evt_purchase_order_received",
+    "purchase_order_submit_transition": "evt_purchase_order_submitted",
     "register_customer_result": "aout_register_customer",
     "restock_inventory_result": "aout_restock_inventory",
-    "sales_order_cancel_transition": "trans_sales_order_cancel",
-    "sales_order_fulfill_transition": "trans_sales_order_fulfill",
-    "sales_order_mark_paid_transition": "trans_sales_order_mark_paid",
+    "sales_order_cancel_transition": "evt_sales_order_cancelled",
+    "sales_order_fulfill_transition": "evt_sales_order_fulfilled",
+    "sales_order_mark_paid_transition": "evt_sales_order_marked_paid",
     "supplier_lead_time_updated": "sig_supplier_lead_time_updated",
 }
 _OBJECT_LOCAL_NAME_BY_KEY: dict[str, str] = {
@@ -69,22 +69,46 @@ _EVENT_KEY_BY_LEGACY_IDENTIFIER: dict[str, str] = {
     "CreateSalesOrderResult": "create_sales_order_result",
     "InvoiceMarkOverdueTransition": "invoice_mark_overdue_transition",
     "InvoiceMarkPaidTransition": "invoice_mark_paid_transition",
+    "evt_invoice_marked_overdue": "invoice_mark_overdue_transition",
+    "evt_invoice_marked_paid": "invoice_mark_paid_transition",
     "Invoice Payment Recorded": "invoice_payment_recorded",
     "InvoicePaymentRecorded": "invoice_payment_recorded",
+    "sig_invoice_payment_recorded": "invoice_payment_recorded",
     "Low Stock Detected": "low_stock_detected",
     "LowStockDetected": "low_stock_detected",
+    "sig_low_stock_detected": "low_stock_detected",
     "PurchaseOrderCloseTransition": "purchase_order_close_transition",
     "PurchaseOrderReceiveTransition": "purchase_order_receive_transition",
     "PurchaseOrderSubmitTransition": "purchase_order_submit_transition",
+    "evt_purchase_order_closed": "purchase_order_close_transition",
+    "evt_purchase_order_received": "purchase_order_receive_transition",
+    "evt_purchase_order_submitted": "purchase_order_submit_transition",
     "Register Customer Result": "register_customer_result",
     "RegisterCustomerResult": "register_customer_result",
+    "aout_register_customer": "register_customer_result",
     "Restock Inventory Result": "restock_inventory_result",
     "RestockInventoryResult": "restock_inventory_result",
+    "aout_restock_inventory": "restock_inventory_result",
     "SalesOrderCancelTransition": "sales_order_cancel_transition",
     "SalesOrderFulfillTransition": "sales_order_fulfill_transition",
     "SalesOrderMarkPaidTransition": "sales_order_mark_paid_transition",
+    "evt_sales_order_cancelled": "sales_order_cancel_transition",
+    "evt_sales_order_fulfilled": "sales_order_fulfill_transition",
+    "evt_sales_order_marked_paid": "sales_order_mark_paid_transition",
     "Supplier Lead Time Updated": "supplier_lead_time_updated",
     "SupplierLeadTimeUpdated": "supplier_lead_time_updated",
+    "sig_supplier_lead_time_updated": "supplier_lead_time_updated",
+    "aout_adjust_inventory": "adjust_inventory_result",
+    "aout_create_purchase_order": "create_purchase_order_result",
+    "aout_create_sales_order": "create_sales_order_result",
+    "trans_invoice_mark_overdue": "invoice_mark_overdue_transition",
+    "trans_invoice_mark_paid": "invoice_mark_paid_transition",
+    "trans_purchase_order_close": "purchase_order_close_transition",
+    "trans_purchase_order_receive": "purchase_order_receive_transition",
+    "trans_purchase_order_submit": "purchase_order_submit_transition",
+    "trans_sales_order_cancel": "sales_order_cancel_transition",
+    "trans_sales_order_fulfill": "sales_order_fulfill_transition",
+    "trans_sales_order_mark_paid": "sales_order_mark_paid_transition",
 }
 _OBJECT_KEY_BY_LEGACY_IDENTIFIER: dict[str, str] = {
     "Customer": "customer",
@@ -151,7 +175,7 @@ def _load_small_business_uri_maps() -> tuple[dict[str, str], dict[str, str]]:
         return f"{local_base_uri}{local_name}"
 
     event_type_uri_by_key = {
-        key: _resolve_uri(local_name, {"Signal", "Transition"})
+        key: _resolve_uri(local_name, {"Event"})
         for key, local_name in _EVENT_LOCAL_NAME_BY_KEY.items()
     }
     object_type_uri_by_key = {
@@ -172,6 +196,9 @@ def _canonicalize_identifier(
     if value in uri_by_key.values():
         return value
     key = key_by_legacy_identifier.get(value)
+    if key is None:
+        local_name = re.split(r"[#/]", value)[-1]
+        key = key_by_legacy_identifier.get(local_name)
     if key is None:
         return value
     return uri_by_key.get(key, value)

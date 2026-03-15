@@ -9,7 +9,7 @@ For a new reader, the shortest useful summary is:
 1. Prophet defines the business world and capability catalog.
 2. Seer stores operational evidence over time.
 3. AI is the default investigation interface.
-4. Managed agents execute ontology-defined workflows inside a safe runtime.
+4. Managed agents execute ontology-defined actions inside a safe runtime.
 
 ## Canonical References
 
@@ -21,10 +21,10 @@ For a new reader, the shortest useful summary is:
 ## Current Design Themes
 
 1. Ontology is consumed in Seer as read-only semantic context and executable capability catalog; authoring remains in Prophet.
-2. Seer extends Prophet with execution concepts for managed AI workflows rather than inventing a disconnected action model; `seer:AgenticWorkflow` is a Seer subtype of `prophet:Workflow`.
+2. Seer extends Prophet with execution concepts for managed AI workflows rather than inventing a disconnected action model; `seer:AgenticWorkflow` is a Seer subtype of `prophet:Action`.
 3. Event, object, and relationship history are first-class and immutable evidence for both investigation and execution.
 4. AI investigation through `/assistant` is the primary user-facing analytics experience; process mining and RCA are tools and drill-down surfaces, not the default entry point.
-5. Managed agentic workflows are ontology-defined workflows/actions executed by Seer in a bounded runtime rather than compiled into rigid workflow specs.
+5. Managed agentic workflows are ontology-defined managed actions executed by Seer in a bounded runtime rather than compiled into rigid workflow specs.
 6. Generic execution lifecycle remains in `actions`, while `agent_orchestration` owns LLM-backed execution, transcript semantics, and agent-specific execution APIs.
 7. Safe execution is a core design problem: runtime guardrails, budgets, auditability, and idempotent action semantics must be explicit even before platform authz is designed.
 8. Canonical managed-agent transcript state is persisted ordered `completion_messages` in ClickHouse, not transient executor memory or mutable PostgreSQL control-plane fields.

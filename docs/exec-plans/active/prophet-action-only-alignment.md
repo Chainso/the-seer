@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: Prophet Action-Only Alignment
 
-**Status:** active  
+**Status:** active (archive-ready)  
 **Target order:** post-MVP track 13  
 **Agent slot:** AGENT-ACTION-MODEL-1  
 **Predecessor:** `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`, `docs/exec-plans/completed/object-store-model-locked-tabs.md`, `docs/exec-plans/completed/adaptive-lifecycle-label-display.md`  
@@ -33,7 +33,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - [x] 2026-03-15 Phase 3 consumer/history slice complete: Object Store and history consumers now derive lifecycle badges from adjacent state-carrier snapshots and no longer parse explicit `fromState` / `toState` payload keys.
 - [x] 2026-03-15 Phase 3 complete: controller merged-branch validation passed for the backend/shared-display and consumer/history slices, closing the state-carrier lifecycle migration.
 - [x] 2026-03-15 Phase 4 complete: ontology explorer and analytics/RCA surfaces now use live `Action`, `Event`, and `EventTrigger` concepts, while dead read-only ontology editor and analytics affordances were deleted instead of migrated.
-- [ ] Phase 5 complete: canonical docs/specs are ratified, full validation evidence is recorded, and the plan is ready to archive.
+- [x] 2026-03-15 Phase 5 complete: canonical docs/specs are ratified, full validation evidence is recorded, residual grep matches are classified, and the plan is ready to archive.
 
 ## Surprises & Discoveries
 
@@ -57,6 +57,12 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15: The canonical object-history contract exposes only the event-linked object snapshot, not an explicit previous snapshot or `fromState` / `toState` payload fields, so the consumer lane had to derive lifecycle badges by diffing adjacent snapshots in timeline order on the shared `stateFilterFieldKey`.
 - 2026-03-15: The old read-only ontology editor and standalone ontology analytics panel were completely unmounted from the live app. Phase 4 could therefore delete those files outright instead of preserving mutation-era scaffolding that only referenced removed Prophet concepts.
 - 2026-03-15: RCA setup, Object Store insights, and process mining all needed the same event-to-model traversal after `Signal` / `Transition` removal, so Phase 4 introduced one shared frontend runtime helper instead of leaving three slightly divergent copies of the old logic.
+- 2026-03-15: Phase 5 full-suite validation exposed a second wave of stale truth that was not product behavior but still blocked acceptance: action tests still asserted removed `ActionKind.PROCESS|WORKFLOW` members, the ontology copilot prompt/index still taught removed Prophet concepts, and the RCA fake-data normalizer still expected transition-era small-business local names. Those were fixed in-scope because final validation is part of the phase contract.
+- 2026-03-15: After the final cleanup pass, the required broad grep still returns a small set of intentional or false-positive matches:
+  - the internal ClickHouse transcript storage column and historical migration still use `workflow_uri`,
+  - `AbortSignal`, React `startTransition`, and `disableTransitionOnChange` are framework/library symbols rather than Prophet concepts,
+  - `docs/product-specs/new-user-onboarding.md` contains the heading `Success Signals`,
+  - `tests/test_root_cause_fake_data.py` intentionally keeps legacy transition-era identifier strings so the old fake-data fixture can be canonicalized onto the current event model.
 
 ## Decision Log
 
@@ -71,6 +77,8 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15, Codex: The history/Object Store consumer lane should use adjacent object snapshots as the lifecycle diff source and treat explicit transition payload fields as removed legacy behavior. Rationale: this matches the real history API contract and keeps the UI aligned to Prophet's state-carrier model instead of reconstructing obsolete transition resources.
 - 2026-03-15, Codex: Phase 4 should delete dead read-only ontology editor and ontology analytics files rather than porting them to the new model. Rationale: those surfaces were unmounted, mutations are already unsupported, and keeping them would preserve removed Prophet taxonomy as misleading dead code.
 - 2026-03-15, Codex: Explorer and analytics runtime discovery should share one `ontology-runtime-semantics` helper that is `Event`-only. Rationale: one event-only traversal path keeps RCA, Object Store insights, and process mining aligned to Prophet's current model and reduces the chance of stale `Signal` / `Transition` logic reappearing in one panel.
+- 2026-03-15, Codex: Phase 5 may fix stale tests, prompt examples, and fixture normalizers when they are the only blockers for the final validation gate. Rationale: the phase brief explicitly permits fixes required to satisfy final validation, and leaving removed Prophet concepts in validation scaffolding would make the repository's acceptance evidence misleading.
+- 2026-03-15, Codex: Leave the internal transcript storage column named `workflow_uri` for now and record it as technical debt rather than expanding Phase 5 into a storage migration. Rationale: public/backend/frontend contracts already expose `action_uri`, the remaining column name is internal persistence detail, and the archive-prep phase should not take on schema churn.
 
 ## Outcomes & Retrospective
 
@@ -128,6 +136,22 @@ Phase 4 validation evidence:
 2. `cd /workspaces/seer-python/seer-ui && node tests/insights.contract.test.mjs` passed with `5 pass, 0 fail`.
 3. `cd /workspaces/seer-python/seer-ui && node tests/process-mining.contract.test.mjs` passed with `1 pass, 0 fail`.
 4. `cd /workspaces/seer-python/seer-ui && npm run build` passed with a successful Next.js production build.
+
+2026-03-15 Phase 5 closed with the canonical docs/specs aligned to Prophet's current `Action` / `Event` / state-carrier model, plus a final validation pass that removed stale test/prompt assumptions discovered after Phases 3 and 4. `VISION.md`, `DESIGN.md`, `ARCHITECTURE.md`, and the managed-agent/history specs now describe action-first execution, `action_uri`, managed-agent actions, and enum-backed state-carrier lifecycle display rather than removed Prophet workflow/process/signal/transition/state-machine concepts.
+
+Phase 5 also tightened the repo's validation truth. Full backend `pytest` and `ruff` now pass, the UI build and touched contract tests pass, the ontology copilot no longer suggests removed Prophet categories in its built-in examples/index, and the broad grep is reduced to explicitly classified residuals instead of active product truth drift.
+
+Phase 5 validation evidence:
+1. `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest` passed with `134 passed in 41.95s`.
+2. `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check .` passed with `All checks passed!`.
+3. `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` passed with `11 pass, 0 fail`.
+4. `cd /workspaces/seer-python/seer-ui && node --test tests/history.contract.test.mjs` passed with `1 pass, 0 fail`.
+5. `cd /workspaces/seer-python/seer-ui && node tests/insights.contract.test.mjs` passed with `5 pass, 0 fail`.
+6. `cd /workspaces/seer-python/seer-ui && npm run build` passed with a successful Next.js production build.
+7. `cd /workspaces/seer-python && rg -n "prophet:Process|prophet:Workflow|Signal|Transition|workflow_uri" VISION.md DESIGN.md ARCHITECTURE.md docs/product-specs seer-backend seer-ui` returned only classified residuals:
+   - false positives (`Success Signals`, `AbortSignal`, `startTransition`, `disableTransitionOnChange`),
+   - the intentional internal transcript-storage `workflow_uri` column/migration,
+   - legacy identifier strings in `tests/test_root_cause_fake_data.py` used only to canonicalize the historical fake-data fixture onto current Prophet event URIs.
 
 ## Context and Orientation
 
@@ -232,6 +256,20 @@ Phase acceptance expectations:
 3. Phase 3 is complete when state filters, state labels, and lifecycle badges render from state-carrier metadata and observed value deltas instead of ontology state/transition resources.
 4. Phase 4 is complete when `/ontology` surfaces and analytics/RCA setup no longer require `Signal`, `Transition`, `Process`, `Workflow`, or explicit ontology `State` categories.
 5. Phase 5 is complete when canonical docs/specs describe the new model accurately and the final backend/frontend validation commands pass or any known unrelated failures are explicitly logged here.
+
+Phase 5 validation recorded on 2026-03-15:
+
+1. `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest` passed with `134 passed in 41.95s`.
+2. `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check .` passed with `All checks passed!`.
+3. `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` passed with `11 pass, 0 fail`.
+4. `cd /workspaces/seer-python/seer-ui && node --test tests/history.contract.test.mjs` passed with `1 pass, 0 fail`.
+5. `cd /workspaces/seer-python/seer-ui && node tests/insights.contract.test.mjs` passed with `5 pass, 0 fail`.
+6. `cd /workspaces/seer-python/seer-ui && npm run build` passed with a successful Next.js production build.
+7. `cd /workspaces/seer-python && rg -n "prophet:Process|prophet:Workflow|Signal|Transition|workflow_uri" VISION.md DESIGN.md ARCHITECTURE.md docs/product-specs seer-backend seer-ui` returned only classified residuals:
+   - `docs/product-specs/new-user-onboarding.md:25` (`Success Signals`) is unrelated product copy.
+   - `seer-ui` `AbortSignal`, `startTransition`, and `disableTransitionOnChange` matches are framework/library names, not Prophet concepts.
+   - `seer-backend/src/seer_backend/agent_orchestration/repository.py` and `seer-backend/migrations/clickhouse/002_agentic_workflow_transcripts.sql` still carry the internal transcript storage column name `workflow_uri`.
+   - `seer-backend/tests/test_root_cause_fake_data.py` intentionally retains legacy transition-era identifiers to normalize the historical fake-data fixture onto current event URIs.
 
 Phase 1 validation recorded on 2026-03-15 after implementation:
 
@@ -580,6 +618,9 @@ Ratify the new model in canonical docs, close the validation ledger, and prepare
 - Known Constraints / Baseline Failures:
   1. Completed plans remain historical records and do not need wording rewrites beyond link/index maintenance.
   2. Any intentionally deferred cleanup must be documented in `docs/exec-plans/tech-debt-tracker.md` before archival.
-- Status: pending
-- Completion Notes: none yet
-- Next Starter Context: Once Phases 1-4 are verified, update the canonical docs first, then run the full validation suite and capture exact outcomes before archiving.
+- Status: complete
+- Completion Notes:
+  1. Canonical docs/specs now describe the action-only executable model, `action_uri`, managed-agent actions, and state-carrier lifecycle semantics.
+  2. Final validation required a narrow cleanup of stale tests/prompts/fixture normalization that still encoded removed Prophet categories; those fixes landed in this phase and the full backend suite now passes.
+  3. The required broad grep is reduced to classified residuals only. The one real deferred cleanup is the internal transcript-storage `workflow_uri` column, which is now tracked in `docs/exec-plans/tech-debt-tracker.md`.
+- Next Starter Context: This plan is archive-ready. The next controller step is to move it under `docs/exec-plans/completed/`, update the active/completed indexes, and preserve the classified residual grep note plus `workflow_uri` storage-debt link during archival.

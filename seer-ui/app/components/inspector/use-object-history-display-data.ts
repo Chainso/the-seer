@@ -711,7 +711,7 @@ export function useObjectHistoryDisplayData({
     ]
   );
 
-  const resolveStateTransition = useCallback(
+  const resolveLifecycleChange = useCallback(
     (
       item: ObjectEventItem,
       payload: Record<string, unknown>,
@@ -754,7 +754,7 @@ export function useObjectHistoryDisplayData({
   };
 
   const timelineBuckets = useMemo<TimelineBucket[]>(() => {
-    const transitionsByIdentityKey = new Map<
+    const lifecycleChangesByIdentityKey = new Map<
       string,
       { from: string; to: string; payloadKeys: string[] }
     >();
@@ -765,9 +765,9 @@ export function useObjectHistoryDisplayData({
     let previousPayload: Record<string, unknown> | null = null;
     ascendingItems.forEach((item) => {
       const payload = item.object_payload || item.payload || {};
-      const stateTransition = resolveStateTransition(item, payload, previousPayload);
-      if (stateTransition) {
-        transitionsByIdentityKey.set(timelineIdentityKey(item), stateTransition);
+      const lifecycleChange = resolveLifecycleChange(item, payload, previousPayload);
+      if (lifecycleChange) {
+        lifecycleChangesByIdentityKey.set(timelineIdentityKey(item), lifecycleChange);
       }
       previousPayload = item.object_payload || payload || null;
     });
@@ -777,9 +777,9 @@ export function useObjectHistoryDisplayData({
       .map((item) => {
         const payload = item.payload || item.object_payload || {};
         const eventDate = new Date(eventTimeIso(item));
-        const stateTransition = transitionsByIdentityKey.get(timelineIdentityKey(item)) || null;
+        const lifecycleChange = lifecycleChangesByIdentityKey.get(timelineIdentityKey(item)) || null;
         const excludedComparableKeys = new Set<string>();
-        for (const key of stateTransition?.payloadKeys || []) {
+        for (const key of lifecycleChange?.payloadKeys || []) {
           const comparable = normalizeComparableToken(key);
           if (comparable) {
             excludedComparableKeys.add(comparable);
@@ -816,10 +816,10 @@ export function useObjectHistoryDisplayData({
           shortEventId: item.event_id.slice(0, 8),
           payloadSummary,
           highlights,
-          stateTransition: stateTransition
+          lifecycleChange: lifecycleChange
             ? {
-                from: stateTransition.from,
-                to: stateTransition.to,
+                from: lifecycleChange.from,
+                to: lifecycleChange.to,
               }
             : null,
         };
@@ -831,7 +831,7 @@ export function useObjectHistoryDisplayData({
     objectType,
     ontologyDisplay,
     objectModel?.stateFilterFieldKey,
-    resolveStateTransition,
+    resolveLifecycleChange,
     summarizeTimelinePayload,
     timelineItems,
   ]);

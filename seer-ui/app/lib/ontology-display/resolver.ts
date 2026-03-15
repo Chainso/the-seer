@@ -249,17 +249,6 @@ function resolveStateOwnerObject(
   );
 }
 
-function resolveTransitionOwnerObject(
-  catalog: OntologyDisplayCatalog,
-  conceptType: string
-): OntologyDisplayObjectModel | null {
-  return resolveOwnerObjectByConcept(
-    conceptType,
-    catalog.transitionOwnerObjectByUri,
-    catalog.transitionOwnerObjectByToken
-  );
-}
-
 function lifecycleLabelMode(options?: OntologyDisplayLifecycleOptions): OntologyDisplayLifecycleLabelMode {
   return options?.lifecycleLabelMode === "explicit" ? "explicit" : "plain";
 }
@@ -294,7 +283,7 @@ function displayConcept(
   }
 
   const normalizedKind = normalizeComparableToken(options?.conceptKind || "");
-  if (normalizedKind && normalizedKind !== "state" && normalizedKind !== "transition") {
+  if (normalizedKind && normalizedKind !== "state") {
     return baseLabel;
   }
 
@@ -302,18 +291,10 @@ function displayConcept(
     const owner = resolveStateOwnerObject(catalog, conceptType);
     return owner ? `${owner.name} ${baseLabel}` : baseLabel;
   }
-  if (normalizedKind === "transition") {
-    const owner = resolveTransitionOwnerObject(catalog, conceptType);
-    return owner ? `${baseLabel} ${owner.name}` : baseLabel;
-  }
 
   const stateOwner = resolveStateOwnerObject(catalog, conceptType);
   if (stateOwner) {
     return `${stateOwner.name} ${baseLabel}`;
-  }
-  const transitionOwner = resolveTransitionOwnerObject(catalog, conceptType);
-  if (transitionOwner) {
-    return `${baseLabel} ${transitionOwner.name}`;
   }
   return baseLabel;
 }

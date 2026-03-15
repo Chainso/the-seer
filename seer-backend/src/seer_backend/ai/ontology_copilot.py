@@ -152,24 +152,22 @@ PREFIX prophet: <http://prophet.platform/ontology#>
 PREFIX support_local: <http://prophet.platform/local/support_local#>
 ASK WHERE {
   support_local:trg_on_ticket_created
-    prophet:listensTo support_local:sig_ticket_created ;
+    prophet:listensTo support_local:evt_ticket_created ;
     prophet:invokes support_local:act_triage_ticket .
 }
 
-Example C: small-business SalesOrder transitions
+Example C: small-business SalesOrder state carrier field
 PREFIX prophet: <http://prophet.platform/ontology#>
 PREFIX artisan_bakery_local: <http://prophet.platform/local/artisan_bakery_local#>
-SELECT ?transition ?fromName ?toName
+SELECT ?fieldKey ?initialValue
 WHERE {
-  ?transition a prophet:Transition ;
-              prophet:transitionOf artisan_bakery_local:obj_sales_order ;
-              prophet:fromState ?fromState ;
-              prophet:toState ?toState .
-  ?fromState prophet:name ?fromName .
-  ?toState prophet:name ?toName .
+  artisan_bakery_local:obj_sales_order prophet:hasProperty ?property .
+  ?property prophet:fieldKey ?fieldKey ;
+            prophet:isStateField true ;
+            prophet:initialEnumValue ?initialValue .
 }
-ORDER BY ?transition
-LIMIT 25
+ORDER BY ?fieldKey
+LIMIT 10
 
 Example D: object reference fields and their target object model
 PREFIX prophet: <http://prophet.platform/ontology#>
@@ -202,11 +200,7 @@ WHERE {
   VALUES ?categoryIri {
     prophet:ObjectModel
     prophet:Action
-    prophet:Process
-    prophet:Workflow
     prophet:Event
-    prophet:Signal
-    prophet:Transition
     prophet:EventTrigger
     prophet:LocalOntology
   }

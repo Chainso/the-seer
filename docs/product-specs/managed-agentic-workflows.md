@@ -1,4 +1,4 @@
-# Managed Agentic Workflows
+# Managed Agent Actions
 
 **Status:** completed (`current managed-agent runtime and execution surface`)
 **Owner plan:** `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`
@@ -12,9 +12,9 @@ This spec defines the current managed-agent runtime model and execution visibili
 
 The delivered model is:
 
-1. the ontology defines executable workflows and actions,
-2. `seer:AgenticWorkflow` extends `prophet:Workflow`,
-3. every agentic workflow run is also a generic action execution,
+1. the ontology defines executable actions,
+2. `seer:AgenticWorkflow` extends `prophet:Action`,
+3. every managed-agent run is also a generic action execution,
 4. `agent_orchestration` owns LLM-backed execution and transcript semantics,
 5. `actions` remains the generic execution control plane,
 6. and Seer exposes dedicated execution list/detail/live-tail surfaces for those runs.
@@ -27,17 +27,17 @@ Managed-agent execution needs to feel like a first-class Seer capability rather 
 
 The delivered runtime surface lets users:
 
-1. find agentic workflow runs without dropping into backend-only control-plane views,
+1. find managed-agent runs without dropping into backend-only control-plane views,
 2. inspect canonical transcript history for one run,
 3. understand which child actions and produced events came from that run,
 4. and monitor live progress through persisted-message tailing.
 
 ## Product Model
 
-Managed agentic workflow execution now has four product-visible layers:
+Managed-agent execution now has four product-visible layers:
 
-1. `Ontology-defined workflow capability`
-   - source of truth for the executable workflow concept
+1. `Ontology-defined action`
+   - source of truth for the executable action concept
    - represented in Seer as `seer:AgenticWorkflow`
 2. `Generic action execution record`
    - canonical lifecycle state, attempts, lineage, and lease metadata
@@ -55,16 +55,16 @@ Ontology authoring remains outside Seer.
 
 That means:
 
-1. workflow/action definitions originate in Prophet plus Seer ontology extensions,
+1. action definitions originate in Prophet plus Seer ontology extensions,
 2. Seer ingests those definitions, including the `seer:AgenticWorkflow` subtype,
 3. Seer does not provide ontology authoring or a separate workflow-graph editor,
-4. and the runtime/UI treat agentic workflows as ontology-discovered executable capabilities.
+4. and the runtime/UI treat managed-agent actions as ontology-discovered executable capabilities.
 
 ## Primary User Flow
 
 1. User opens `/inspector/agentic-workflows`.
-2. Seer lists recent workflow runs without requiring a `user_id` entry gate.
-3. User filters by lifecycle state, time window, and ontology-backed workflow capability selection.
+2. Seer lists recent managed-agent runs without requiring a `user_id` entry gate.
+3. User filters by lifecycle state, time window, and ontology-backed action selection.
 4. User opens one run.
 5. Seer shows:
    - execution summary,
@@ -72,7 +72,7 @@ That means:
    - child action executions,
    - produced events,
    - live transcript updates for running executions.
-6. The UI resolves workflow, action, and event labels through shared ontology display helpers, with raw identifiers available as supporting detail.
+6. The UI resolves action and event labels through shared ontology display helpers, with raw identifiers available as supporting detail.
 
 ## Agent Runtime Expectations
 
@@ -87,7 +87,7 @@ The current managed-agent runtime model is:
 
 ## What Seer Must Persist
 
-1. ontology workflow/action identity,
+1. ontology action identity,
 2. generic execution lifecycle state and attempts,
 3. canonical ordered transcript `completion_messages`,
 4. child action lineage through `parent_execution_id`,
@@ -107,17 +107,17 @@ The ontology remains the capability catalog.
 
 That means:
 
-1. atomic actions and agentic workflows are both discoverable through ontology concepts,
-2. `seer:AgenticWorkflow` composes as a subtype of `prophet:Workflow`,
+1. ordinary actions and managed-agent actions are both discoverable through ontology concepts,
+2. `seer:AgenticWorkflow` composes as a subtype of `prophet:Action`,
 3. typing and produced-event expectations come from ontology definitions,
-4. execution filtering/display uses ontology-discovered workflow capabilities and shared ontology labels,
+4. execution filtering/display uses ontology-discovered actions and shared ontology labels,
 5. and Seer does not invent a conflicting capability model.
 
 ## User Trust Requirements
 
 The delivered execution surfaces must make the following clear:
 
-1. which workflow capability is running,
+1. which action is running,
 2. what lifecycle state the run is in,
 3. what transcript messages were canonically persisted,
 4. which child actions were invoked,
@@ -130,20 +130,20 @@ Managed-agent execution inspection is not useful if it only exposes raw control-
 
 The product should show:
 
-1. what the workflow did,
+1. what the action did,
 2. what actions it triggered,
 3. what events it produced,
 4. and the canonical message history that explains the run.
 
 ## Acceptance Expectations
 
-1. Users can list/filter agentic workflow executions from a dedicated inspector surface.
+1. Users can list/filter managed-agent executions from a dedicated inspector surface.
 2. The execution list read surface does not require `user_id`, while generic action control-plane write/claim semantics still do.
-3. Workflow filtering uses ontology-backed selectable registered agentic workflows rather than raw URI text entry.
+3. Filtering uses ontology-backed selectable registered managed-agent actions rather than raw URI text entry.
 4. Users can drill into one execution and read canonical persisted transcript history.
 5. Execution detail shows child actions and produced events with explicit lineage/provenance data.
 6. Live execution visibility uses SSE of persisted transcript messages rather than an ephemeral token-only stream.
-7. Execution history and drill-in views use ontology-resolved workflow, action, and event labels as the primary presentation, with raw identifiers available as supporting detail.
+7. Execution history and drill-in views use ontology-resolved action and event labels as the primary presentation, with raw identifiers available as supporting detail.
 
 ## Out Of Scope For This Spec
 

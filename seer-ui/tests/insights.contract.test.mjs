@@ -49,7 +49,7 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
   assert.match(rootCausePanel, /RootCauseResultsSurface/);
   assert.match(rootCausePanel, /buildRuntimeOutcomeOptions/);
   assert.match(runtimeSemantics, /LIVE_EVENT_NODE_LABELS = new Set\(\["Event"\]\)/);
-  assert.doesNotMatch(runtimeSemantics, /\bSignal\b|\bTransition\b|\bWorkflow\b/);
+  assert.doesNotMatch(runtimeSemantics, /\b(signal|transition|workflow)\b/i);
   assert.match(rootCausePanel, /Select event type/);
   assert.match(rootCausePanel, /Select filter field/);
   assert.match(rootCauseSurface, /data-root-cause-results-surface/);
