@@ -20,10 +20,10 @@ import {
 import { useOntologyGraphContext } from "@/app/components/providers/ontology-graph-provider";
 import { getOcdfgGraph } from "@/app/lib/api/process-mining";
 import { runRootCause } from "@/app/lib/api/root-cause";
-import { iriLocalName, useOntologyDisplay } from "@/app/lib/ontology-display";
+import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import { mergeSearchParams } from "@/app/lib/url-state";
 import { cn } from "@/app/lib/utils";
-import type { OntologyGraph, OntologyNode } from "@/app/types/ontology";
+import type { OntologyGraph } from "@/app/types/ontology";
 import type { OcdfgGraph } from "@/app/types/process-mining";
 import type {
   RootCauseInsightResultContract,
@@ -66,18 +66,6 @@ function toIsoDateTime(value: string): string | null {
     return null;
   }
   return parsed.toISOString();
-}
-
-function ontologyNodeName(node: OntologyNode): string {
-  const prophetName = node.properties?.["prophet:name"];
-  if (typeof prophetName === "string" && prophetName.trim()) {
-    return prophetName.trim();
-  }
-  const name = node.properties?.name;
-  if (typeof name === "string" && name.trim()) {
-    return name.trim();
-  }
-  return iriLocalName(node.uri);
 }
 
 function buildOutcomeOptions(

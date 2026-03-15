@@ -30,6 +30,11 @@ import { Table } from "../ui/table";
 type PropertyFilterDraft = ObjectPropertyFilter & { id: string };
 type PropertyFilterOperatorOption = { value: PropertyFilterOperator; label: string };
 type PropertyKeyOption = { value: string; label: string; kind: OntologyDisplayFieldKind };
+type LatestObjectsRequestState = {
+  requestKey: string;
+  data: LatestObjectsResponse | null;
+  error: string | null;
+};
 
 const STATE_FILTER_KEY = "__state__";
 const TYPE_RESOLUTION_QUERY_PREFIX = `
@@ -154,9 +159,11 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
 
   const [latestPage, setLatestPage] = useState(0);
   const latestPageSize = 25;
-  const [latestData, setLatestData] = useState<LatestObjectsResponse | null>(null);
-  const [latestLoading, setLatestLoading] = useState(false);
-  const [latestError, setLatestError] = useState<string | null>(null);
+  const [latestRequestState, setLatestRequestState] = useState<LatestObjectsRequestState>({
+    requestKey: "",
+    data: null,
+    error: null,
+  });
 
   const [propertyFilterDrafts, setPropertyFilterDrafts] = useState<PropertyFilterDraft[]>([
     { id: "filter-0", key: "", op: "eq", value: "" },
@@ -292,32 +299,32 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
     };
   }, [inferFieldKind, propertyKindsByModelUri, selectedModel]);
 
-  useEffect(() => {
-    setPropertyFilterDrafts((previous) => {
-      let changed = false;
-      const next = previous.map((filter) => {
+  const normalizedPropertyFilterDrafts = useMemo(
+    () =>
+      propertyFilterDrafts.map((filter) => {
         if (!filter.key) {
           return filter;
         }
         if (!allowedPropertyKeySet.has(filter.key)) {
-          changed = true;
           return { ...filter, key: "", op: "eq" as PropertyFilterOperator, value: "" };
         }
         const normalizedOperator = normalizeOperatorForPropertyKey(filter.key, filter.op);
         if (normalizedOperator !== filter.op) {
-          changed = true;
           return { ...filter, op: normalizedOperator };
         }
         return filter;
-      });
-      return changed ? next : previous;
-    });
-  }, [allowedPropertyKeySet, normalizeOperatorForPropertyKey]);
+      }),
+    [allowedPropertyKeySet, normalizeOperatorForPropertyKey, propertyFilterDrafts]
+  );
 
   useEffect(() => {
     let active = true;
-    setLatestLoading(true);
-    setLatestError(null);
+    const requestKey = JSON.stringify({
+      objectType,
+      propertyFilters: appliedPropertyFilters,
+      page: latestPage,
+      size: latestPageSize,
+    });
 
     listLatestObjects({
       objectType,
@@ -329,20 +336,21 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
         if (!active) {
           return;
         }
-        setLatestData(response);
+        setLatestRequestState({
+          requestKey,
+          data: response,
+          error: null,
+        });
       })
       .catch((cause) => {
         if (!active) {
           return;
         }
-        setLatestData(null);
-        setLatestError(cause instanceof Error ? cause.message : "Failed to load latest objects");
-      })
-      .finally(() => {
-        if (!active) {
-          return;
-        }
-        setLatestLoading(false);
+        setLatestRequestState({
+          requestKey,
+          data: null,
+          error: cause instanceof Error ? cause.message : "Failed to load latest objects",
+        });
       });
 
     return () => {
@@ -350,8 +358,22 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
     };
   }, [appliedPropertyFilters, latestPage, objectType]);
 
+  const latestRequestKey = useMemo(
+    () =>
+      JSON.stringify({
+        objectType,
+        propertyFilters: appliedPropertyFilters,
+        page: latestPage,
+        size: latestPageSize,
+      }),
+    [appliedPropertyFilters, latestPage, objectType]
+  );
+  const latestLoading = latestRequestState.requestKey !== latestRequestKey;
+  const latestError = latestLoading ? null : latestRequestState.error;
+  const latestData = latestRequestState.data;
+
   const applyFilters = () => {
-    const nextFilters = propertyFilterDrafts
+    const nextFilters = normalizedPropertyFilterDrafts
       .filter(
         (filter) =>
           filter.key.trim() &&
@@ -409,7 +431,7 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
     );
   };
 
-  const liveObjects = latestData?.items || [];
+  const liveObjects = useMemo(() => latestData?.items ?? [], [latestData]);
   const keyPartFieldKeys = useMemo(() => {
     const discoveredKeys = new Set<string>();
     liveObjects.forEach((item) => {
@@ -513,7 +535,7 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
         <div className="mt-6 grid gap-4 lg:grid-cols-[2fr_auto]">
           <div className="space-y-3">
             <Label>Property filters</Label>
-            {propertyFilterDrafts.map((filter) => {
+            {normalizedPropertyFilterDrafts.map((filter) => {
               const operatorOptions = operatorOptionsForPropertyKey(filter.key);
               const fieldKind = propertyKeyOptionLookup.get(filter.key)?.kind || "string";
               const isBooleanField = filter.key !== STATE_FILTER_KEY && fieldKind === "boolean";
@@ -621,7 +643,7 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
                     type="button"
                     variant="outline"
                     onClick={() => removeFilter(filter.id)}
-                    disabled={propertyFilterDrafts.length <= 1}
+                    disabled={normalizedPropertyFilterDrafts.length <= 1}
                   >
                     Remove
                   </Button>

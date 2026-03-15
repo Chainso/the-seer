@@ -745,7 +745,7 @@ export function useObjectHistoryDisplayData({
         payloadKeys: [stateFieldKey],
       };
     },
-    [objectModel?.stateFilterFieldKey, objectType, ontologyDisplay, stateLabelByToken]
+    [objectModel, objectType, ontologyDisplay, stateLabelByToken]
   );
 
   type TimelineBucket = ObjectHistoryTimelineGroup["entries"][number] & {
@@ -830,7 +830,6 @@ export function useObjectHistoryDisplayData({
     displayRelationRole,
     objectType,
     ontologyDisplay,
-    objectModel?.stateFilterFieldKey,
     resolveLifecycleChange,
     summarizeTimelinePayload,
     timelineItems,
