@@ -1,6 +1,6 @@
 # Post-MVP Exec Plan: Prophet Action-Only Alignment
 
-**Status:** active (archive-ready)  
+**Status:** completed  
 **Target order:** post-MVP track 13  
 **Agent slot:** AGENT-ACTION-MODEL-1  
 **Predecessor:** `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`, `docs/exec-plans/completed/object-store-model-locked-tabs.md`, `docs/exec-plans/completed/adaptive-lifecycle-label-display.md`  
@@ -369,7 +369,7 @@ Deliver a backend contract model that accepts the current Prophet action-only vo
 - Scope Boundary: Backend-only changes in ontology/action domains and directly related tests. Do not rename managed-agent public routes or frontend types in this phase.
 - Read First:
   1. `PLANS.md`
-  2. `docs/exec-plans/active/prophet-action-only-alignment.md`
+  2. `docs/exec-plans/completed/prophet-action-only-alignment.md`
   3. `prophet/prophet-cli/CHANGELOG.md`
   4. `seer-backend/src/seer_backend/actions/service.py`
   5. `seer-backend/src/seer_backend/actions/models.py`
@@ -422,7 +422,7 @@ Rename managed-agent contracts from workflow-first to action-first without reint
 - Scope Boundary: Managed-agent APIs, frontend types, API clients, list/detail UI, and transcript models only. Do not touch state-carrier lifecycle rendering in this phase.
 - Read First:
   1. `PLANS.md`
-  2. `docs/exec-plans/active/prophet-action-only-alignment.md`
+  2. `docs/exec-plans/completed/prophet-action-only-alignment.md`
   3. `seer-backend/src/seer_backend/api/agentic_workflows.py`
   4. `seer-backend/src/seer_backend/agent_orchestration/`
   5. `seer-ui/app/types/agentic-workflows.ts`
@@ -475,7 +475,7 @@ Move ontology display and lifecycle interpretation to the state-carrier field mo
 - Scope Boundary: Ontology graph/read-model, shared ontology display helpers, Object Store filters, and history timeline rendering. Do not rewrite explorer/analytics taxonomy outside what is necessary to support this metadata.
 - Read First:
   1. `PLANS.md`
-  2. `docs/exec-plans/active/prophet-action-only-alignment.md`
+  2. `docs/exec-plans/completed/prophet-action-only-alignment.md`
   3. `seer-backend/src/seer_backend/ontology/service.py`
   4. `seer-ui/app/lib/ontology-display/catalog.ts`
   5. `seer-ui/app/lib/ontology-display/resolver.ts`
@@ -531,7 +531,7 @@ Remove obsolete Prophet taxonomy from explorer and analytics surfaces.
 - Scope Boundary: Frontend explorer tabs, ontology helpers, analytics setup helpers, and related tests. Do not re-open backend action-kind or managed-agent contract work in this phase.
 - Read First:
   1. `PLANS.md`
-  2. `docs/exec-plans/active/prophet-action-only-alignment.md`
+  2. `docs/exec-plans/completed/prophet-action-only-alignment.md`
   3. `seer-ui/app/components/ontology/ontology-explorer-tabs.tsx`
   4. `seer-ui/app/components/ontology/tabs/`
   5. `seer-ui/app/lib/ontology-helpers.ts`
@@ -585,7 +585,7 @@ Ratify the new model in canonical docs, close the validation ledger, and prepare
 - Scope Boundary: Docs/specs/indexes and final validation only. No new behavioral code should be introduced here except fixes required to satisfy final validation.
 - Read First:
   1. `PLANS.md`
-  2. `docs/exec-plans/active/prophet-action-only-alignment.md`
+  2. `docs/exec-plans/completed/prophet-action-only-alignment.md`
   3. `VISION.md`
   4. `DESIGN.md`
   5. `ARCHITECTURE.md`
@@ -623,4 +623,4 @@ Ratify the new model in canonical docs, close the validation ledger, and prepare
   1. Canonical docs/specs now describe the action-only executable model, `action_uri`, managed-agent actions, and state-carrier lifecycle semantics.
   2. Final validation required a narrow cleanup of stale tests/prompts/fixture normalization that still encoded removed Prophet categories; those fixes landed in this phase and the full backend suite now passes.
   3. The required broad grep is reduced to classified residuals only. The one real deferred cleanup is the internal transcript-storage `workflow_uri` column, which is now tracked in `docs/exec-plans/tech-debt-tracker.md`.
-- Next Starter Context: This plan is archive-ready. The next controller step is to move it under `docs/exec-plans/completed/`, update the active/completed indexes, and preserve the classified residual grep note plus `workflow_uri` storage-debt link during archival.
+- Next Starter Context: This plan was archived to `docs/exec-plans/completed/prophet-action-only-alignment.md`. Preserve the classified residual grep note plus the `workflow_uri` storage-debt link when referring back to this migration.

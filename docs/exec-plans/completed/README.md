@@ -54,3 +54,4 @@ Each completed plan should preserve:
 42. `object-store-combined-rca-ocdfg-workspace.md` - completed (2026-03-14)
 43. `execution-plan-policy-and-skill-alignment.md` - completed (2026-03-15)
 44. `phase-handoff-capsules-in-execution-plans.md` - completed (2026-03-15)
+45. `prophet-action-only-alignment.md` - completed (2026-03-15)
