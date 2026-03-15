@@ -18,3 +18,10 @@ class OntologyNotReadyError(OntologyError):
 class OntologyReadOnlyViolationError(OntologyError):
     """Raised when a SPARQL query attempts mutation or unsupported clauses."""
 
+
+class ManagedAgentAuthoringError(OntologyError):
+    """Raised when managed-agent authoring validation fails."""
+
+    def __init__(self, message: str, detail: object | None = None) -> None:
+        super().__init__(message)
+        self.detail = detail

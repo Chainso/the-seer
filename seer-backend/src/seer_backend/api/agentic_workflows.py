@@ -35,8 +35,109 @@ from seer_backend.agent_orchestration.service import (
 )
 from seer_backend.api.status_codes import HTTP_422_UNPROCESSABLE_CONTENT
 from seer_backend.config.settings import Settings
+from seer_backend.ontology.errors import (
+    ManagedAgentAuthoringError,
+    OntologyDependencyUnavailableError,
+    OntologyError,
+    OntologyNotReadyError,
+)
+from seer_backend.ontology.managed_agents import (
+    ManagedAgentDetail,
+    ManagedAgentEditorCatalog,
+    ManagedAgentListResponse,
+    ManagedAgentUpsertRequest,
+)
 
 router = APIRouter(prefix="/agentic-workflows", tags=["agentic-workflows"])
+
+
+@router.get("/managed-agents", response_model=ManagedAgentListResponse)
+async def list_managed_agents(request: Request) -> ManagedAgentListResponse:
+    ontology_service = request.app.state.ontology_service
+    try:
+        return await ontology_service.list_managed_agents()
+    except OntologyDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except OntologyNotReadyError as exc:
+        raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except OntologyError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@router.get("/managed-agents/editor-catalog", response_model=ManagedAgentEditorCatalog)
+async def managed_agent_editor_catalog(request: Request) -> ManagedAgentEditorCatalog:
+    ontology_service = request.app.state.ontology_service
+    try:
+        return await ontology_service.managed_agent_editor_catalog()
+    except OntologyDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except OntologyNotReadyError as exc:
+        raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except OntologyError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@router.get("/managed-agents/{managed_agent_key}", response_model=ManagedAgentDetail)
+async def get_managed_agent(
+    managed_agent_key: str,
+    request: Request,
+) -> ManagedAgentDetail:
+    ontology_service = request.app.state.ontology_service
+    try:
+        return await ontology_service.get_managed_agent(managed_agent_key)
+    except ValueError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except OntologyDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except OntologyNotReadyError as exc:
+        raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except OntologyError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@router.post("/managed-agents", response_model=ManagedAgentDetail)
+async def create_managed_agent(
+    payload: ManagedAgentUpsertRequest,
+    request: Request,
+) -> ManagedAgentDetail:
+    ontology_service = request.app.state.ontology_service
+    try:
+        return await ontology_service.upsert_managed_agent(payload)
+    except ManagedAgentAuthoringError as exc:
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, exc.detail or str(exc)) from exc
+    except OntologyDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except OntologyNotReadyError as exc:
+        raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except OntologyError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+
+
+@router.put("/managed-agents/{managed_agent_key}", response_model=ManagedAgentDetail)
+async def update_managed_agent(
+    managed_agent_key: str,
+    payload: ManagedAgentUpsertRequest,
+    request: Request,
+) -> ManagedAgentDetail:
+    if payload.managed_agent_key != managed_agent_key:
+        raise _http_error(
+            HTTP_422_UNPROCESSABLE_CONTENT,
+            {
+                "code": "managed_agent_key_mismatch",
+                "message": "Path managed_agent_key must match payload.managed_agent_key.",
+            },
+        )
+    ontology_service = request.app.state.ontology_service
+    try:
+        return await ontology_service.upsert_managed_agent(payload)
+    except ManagedAgentAuthoringError as exc:
+        raise _http_error(HTTP_422_UNPROCESSABLE_CONTENT, exc.detail or str(exc)) from exc
+    except OntologyDependencyUnavailableError as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except OntologyNotReadyError as exc:
+        raise _http_error(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except OntologyError as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
 
 
 class AgenticWorkflowActionSummaryResponse(BaseModel):

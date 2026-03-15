@@ -4,10 +4,26 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from seer_backend.ontology.constants import BASE_GRAPH_IRI, META_GRAPH_IRI
+from seer_backend.ontology.constants import (
+    BASE_GRAPH_IRI,
+    META_GRAPH_IRI,
+    SEER_DATA_GRAPH_IRI,
+)
 from seer_backend.ontology.errors import (
+    ManagedAgentAuthoringError,
     OntologyDependencyUnavailableError,
     OntologyNotReadyError,
+)
+from seer_backend.ontology.managed_agents import (
+    ManagedAgentCatalogItem,
+    ManagedAgentDetail,
+    ManagedAgentEditorCatalog,
+    ManagedAgentListResponse,
+    ManagedAgentUpsertRequest,
+    build_managed_agent_cluster,
+    extract_managed_agent_detail,
+    extract_managed_agent_summaries,
+    remove_managed_agent_cluster,
 )
 from seer_backend.ontology.models import (
     CurrentReleasePointer,
@@ -76,6 +92,45 @@ WHERE {{
 }}
 LIMIT 300
 """.strip()
+_MANAGED_AGENT_VALUE_TYPES_QUERY = f"""
+{_PREFIXES}
+SELECT DISTINCT ?type ?label ?kind
+WHERE {{
+  VALUES ?kindIri {{
+    prophet:BaseType
+    prophet:CustomType
+    prophet:StructType
+    prophet:ListType
+  }}
+  ?type a ?typeIri .
+  ?typeIri rdfs:subClassOf* ?kindIri .
+  FILTER(isIRI(?type))
+  OPTIONAL {{ ?type prophet:name ?prophetName . }}
+  OPTIONAL {{ ?type rdfs:label ?rdfsLabel . }}
+  BIND(COALESCE(STR(?prophetName), STR(?rdfsLabel), REPLACE(STR(?type), "^.*[#/]", "")) AS ?label)
+  BIND(REPLACE(STR(?kindIri), "^.*[#/]", "") AS ?kind)
+}}
+ORDER BY ?kind ?label
+""".strip()
+_MANAGED_AGENT_OBJECT_MODELS_QUERY = f"""
+{_PREFIXES}
+SELECT DISTINCT ?objectModel ?label
+WHERE {{
+  ?objectModel a ?typeIri .
+  ?typeIri rdfs:subClassOf* prophet:ObjectModel .
+  FILTER(isIRI(?objectModel))
+  OPTIONAL {{ ?objectModel prophet:name ?prophetName . }}
+  OPTIONAL {{ ?objectModel rdfs:label ?rdfsLabel . }}
+  BIND(
+    COALESCE(
+      STR(?prophetName),
+      STR(?rdfsLabel),
+      REPLACE(STR(?objectModel), "^.*[#/]", "")
+    ) AS ?label
+  )
+}}
+ORDER BY ?label
+""".strip()
 _PROPHET_NS = "http://prophet.platform/ontology#"
 _SHACL_NS = "http://www.w3.org/ns/shacl#"
 
@@ -89,11 +144,13 @@ class OntologyService:
         validator: ShaclValidator,
         base_graph_iri: str = BASE_GRAPH_IRI,
         meta_graph_iri: str = META_GRAPH_IRI,
+        data_graph_iri: str = SEER_DATA_GRAPH_IRI,
     ) -> None:
         self._repository = repository
         self._validator = validator
         self._base_graph_iri = base_graph_iri
         self._meta_graph_iri = meta_graph_iri
+        self._data_graph_iri = data_graph_iri
 
     async def ingest(self, release_id: str, turtle: str) -> OntologyIngestResponse:
         release_graph_iri = make_release_graph_iri(release_id)
@@ -364,6 +421,106 @@ LIMIT 50
             edges=edges,
         )
 
+    async def list_managed_agents(self) -> ManagedAgentListResponse:
+        data_graph = await self._managed_agent_data_graph()
+        summaries = extract_managed_agent_summaries(data_graph)
+        return ManagedAgentListResponse(total=len(summaries), managed_agents=summaries)
+
+    async def get_managed_agent(self, managed_agent_key: str) -> ManagedAgentDetail:
+        data_graph = await self._managed_agent_data_graph()
+        detail = extract_managed_agent_detail(
+            data_graph,
+            managed_agent_key=managed_agent_key,
+        )
+        if detail is None:
+            raise ValueError(f"managed agent '{managed_agent_key}' was not found")
+        return detail
+
+    async def managed_agent_editor_catalog(self) -> ManagedAgentEditorCatalog:
+        object_model_rows = await self._select_scoped(_MANAGED_AGENT_OBJECT_MODELS_QUERY)
+        value_type_rows = await self._select_scoped(_MANAGED_AGENT_VALUE_TYPES_QUERY)
+        object_models: list[ManagedAgentCatalogItem] = []
+        seen_object_models: set[str] = set()
+        for row in object_model_rows:
+            iri = row.get("objectModel", "").strip()
+            if not iri or iri in seen_object_models:
+                continue
+            seen_object_models.add(iri)
+            object_models.append(
+                ManagedAgentCatalogItem(
+                    iri=iri,
+                    label=row.get("label", iri).strip() or iri,
+                    kind="ObjectModel",
+                )
+            )
+
+        value_types: list[ManagedAgentCatalogItem] = []
+        seen_value_types: set[str] = set()
+        for row in value_type_rows:
+            iri = row.get("type", "").strip()
+            if not iri or iri in seen_value_types:
+                continue
+            seen_value_types.add(iri)
+            value_types.append(
+                ManagedAgentCatalogItem(
+                    iri=iri,
+                    label=row.get("label", iri).strip() or iri,
+                    kind=row.get("kind", "Type").strip() or "Type",
+                )
+            )
+
+        return ManagedAgentEditorCatalog(
+            object_models=object_models,
+            value_types=value_types,
+        )
+
+    async def upsert_managed_agent(
+        self,
+        payload: ManagedAgentUpsertRequest,
+    ) -> ManagedAgentDetail:
+        if RdfGraph is None:
+            raise OntologyDependencyUnavailableError(
+                "rdflib is required for managed-agent authoring"
+            )
+
+        await self._current_pointer_or_raise()
+        await self._validate_managed_agent_catalog_membership(payload)
+
+        current_release_graph = await self._current_release_graph()
+        data_graph = await self._managed_agent_data_graph()
+        remove_managed_agent_cluster(data_graph, managed_agent_key=payload.managed_agent_key)
+        cluster = build_managed_agent_cluster(payload, updated_at=datetime.now(UTC))
+        data_graph += cluster.graph
+
+        validation_graph = RdfGraph()
+        validation_graph += current_release_graph
+        validation_graph += data_graph
+        serialized_validation_graph = validation_graph.serialize(format="turtle")
+        validation_turtle = (
+            serialized_validation_graph.decode("utf-8")
+            if isinstance(serialized_validation_graph, bytes)
+            else serialized_validation_graph
+        )
+        validation = self._validator.validate(validation_turtle)
+        if not validation.conforms:
+            raise ManagedAgentAuthoringError(
+                "managed agent authoring failed validation",
+                detail={
+                    "code": "managed_agent_validation_failed",
+                    "message": "Managed agent payload failed Prophet/Seer ontology validation.",
+                    "diagnostics": [item.model_dump() for item in validation.diagnostics],
+                },
+            )
+
+        serialized_data_graph = data_graph.serialize(format="turtle")
+        data_turtle = (
+            serialized_data_graph.decode("utf-8")
+            if isinstance(serialized_data_graph, bytes)
+            else serialized_data_graph
+        )
+        await self._repository.replace_graph(self._data_graph_iri, data_turtle)
+        return await self.get_managed_agent(payload.managed_agent_key)
+
     async def run_read_only_query(self, query: str) -> OntologySparqlQueryResponse:
         query_type = enforce_read_only_query(query)
         graphs = await self._scoped_graphs()
@@ -397,9 +554,71 @@ LIMIT 50
             raise OntologyNotReadyError("No current ontology release has been ingested")
         return pointer
 
+    async def _current_release_graph(self) -> RdfGraph:
+        if RdfGraph is None:
+            raise OntologyDependencyUnavailableError(
+                "rdflib is required for ontology graph loading"
+            )
+        pointer = await self._current_pointer_or_raise()
+        current_turtle = await self._repository.get_graph_turtle(pointer.graph_iri)
+        release_graph = RdfGraph()
+        if current_turtle.strip():
+            release_graph.parse(data=current_turtle, format="turtle")
+        return release_graph
+
+    async def _managed_agent_data_graph(self) -> RdfGraph:
+        if RdfGraph is None:
+            raise OntologyDependencyUnavailableError(
+                "rdflib is required for ontology graph loading"
+            )
+        data_graph = RdfGraph()
+        turtle = await self._repository.get_graph_turtle_or_empty(self._data_graph_iri)
+        if turtle.strip():
+            data_graph.parse(data=turtle, format="turtle")
+        return data_graph
+
+    async def _validate_managed_agent_catalog_membership(
+        self,
+        payload: ManagedAgentUpsertRequest,
+    ) -> None:
+        catalog = await self.managed_agent_editor_catalog()
+        value_type_iris = {item.iri for item in catalog.value_types}
+        object_model_iris = {item.iri for item in catalog.object_models}
+        for field in [*payload.input_fields, *payload.output_fields]:
+            if field.value_type_iri and field.value_type_iri not in value_type_iris:
+                raise ManagedAgentAuthoringError(
+                    (
+                        f"value type '{field.value_type_iri}' is not available in the "
+                        "current ontology scope"
+                    ),
+                    detail={
+                        "code": "unknown_value_type",
+                        "field": f"field.{field.field_key}.value_type_iri",
+                        "message": (
+                            f"Value type '{field.value_type_iri}' was not found in the current "
+                            "ontology scope."
+                        ),
+                    },
+                )
+            if field.object_model_iri and field.object_model_iri not in object_model_iris:
+                raise ManagedAgentAuthoringError(
+                    (
+                        f"object model '{field.object_model_iri}' is not available in the "
+                        "current ontology scope"
+                    ),
+                    detail={
+                        "code": "unknown_object_model",
+                        "field": f"field.{field.field_key}.object_model_iri",
+                        "message": (
+                            f"Object model '{field.object_model_iri}' was not found in the current "
+                            "ontology scope."
+                        ),
+                    },
+                )
+
     async def _scoped_graphs(self) -> list[str]:
         pointer = await self._current_pointer_or_raise()
-        return [self._base_graph_iri, pointer.graph_iri]
+        return [self._base_graph_iri, pointer.graph_iri, self._data_graph_iri]
 
 
 class UnavailableOntologyService:
@@ -428,6 +647,23 @@ class UnavailableOntologyService:
         raise OntologyDependencyUnavailableError(self.reason)
 
     async def graph(self) -> OntologyGraphResponse:
+        raise OntologyDependencyUnavailableError(self.reason)
+
+    async def list_managed_agents(self) -> ManagedAgentListResponse:
+        raise OntologyDependencyUnavailableError(self.reason)
+
+    async def get_managed_agent(self, managed_agent_key: str) -> ManagedAgentDetail:
+        del managed_agent_key
+        raise OntologyDependencyUnavailableError(self.reason)
+
+    async def managed_agent_editor_catalog(self) -> ManagedAgentEditorCatalog:
+        raise OntologyDependencyUnavailableError(self.reason)
+
+    async def upsert_managed_agent(
+        self,
+        payload: ManagedAgentUpsertRequest,
+    ) -> ManagedAgentDetail:
+        del payload
         raise OntologyDependencyUnavailableError(self.reason)
 
     async def run_read_only_query(self, query: str) -> OntologySparqlQueryResponse:

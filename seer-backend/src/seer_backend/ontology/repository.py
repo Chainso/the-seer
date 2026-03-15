@@ -39,6 +39,8 @@ class OntologyRepository(Protocol):
 
     async def get_graph_turtle(self, graph_iri: str) -> str: ...
 
+    async def get_graph_turtle_or_empty(self, graph_iri: str) -> str: ...
+
     async def select(
         self,
         query: str,
@@ -152,6 +154,17 @@ LIMIT 1
         self._raise_for_status(response, "read named graph")
         return response.text
 
+    async def get_graph_turtle_or_empty(self, graph_iri: str) -> str:
+        async with self._client() as client:
+            response = await client.get(
+                f"{self._graph_store_url}?graph={quote(graph_iri, safe='')}",
+                headers={"Accept": "text/turtle"},
+            )
+        if response.status_code == 404:
+            return ""
+        self._raise_for_status(response, "read named graph")
+        return response.text
+
     async def select(
         self, query: str, default_graph_uris: Sequence[str] | None = None
     ) -> list[dict[str, str]]:
@@ -256,6 +269,9 @@ class InMemoryOntologyRepository:
         if isinstance(serialized, bytes):
             return serialized.decode("utf-8")
         return str(serialized)
+
+    async def get_graph_turtle_or_empty(self, graph_iri: str) -> str:
+        return await self.get_graph_turtle(graph_iri)
 
     async def select(
         self, query: str, default_graph_uris: Sequence[str] | None = None
