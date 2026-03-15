@@ -30,6 +30,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - [x] 2026-03-15 Phase 1 complete: backend ontology/action contracts now classify runnable ontology concepts as `action | agentic_workflow`, bootstrap `seer:AgenticWorkflow` as a `prophet:Action` subtype without touching the dirty `prophet` submodule, and pass the targeted backend validation commands.
 - [x] 2026-03-15 Phase 2 complete: managed-agent APIs/UI use action-first terminology and `action_uri`, while `seer:AgenticWorkflow` remains a subtype of `prophet:Action`.
 - [x] 2026-03-15 Phase 3 backend/shared-display slice complete: ontology graph nodes now project state-carrier metadata from Prophet field annotations and the shared ontology-display catalog/resolver consume that metadata for state labels and filters.
+- [x] 2026-03-15 Phase 3 consumer/history slice complete: Object Store and history consumers now derive lifecycle badges from adjacent state-carrier snapshots and no longer parse explicit `fromState` / `toState` payload keys.
 - [ ] Phase 3 complete: ontology graph, shared display helpers, Object Store, and lifecycle rendering use state-carrier metadata instead of explicit state/transition resources.
 - [ ] Phase 4 complete: ontology explorer and analytics/RCA surfaces drop obsolete Prophet taxonomy and operate on `Action`, `Event`, `EventTrigger`, and state-carrier semantics only.
 - [ ] Phase 5 complete: canonical docs/specs are ratified, full validation evidence is recorded, and the plan is ready to archive.
@@ -53,6 +54,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15: The agent-orchestration tests outside the Phase 2 handoff `Read First` list still asserted removed `ActionKind.PROCESS|WORKFLOW` members and `workflow_uri` transcript fields, so Phase 2 had to update `tests/test_agent_orchestration_phase3.py` and `tests/test_agent_orchestration_phase4.py` alongside the production contract rename to keep the related suite truthful.
 - 2026-03-15: Phase 3 backend work could not rely on explicit enum member nodes in generated Turtle. Prophet emits state options only through `sh:in (...)` on the enum constraint shape, while `prophet:initialEnumValue` points at an `enumv_*` IRI with no separate label triples, so the backend graph had to derive initial literal values by matching the enum-value IRI suffix back to the SHACL option list.
 - 2026-03-15: The shared resolver still short-circuited every state-like field label to `"State"` before checking ontology labels. Once the state carrier field became `status`, Phase 3 had to change `displayFieldLabel` to consult ontology field labels first so state-carrier fields keep their real labels.
+- 2026-03-15: The canonical object-history contract exposes only the event-linked object snapshot, not an explicit previous snapshot or `fromState` / `toState` payload fields, so the consumer lane had to derive lifecycle badges by diffing adjacent snapshots in timeline order on the shared `stateFilterFieldKey`.
 
 ## Decision Log
 
@@ -64,6 +66,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15, Codex: Phase 1 may update backend response-model literals in `api/actions.py` and `api/agentic_workflows.py` even though managed-agent contract renames belong to Phase 2. Rationale: the shared execution-kind collapse is a Phase 1 deliverable, and the backend cannot serialize `action` records correctly until those schema literals accept the new value.
 - 2026-03-15, Codex: Phase 2 keeps the ClickHouse transcript table column name `workflow_uri` unchanged while remapping every managed-agent service/API/UI field to `action_uri`. Rationale: the storage column is an internal persistence detail, and avoiding a schema migration keeps the phase scoped to public contract correction instead of storage churn.
 - 2026-03-15, Codex: Phase 3 is safe to split into two implementation lanes as long as the backend/shared-display lane lands first and the consumer/UI lane only reads the new metadata. Rationale: the backend graph plus shared resolver files are largely disjoint from the inspector history consumers, and sequencing the metadata producer first reduces merge risk while keeping the plan truthful about the phase still being open.
+- 2026-03-15, Codex: The history/Object Store consumer lane should use adjacent object snapshots as the lifecycle diff source and treat explicit transition payload fields as removed legacy behavior. Rationale: this matches the real history API contract and keeps the UI aligned to Prophet's state-carrier model instead of reconstructing obsolete transition resources.
 
 ## Outcomes & Retrospective
 
@@ -96,6 +99,12 @@ Phase 3 backend/shared-display validation evidence:
 2. `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests/test_ontology_phase1.py` passed with `All checks passed!`.
 3. `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` passed with `11 passed, 0 failed`.
 4. `cd /workspaces/seer-python/seer-ui && npm run build` passed and produced a successful Next.js production build.
+
+2026-03-15 Phase 3 consumer/history work is now landed as well. `use-object-history-display-data.ts` reads the shared `stateFilterFieldKey`, compares adjacent object snapshots in timeline order, and renders lifecycle badges from observed state-carrier value changes instead of parsing `fromState` / `toState` payload keys. The history contract test now locks that behavior so future edits do not reintroduce the legacy transition-payload path.
+
+Phase 3 consumer/history validation evidence:
+1. `cd /workspaces/seer-python/seer-ui && node --test tests/history.contract.test.mjs` passed with `1 pass, 0 fail`.
+2. `cd /workspaces/seer-python/seer-ui && npm run build` passed and produced a successful Next.js production build.
 
 ## Context and Orientation
 
@@ -436,10 +445,14 @@ Move ontology display and lifecycle interpretation to the state-carrier field mo
 - Known Constraints / Baseline Failures:
   1. Prophet generated Turtle currently exposes `prophet:isStateField` and `prophet:initialEnumValue`, but not explicit enum member resources in the examples; fallback label logic may be required.
   2. Do not recreate fake `State` or `Transition` nodes for compatibility.
-- Status: pending
 - Status: in_progress
-- Completion Notes: Backend/shared-display producer work is complete. `seer_backend.ontology.service` now derives state-carrier metadata from `prophet:isStateField`, `prophet:initialEnumValue`, and enum constraint `sh:in` lists, and the shared catalog/resolver consume that metadata for object-model state filters and value display. The remaining work in this phase is consumer-side history/Object Store lifecycle rendering.
-- Next Starter Context: Consume `selectedModel.stateFilterFieldKey`, `selectedModel.stateFilterOptions`, and `selectedModel.initialStateValue` from the shared resolver in the history/Object Store lane. Avoid changing the backend graph property names again unless the consumer lane finds a concrete mismatch, because the backend graph test and shared display contract test now lock this metadata shape.
+- Completion Notes:
+  1. Backend/shared-display producer work is complete. `seer_backend.ontology.service` now derives state-carrier metadata from `prophet:isStateField`, `prophet:initialEnumValue`, and enum constraint `sh:in` lists, and the shared catalog/resolver consume that metadata for object-model state filters and value display.
+  2. Consumer/history work is complete. `seer-ui/app/components/inspector/use-object-history-display-data.ts` now derives lifecycle badges from adjacent state-carrier snapshot deltas, and `seer-ui/tests/history.contract.test.mjs` guards against reintroducing explicit `fromState` / `toState` payload parsing.
+  3. Validation passed for the consumer lane:
+     - `cd /workspaces/seer-python/seer-ui && node --test tests/history.contract.test.mjs` -> `1 pass, 0 fail`
+     - `cd /workspaces/seer-python/seer-ui && npm run build` -> successful Next.js production build
+- Next Starter Context: Phase 3 should now be closed by the controller after integrating the backend/shared-display commit with this consumer/history commit and re-running controller validation. Phase 4 can then start from the new shared `stateFilterFieldKey`, `stateFilterOptions`, and `initialStateValue` metadata without reintroducing explicit ontology state or transition concepts.
 
 ## Phase 4
 

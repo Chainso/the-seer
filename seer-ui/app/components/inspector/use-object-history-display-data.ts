@@ -156,6 +156,34 @@ function isMappedDisplayLabel(raw: string, candidate: string): boolean {
   return normalizedCandidate !== raw;
 }
 
+function readStateSnapshotValue(
+  payload: Record<string, unknown> | null | undefined,
+  fieldKey: string | null | undefined
+): string | null {
+  if (!payload || !fieldKey) {
+    return null;
+  }
+  const normalizedFieldKey = normalizeComparableToken(fieldKey);
+  if (!normalizedFieldKey) {
+    return null;
+  }
+  const payloadKey = Object.keys(payload).find(
+    (candidate) => normalizeComparableToken(candidate) === normalizedFieldKey
+  );
+  if (!payloadKey) {
+    return null;
+  }
+  const rawValue = payload[payloadKey];
+  if (typeof rawValue === "string") {
+    const trimmed = rawValue.trim();
+    return trimmed || null;
+  }
+  if (typeof rawValue === "number" || typeof rawValue === "boolean") {
+    return String(rawValue);
+  }
+  return null;
+}
+
 async function fetchObjectEventsForGraph(
   identity: ObjectHistoryIdentity,
   window: TimeWindow,
@@ -611,14 +639,13 @@ export function useObjectHistoryDisplayData({
       const payloadKeys = Object.keys(payload);
 
       const prioritized = [
-        "from_state",
-        "to_state",
+        objectModel?.stateFilterFieldKey,
         "state",
         "status",
         ...eventFieldKeys,
         ...objectFieldKeys,
         ...payloadKeys,
-      ];
+      ].filter((key): key is string => Boolean(key));
 
       const selectedKeys: string[] = [];
       const seenNormalized = new Set<string>();
@@ -675,45 +702,50 @@ export function useObjectHistoryDisplayData({
         };
       });
     },
-    [objectModel?.canonicalFieldKeys, objectType, ontologyDisplay, stateLabelByToken]
+    [
+      objectModel?.canonicalFieldKeys,
+      objectModel?.stateFilterFieldKey,
+      objectType,
+      ontologyDisplay,
+      stateLabelByToken,
+    ]
   );
 
   const resolveStateTransition = useCallback(
-    (item: ObjectEventItem, payload: Record<string, unknown>) => {
-      const fromKey = Object.keys(payload).find(
-        (key) => normalizeComparableToken(key) === "fromstate"
-      );
-      const toKey = Object.keys(payload).find(
-        (key) => normalizeComparableToken(key) === "tostate"
-      );
-      if (!fromKey && !toKey) {
+    (
+      item: ObjectEventItem,
+      payload: Record<string, unknown>,
+      previousPayload: Record<string, unknown> | null | undefined
+    ) => {
+      const stateFieldKey = objectModel?.stateFilterFieldKey;
+      if (!stateFieldKey) {
         return null;
       }
 
-      const fromValue = fromKey
-        ? ontologyDisplay.displayFieldValue(fromKey, payload[fromKey], {
-            objectType,
-            eventType: item.event_type,
-            stateLabelByToken,
-          })
-        : null;
-      const toValue = toKey
-        ? ontologyDisplay.displayFieldValue(toKey, payload[toKey], {
-            objectType,
-            eventType: item.event_type,
-            stateLabelByToken,
-          })
-        : null;
+      const fromRawValue = readStateSnapshotValue(previousPayload, stateFieldKey);
+      const toRawValue = readStateSnapshotValue(payload, stateFieldKey);
+      if (!fromRawValue || !toRawValue || fromRawValue === toRawValue) {
+        return null;
+      }
 
-      const payloadKeys = [fromKey, toKey].filter((key): key is string => Boolean(key));
+      const fromValue = ontologyDisplay.displayFieldValue(stateFieldKey, fromRawValue, {
+        objectType,
+        eventType: item.event_type,
+        stateLabelByToken,
+      });
+      const toValue = ontologyDisplay.displayFieldValue(stateFieldKey, toRawValue, {
+        objectType,
+        eventType: item.event_type,
+        stateLabelByToken,
+      });
 
       return {
         from: fromValue ? String(fromValue) : "Unknown",
         to: toValue ? String(toValue) : "Unknown",
-        payloadKeys,
+        payloadKeys: [stateFieldKey],
       };
     },
-    [objectType, ontologyDisplay, stateLabelByToken]
+    [objectModel?.stateFilterFieldKey, objectType, ontologyDisplay, stateLabelByToken]
   );
 
   type TimelineBucket = ObjectHistoryTimelineGroup["entries"][number] & {
@@ -722,12 +754,30 @@ export function useObjectHistoryDisplayData({
   };
 
   const timelineBuckets = useMemo<TimelineBucket[]>(() => {
+    const transitionsByIdentityKey = new Map<
+      string,
+      { from: string; to: string; payloadKeys: string[] }
+    >();
+    const ascendingItems = [...timelineItems].sort(
+      (a, b) => Date.parse(eventTimeIso(a)) - Date.parse(eventTimeIso(b))
+    );
+
+    let previousPayload: Record<string, unknown> | null = null;
+    ascendingItems.forEach((item) => {
+      const payload = item.object_payload || item.payload || {};
+      const stateTransition = resolveStateTransition(item, payload, previousPayload);
+      if (stateTransition) {
+        transitionsByIdentityKey.set(timelineIdentityKey(item), stateTransition);
+      }
+      previousPayload = item.object_payload || payload || null;
+    });
+
     return [...timelineItems]
       .sort((a, b) => Date.parse(eventTimeIso(b)) - Date.parse(eventTimeIso(a)))
       .map((item) => {
         const payload = item.payload || item.object_payload || {};
         const eventDate = new Date(eventTimeIso(item));
-        const stateTransition = resolveStateTransition(item, payload);
+        const stateTransition = transitionsByIdentityKey.get(timelineIdentityKey(item)) || null;
         const excludedComparableKeys = new Set<string>();
         for (const key of stateTransition?.payloadKeys || []) {
           const comparable = normalizeComparableToken(key);
@@ -780,6 +830,7 @@ export function useObjectHistoryDisplayData({
     displayRelationRole,
     objectType,
     ontologyDisplay,
+    objectModel?.stateFilterFieldKey,
     resolveStateTransition,
     summarizeTimelinePayload,
     timelineItems,

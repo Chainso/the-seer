@@ -102,6 +102,11 @@ test("history surfaces consume shared ontology display resolver contracts", () =
   assert.match(displayHook, /\.summarizePayload\(/);
   assert.match(displayHook, /buildTimelineHighlights/);
   assert.match(displayHook, /resolveStateTransition/);
+  assert.match(displayHook, /readStateSnapshotValue/);
+  assert.match(displayHook, /stateFilterFieldKey/);
+  assert.match(displayHook, /previousPayload/);
+  assert.doesNotMatch(displayHook, /normalizeComparableToken\(key\)\s*===\s*"fromstate"/);
+  assert.doesNotMatch(displayHook, /normalizeComparableToken\(key\)\s*===\s*"tostate"/);
   assert.match(displayHook, /toLocaleDateString\(undefined,\s*\{\s*weekday:\s*"short"/);
   assert.match(displaySurface, /<ObjectHistoryActivityGraph/);
   assert.match(displaySurface, /<ObjectHistoryTimeline/);
