@@ -949,6 +949,34 @@ def test_graph_endpoint_returns_current_release_named_graph_only(client: TestCli
     assert all(not iri.startswith("http://prophet.platform/standard-types#") for iri in node_iris)
     assert all(not iri.startswith("http://www.w3.org/") for iri in node_iris)
 
+    sales_order_node = next(
+        node
+        for node in body["nodes"]
+        if node["iri"]
+        == "http://prophet.platform/local/support_local#obj_ticket"
+    )
+    status_property_node = next(
+        node
+        for node in body["nodes"]
+        if node["iri"]
+        == "http://prophet.platform/local/support_local#fld_ticket_status"
+    )
+
+    assert sales_order_node["properties"]["stateCarrierFieldKey"] == "status"
+    assert (
+        sales_order_node["properties"]["stateCarrierPropertyUri"]
+        == "http://prophet.platform/local/support_local#fld_ticket_status"
+    )
+    assert sales_order_node["properties"]["initialStateValue"] == "New"
+    assert sales_order_node["properties"]["stateOptions"] == [
+        {"value": "New", "label": "New"},
+        {"value": "Triaged", "label": "Triaged"},
+    ]
+
+    assert status_property_node["properties"]["isStateCarrier"] is True
+    assert status_property_node["properties"]["stateCarrierFieldKey"] == "status"
+    assert status_property_node["properties"]["initialStateValue"] == "New"
+
 
 def test_copilot_executes_tool_call_and_returns_structured_rows() -> None:
     model_output = CopilotStructuredOutput(

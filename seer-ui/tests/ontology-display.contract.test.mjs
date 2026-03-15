@@ -94,27 +94,22 @@ function read(relativePath) {
 }
 
 function buildFixtureGraph() {
+  const stateOptions = [
+    { value: "PendingPayment", label: "Pending Approval" },
+    { value: "Approved", label: "Approved" },
+  ];
   return {
     nodes: [
       {
         uri: "http://example.com/obj_order",
         label: "ObjectModel",
-        properties: { "prophet:name": "Order" },
-      },
-      {
-        uri: "http://example.com/state_order_pending",
-        label: "State",
-        properties: { "prophet:name": "Pending Approval" },
-      },
-      {
-        uri: "http://example.com/state_order_approved",
-        label: "State",
-        properties: { "prophet:name": "Approved" },
-      },
-      {
-        uri: "http://example.com/trans_order_approve",
-        label: "Transition",
-        properties: { "prophet:name": "Approve" },
+        properties: {
+          "prophet:name": "Order",
+          stateCarrierFieldKey: "status",
+          stateCarrierPropertyUri: "http://example.com/prop_status",
+          initialStateValue: "PendingPayment",
+          stateOptions,
+        },
       },
       {
         uri: "http://example.com/prop_customer",
@@ -137,9 +132,15 @@ function buildFixtureGraph() {
         properties: { fieldKey: "quantity", "prophet:name": "Quantity" },
       },
       {
-        uri: "http://example.com/prop_state",
+        uri: "http://example.com/prop_status",
         label: "PropertyDefinition",
-        properties: { fieldKey: "state", "prophet:name": "State" },
+        properties: {
+          fieldKey: "status",
+          "prophet:name": "Status",
+          isStateCarrier: true,
+          initialStateValue: "PendingPayment",
+          stateOptions,
+        },
       },
       {
         uri: "http://example.com/evt_order_created",
@@ -161,32 +162,7 @@ function buildFixtureGraph() {
         type: "hasProperty",
       },
       { fromUri: "http://example.com/obj_order", toUri: "http://example.com/prop_quantity", type: "hasProperty" },
-      { fromUri: "http://example.com/obj_order", toUri: "http://example.com/prop_state", type: "hasProperty" },
-      {
-        fromUri: "http://example.com/obj_order",
-        toUri: "http://example.com/state_order_pending",
-        type: "hasPossibleState",
-      },
-      {
-        fromUri: "http://example.com/obj_order",
-        toUri: "http://example.com/state_order_approved",
-        type: "hasPossibleState",
-      },
-      {
-        fromUri: "http://example.com/trans_order_approve",
-        toUri: "http://example.com/obj_order",
-        type: "transitionOf",
-      },
-      {
-        fromUri: "http://example.com/trans_order_approve",
-        toUri: "http://example.com/state_order_pending",
-        type: "fromState",
-      },
-      {
-        fromUri: "http://example.com/trans_order_approve",
-        toUri: "http://example.com/state_order_approved",
-        type: "toState",
-      },
+      { fromUri: "http://example.com/obj_order", toUri: "http://example.com/prop_status", type: "hasProperty" },
       {
         fromUri: "http://example.com/prop_quantity",
         toUri: "http://www.w3.org/2001/XMLSchema#integer",
@@ -228,17 +204,17 @@ test("resolver centralizes field label, state value, and summary rendering", () 
   const resolver = buildResolver();
 
   assert.equal(resolver.displayFieldLabel("customer_id", { objectType: "order" }), "Customer ID");
-  assert.equal(resolver.displayFieldLabel("state", { objectType: "order" }), "State");
+  assert.equal(resolver.displayFieldLabel("status", { objectType: "order" }), "Status");
   assert.equal(
     resolver.displayFieldLabel("event.present.OrderCreated", { objectType: "order" }),
     "Event present • Order Created"
   );
   assert.equal(
-    resolver.displayFieldValue("state", "pending", { objectType: "order" }),
+    resolver.displayFieldValue("status", "PendingPayment", { objectType: "order" }),
     "Pending Approval"
   );
   assert.equal(
-    resolver.displayFieldValue("from_state", "pending", { objectType: "order" }),
+    resolver.displayFieldValue("from_state", "PendingPayment", { objectType: "order" }),
     "Pending Approval"
   );
   assert.equal(
@@ -247,14 +223,14 @@ test("resolver centralizes field label, state value, and summary rendering", () 
   );
   assert.equal(
     resolver.summarizePayload(
-      { state: "pending", quantity: 3, customer: "ACME", metadata: { nested: true } },
+      { status: "PendingPayment", quantity: 3, customer: "ACME", metadata: { nested: true } },
       { objectType: "order" }
     ),
-    "State · Pending Approval | Quantity · 3 | Customer · ACME"
+    "Status · Pending Approval | Quantity · 3 | Customer · ACME"
   );
 });
 
-test("resolver removes hard-coded alias rewrites and keeps state token mapping contracts", () => {
+test("resolver removes hard-coded alias rewrites and keeps state-carrier token mapping contracts", () => {
   const resolver = buildResolver();
 
   assert.equal(resolver.displayObjectType("sales order"), "sales order");
@@ -263,15 +239,32 @@ test("resolver removes hard-coded alias rewrites and keeps state token mapping c
     "sales_order_number"
   );
   assert.equal(
-    resolver.displayFieldValue("state", "state_order_pending", { objectType: "order" }),
+    resolver.displayFieldValue("status", "PendingPayment", { objectType: "order" }),
     "Pending Approval"
   );
   assert.equal(
-    resolver.displayFieldValue("from_state", "order_pending", { objectType: "order" }),
+    resolver.displayFieldValue("from_state", "PendingPayment", { objectType: "order" }),
     "Pending Approval"
   );
   assert.ok(!tokenVariants("order").includes("salesorder"));
   assert.ok(!tokenVariants("sales_order_total").includes("order_total"));
+});
+
+test("catalog exposes state-carrier metadata on object models", () => {
+  const catalog = buildOntologyDisplayCatalog(buildFixtureGraph());
+  const order = catalog.objectModelByUri.get("http://example.com/obj_order");
+
+  assert.ok(order);
+  assert.equal(order.stateFilterFieldKey, "status");
+  assert.equal(order.stateCarrierPropertyUri, "http://example.com/prop_status");
+  assert.equal(order.initialStateValue, "PendingPayment");
+  assert.equal(
+    JSON.stringify(order.stateFilterOptions),
+    JSON.stringify([
+      { value: "Approved", label: "Approved" },
+      { value: "PendingPayment", label: "Pending Approval" },
+    ])
+  );
 });
 
 test("catalog omits legacy alias rewrite tables", () => {
@@ -325,53 +318,12 @@ test("history details panel keeps object-local lifecycle naming in plain/default
   assert.doesNotMatch(historySource, /lifecycleLabelMode:\s*['"]explicit['"]/);
   assert.match(detailsSource, /displayFieldValue\(/);
   assert.equal(
-    resolver.displayFieldValue("from_state", "pending", { objectType: "order" }),
+    resolver.displayFieldValue("from_state", "PendingPayment", { objectType: "order" }),
     "Pending Approval"
   );
   assert.equal(
-    resolver.displayFieldValue("to_state", "approved", { objectType: "order" }),
+    resolver.displayFieldValue("to_state", "Approved", { objectType: "order" }),
     "Approved"
-  );
-});
-
-test("resolver formats lifecycle concept labels in explicit mode", () => {
-  const resolver = buildResolver();
-
-  assert.equal(
-    resolver.displayConcept("http://example.com/state_order_pending", {
-      conceptKind: "State",
-      lifecycleLabelMode: "explicit",
-    }),
-    "Order Pending Approval"
-  );
-  assert.equal(
-    resolver.displayConcept("http://example.com/trans_order_approve", {
-      conceptKind: "Transition",
-      lifecycleLabelMode: "explicit",
-    }),
-    "Approve Order"
-  );
-  assert.equal(
-    resolver.displayNode(
-      {
-        uri: "http://example.com/state_order_pending",
-        label: "State",
-        properties: { "prophet:name": "Pending Approval" },
-      },
-      { lifecycleLabelMode: "explicit" }
-    ),
-    "Order Pending Approval"
-  );
-  assert.equal(
-    resolver.displayNode(
-      {
-        uri: "http://example.com/trans_order_approve",
-        label: "Transition",
-        properties: { "prophet:name": "Approve" },
-      },
-      { lifecycleLabelMode: "explicit" }
-    ),
-    "Approve Order"
   );
 });
 
@@ -379,20 +331,16 @@ test("resolver keeps lifecycle concept labels plain by default", () => {
   const resolver = buildResolver();
 
   assert.equal(
-    resolver.displayConcept("http://example.com/state_order_pending", { conceptKind: "State" }),
-    "Pending Approval"
-  );
-  assert.equal(
-    resolver.displayConcept("http://example.com/trans_order_approve", { conceptKind: "Transition" }),
-    "Approve"
+    resolver.displayConcept("http://example.com/evt_order_created", { conceptKind: "Event" }),
+    "Order Created"
   );
   assert.equal(
     resolver.displayNode({
-      uri: "http://example.com/state_order_pending",
-      label: "State",
-      properties: { "prophet:name": "Pending Approval" },
+      uri: "http://example.com/evt_order_created",
+      label: "Event",
+      properties: { "prophet:name": "Order Created" },
     }),
-    "Pending Approval"
+    "Order Created"
   );
 });
 

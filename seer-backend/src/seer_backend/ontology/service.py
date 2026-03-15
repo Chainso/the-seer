@@ -77,6 +77,7 @@ WHERE {{
 LIMIT 300
 """.strip()
 _PROPHET_NS = "http://prophet.platform/ontology#"
+_SHACL_NS = "http://www.w3.org/ns/shacl#"
 
 
 class OntologyService:
@@ -326,6 +327,8 @@ LIMIT 50
             if existing_value != literal_value:
                 subject_node.properties[property_key] = [existing_value, literal_value]
 
+        _attach_state_carrier_metadata(dataset_graph, nodes_by_iri)
+
         edge_keys: set[tuple[str, str, str]] = set()
         edges: list[OntologyGraphEdge] = []
         for subject, predicate, obj in dataset_graph:
@@ -471,3 +474,189 @@ def _iri_local_name(iri: str) -> str:
     if slash_index >= 0 and slash_index < len(iri) - 1:
         return iri[slash_index + 1 :]
     return iri
+
+
+def _attach_state_carrier_metadata(
+    dataset_graph: RdfGraph,
+    nodes_by_iri: dict[str, OntologyGraphNode],
+) -> None:
+    if URIRef is None or RDF is None:
+        return
+
+    has_property_predicate = URIRef(f"{_PROPHET_NS}hasProperty")
+    field_key_predicate = URIRef(f"{_PROPHET_NS}fieldKey")
+    value_type_predicate = URIRef(f"{_PROPHET_NS}valueType")
+    is_state_field_predicate = URIRef(f"{_PROPHET_NS}isStateField")
+    initial_enum_value_predicate = URIRef(f"{_PROPHET_NS}initialEnumValue")
+    has_constraint_predicate = URIRef(f"{_PROPHET_NS}hasConstraint")
+    sh_property_predicate = URIRef(f"{_SHACL_NS}property")
+    sh_in_predicate = URIRef(f"{_SHACL_NS}in")
+
+    for object_uri, object_node in nodes_by_iri.items():
+        if object_node.category != "ObjectModel":
+            continue
+
+        state_property_node: OntologyGraphNode | None = None
+        state_property_uri: str | None = None
+        state_value_type_uri: str | None = None
+        state_options: list[dict[str, str]] = []
+        initial_state_value: str | None = None
+
+        for property_ref in dataset_graph.objects(URIRef(object_uri), has_property_predicate):
+            if not isinstance(property_ref, URIRef):
+                continue
+            property_uri = str(property_ref)
+            property_node = nodes_by_iri.get(property_uri)
+            if property_node is None:
+                continue
+
+            is_state_field = _coerce_booleanish(
+                dataset_graph.value(property_ref, is_state_field_predicate)
+            ) or _coerce_booleanish(property_node.properties.get("isStateField"))
+
+            property_node.properties["isStateCarrier"] = is_state_field
+            if not is_state_field:
+                continue
+
+            state_property_node = property_node
+            state_property_uri = property_uri
+
+            field_key = _literal_string(dataset_graph.value(property_ref, field_key_predicate))
+            if not field_key:
+                field_key = _string_property(property_node.properties.get("fieldKey"))
+
+            value_type_ref = dataset_graph.value(property_ref, value_type_predicate)
+            if isinstance(value_type_ref, URIRef):
+                state_value_type_uri = str(value_type_ref)
+
+            state_options = _extract_enum_options(
+                dataset_graph,
+                value_type_ref,
+                has_constraint_predicate,
+                sh_property_predicate,
+                sh_in_predicate,
+            )
+
+            initial_enum_ref = dataset_graph.value(property_ref, initial_enum_value_predicate)
+            initial_state_value = _resolve_initial_enum_value(
+                initial_enum_ref,
+                state_options,
+            )
+
+            property_node.properties["stateCarrierFieldKey"] = field_key
+            property_node.properties["stateValueTypeUri"] = state_value_type_uri
+            property_node.properties["stateOptions"] = state_options
+            if initial_state_value:
+                property_node.properties["initialStateValue"] = initial_state_value
+            break
+
+        if state_property_node is None:
+            continue
+
+        field_key = _string_property(state_property_node.properties.get("stateCarrierFieldKey"))
+        object_node.properties["stateCarrierFieldKey"] = field_key
+        object_node.properties["stateCarrierPropertyUri"] = state_property_uri
+        object_node.properties["stateValueTypeUri"] = state_value_type_uri
+        object_node.properties["stateOptions"] = state_options
+        if initial_state_value:
+            object_node.properties["initialStateValue"] = initial_state_value
+
+
+def _coerce_booleanish(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    return str(value).strip().lower() == "true"
+
+
+def _literal_string(value: object) -> str | None:
+    if value is None:
+        return None
+    rendered = str(value).strip()
+    return rendered or None
+
+
+def _string_property(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
+def _extract_enum_options(
+    dataset_graph: RdfGraph,
+    value_type_ref: object,
+    has_constraint_predicate: URIRef,
+    sh_property_predicate: URIRef,
+    sh_in_predicate: URIRef,
+) -> list[dict[str, str]]:
+    if not isinstance(value_type_ref, URIRef):
+        return []
+
+    options: list[dict[str, str]] = []
+    seen_values: set[str] = set()
+    for constraint_ref in dataset_graph.objects(value_type_ref, has_constraint_predicate):
+        for property_shape_ref in dataset_graph.objects(constraint_ref, sh_property_predicate):
+            in_list_ref = dataset_graph.value(property_shape_ref, sh_in_predicate)
+            for option_value in _read_rdf_list_literals(dataset_graph, in_list_ref):
+                if option_value in seen_values:
+                    continue
+                seen_values.add(option_value)
+                options.append({"value": option_value, "label": option_value})
+    return options
+
+
+def _read_rdf_list_literals(dataset_graph: RdfGraph, list_ref: object) -> list[str]:
+    if list_ref is None or RDF is None:
+        return []
+
+    values: list[str] = []
+    current = list_ref
+    visited: set[object] = set()
+    while current and current != RDF.nil and current not in visited:
+        visited.add(current)
+        first = dataset_graph.value(current, RDF.first)
+        if first is not None:
+            rendered = str(first).strip()
+            if rendered:
+                values.append(rendered)
+        current = dataset_graph.value(current, RDF.rest)
+    return values
+
+
+def _resolve_initial_enum_value(
+    initial_enum_ref: object,
+    state_options: list[dict[str, str]],
+) -> str | None:
+    if not isinstance(initial_enum_ref, URIRef):
+        return None
+
+    local_name = _iri_local_name(str(initial_enum_ref))
+    normalized_local = _normalize_comparable_token(local_name)
+    if not normalized_local:
+        return None
+
+    matching_values = [
+        option["value"]
+        for option in state_options
+        if _normalize_comparable_token(option["value"])
+        and normalized_local.endswith(_normalize_comparable_token(option["value"]))
+    ]
+    if matching_values:
+        return sorted(matching_values, key=len, reverse=True)[0]
+
+    containing_values = [
+        option["value"]
+        for option in state_options
+        if _normalize_comparable_token(option["value"])
+        in normalized_local
+    ]
+    if len(containing_values) == 1:
+        return containing_values[0]
+
+    return None
+
+
+def _normalize_comparable_token(value: str) -> str:
+    return "".join(ch for ch in value.strip().lower() if ch.isalnum())

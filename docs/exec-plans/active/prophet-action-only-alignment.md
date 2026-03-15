@@ -29,6 +29,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - [x] 2026-03-15 Run baseline backend/frontend validation commands once, record any unrelated failures in this plan, and confirm the current breakpoints before implementation.
 - [x] 2026-03-15 Phase 1 complete: backend ontology/action contracts now classify runnable ontology concepts as `action | agentic_workflow`, bootstrap `seer:AgenticWorkflow` as a `prophet:Action` subtype without touching the dirty `prophet` submodule, and pass the targeted backend validation commands.
 - [x] 2026-03-15 Phase 2 complete: managed-agent APIs/UI use action-first terminology and `action_uri`, while `seer:AgenticWorkflow` remains a subtype of `prophet:Action`.
+- [x] 2026-03-15 Phase 3 backend/shared-display slice complete: ontology graph nodes now project state-carrier metadata from Prophet field annotations and the shared ontology-display catalog/resolver consume that metadata for state labels and filters.
 - [ ] Phase 3 complete: ontology graph, shared display helpers, Object Store, and lifecycle rendering use state-carrier metadata instead of explicit state/transition resources.
 - [ ] Phase 4 complete: ontology explorer and analytics/RCA surfaces drop obsolete Prophet taxonomy and operate on `Action`, `Event`, `EventTrigger`, and state-carrier semantics only.
 - [ ] Phase 5 complete: canonical docs/specs are ratified, full validation evidence is recorded, and the plan is ready to archive.
@@ -50,6 +51,8 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15: The backend validator was already prepared to load a Seer ontology extension next to `prophet.ttl`, but no tracked `seer.ttl` is present in the superproject. Phase 1 therefore had to embed the Seer extension Turtle in backend ontology bootstrap so the dirty `prophet` submodule could remain untouched.
 - 2026-03-15: The first Phase 1 validation rerun exposed one more old-kind dependency outside the original handoff file list: `seer-backend/src/seer_backend/api/actions.py` and `seer-backend/src/seer_backend/api/agentic_workflows.py` still constrained `action_kind` to `process|workflow|agentic_workflow`, so Pydantic rejected the new `action` enum value until those literals were collapsed too.
 - 2026-03-15: The agent-orchestration tests outside the Phase 2 handoff `Read First` list still asserted removed `ActionKind.PROCESS|WORKFLOW` members and `workflow_uri` transcript fields, so Phase 2 had to update `tests/test_agent_orchestration_phase3.py` and `tests/test_agent_orchestration_phase4.py` alongside the production contract rename to keep the related suite truthful.
+- 2026-03-15: Phase 3 backend work could not rely on explicit enum member nodes in generated Turtle. Prophet emits state options only through `sh:in (...)` on the enum constraint shape, while `prophet:initialEnumValue` points at an `enumv_*` IRI with no separate label triples, so the backend graph had to derive initial literal values by matching the enum-value IRI suffix back to the SHACL option list.
+- 2026-03-15: The shared resolver still short-circuited every state-like field label to `"State"` before checking ontology labels. Once the state carrier field became `status`, Phase 3 had to change `displayFieldLabel` to consult ontology field labels first so state-carrier fields keep their real labels.
 
 ## Decision Log
 
@@ -60,6 +63,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15, Codex: Phase 1 should ship the Seer ontology extension as backend-owned bootstrap Turtle instead of editing files inside `prophet/`. Rationale: the `prophet` submodule is already dirty and explicitly out of scope for this phase, while backend validation/query bootstrap already owns the base graph composition seam.
 - 2026-03-15, Codex: Phase 1 may update backend response-model literals in `api/actions.py` and `api/agentic_workflows.py` even though managed-agent contract renames belong to Phase 2. Rationale: the shared execution-kind collapse is a Phase 1 deliverable, and the backend cannot serialize `action` records correctly until those schema literals accept the new value.
 - 2026-03-15, Codex: Phase 2 keeps the ClickHouse transcript table column name `workflow_uri` unchanged while remapping every managed-agent service/API/UI field to `action_uri`. Rationale: the storage column is an internal persistence detail, and avoiding a schema migration keeps the phase scoped to public contract correction instead of storage churn.
+- 2026-03-15, Codex: Phase 3 is safe to split into two implementation lanes as long as the backend/shared-display lane lands first and the consumer/UI lane only reads the new metadata. Rationale: the backend graph plus shared resolver files are largely disjoint from the inspector history consumers, and sequencing the metadata producer first reduces merge risk while keeping the plan truthful about the phase still being open.
 
 ## Outcomes & Retrospective
 
@@ -82,6 +86,16 @@ Phase 2 validation evidence:
 4. Additional confidence check: `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests/test_actions_submit.py tests/test_agent_orchestration_phase3.py tests/test_agent_orchestration_phase4.py` passed with `All checks passed!`.
 
 Remaining work stays in later phases: state-carrier lifecycle migration, explorer/analytics taxonomy cleanup, and the unrelated baseline RCA fake-data failures in `tests/test_root_cause_fake_data.py`.
+
+2026-03-15 Phase 3 backend/shared-display work is now landed, but the full phase is still open pending the consumer-side history/Object Store lane. The ontology graph endpoint now annotates object/property nodes with state-carrier metadata (`stateCarrierFieldKey`, `stateCarrierPropertyUri`, `stateOptions`, `initialStateValue`, and property-level `isStateCarrier`), and the shared ontology-display catalog/resolver now use that metadata to resolve state labels and state-carrier fields without requiring explicit ontology state/transition resources.
+
+The shared display contract tests were also rewritten to exercise the state-carrier path directly instead of fabricating `State` and `Transition` nodes in the fixture graph, which keeps future contributors from accidentally rebuilding the removed Prophet concepts into the shared resolver layer.
+
+Phase 3 backend/shared-display validation evidence:
+1. `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ontology_phase1.py -k 'graph_endpoint_returns_current_release_named_graph_only or ontology_ingest_and_query_include_seer_agentic_workflow_extension'` passed with `2 passed, 26 deselected in 4.19s`.
+2. `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests/test_ontology_phase1.py` passed with `All checks passed!`.
+3. `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` passed with `11 passed, 0 failed`.
+4. `cd /workspaces/seer-python/seer-ui && npm run build` passed and produced a successful Next.js production build.
 
 ## Context and Orientation
 
@@ -191,6 +205,13 @@ Phase 1 validation recorded on 2026-03-15 after implementation:
 
 1. `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_actions_submit.py tests/test_ontology_phase1.py` passed with `33 passed in 22.62s`.
 2. `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests` passed with `All checks passed!`.
+
+Phase 3 backend/shared-display validation recorded on 2026-03-15:
+
+1. `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ontology_phase1.py -k 'graph_endpoint_returns_current_release_named_graph_only or ontology_ingest_and_query_include_seer_agentic_workflow_extension'` passed with `2 passed, 26 deselected in 4.19s`.
+2. `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests/test_ontology_phase1.py` passed with `All checks passed!`.
+3. `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` passed with `11 passed, 0 failed`.
+4. `cd /workspaces/seer-python/seer-ui && npm run build` passed and produced a successful Next.js production build.
 
 Final observable acceptance:
 
@@ -416,8 +437,9 @@ Move ontology display and lifecycle interpretation to the state-carrier field mo
   1. Prophet generated Turtle currently exposes `prophet:isStateField` and `prophet:initialEnumValue`, but not explicit enum member resources in the examples; fallback label logic may be required.
   2. Do not recreate fake `State` or `Transition` nodes for compatibility.
 - Status: pending
-- Completion Notes: none yet
-- Next Starter Context: Start by defining the backend graph metadata shape, then switch the shared catalog/resolver before touching the UI panels that consume it.
+- Status: in_progress
+- Completion Notes: Backend/shared-display producer work is complete. `seer_backend.ontology.service` now derives state-carrier metadata from `prophet:isStateField`, `prophet:initialEnumValue`, and enum constraint `sh:in` lists, and the shared catalog/resolver consume that metadata for object-model state filters and value display. The remaining work in this phase is consumer-side history/Object Store lifecycle rendering.
+- Next Starter Context: Consume `selectedModel.stateFilterFieldKey`, `selectedModel.stateFilterOptions`, and `selectedModel.initialStateValue` from the shared resolver in the history/Object Store lane. Avoid changing the backend graph property names again unless the consumer lane finds a concrete mismatch, because the backend graph test and shared display contract test now lock this metadata shape.
 
 ## Phase 4
 

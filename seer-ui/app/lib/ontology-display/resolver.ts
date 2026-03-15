@@ -176,7 +176,12 @@ function fallbackFieldLabel(key: string): string {
 
 function isStateLikeFieldKey(key: string): boolean {
   const normalized = normalizeComparableToken(key);
-  return normalized === "state" || normalized === "fromstate" || normalized === "tostate";
+  return (
+    normalized === "state" ||
+    normalized === "status" ||
+    normalized === "fromstate" ||
+    normalized === "tostate"
+  );
 }
 
 function formatStateLabel(value: string): string {
@@ -497,11 +502,14 @@ function displayFieldLabel(
     return filterLabel;
   }
 
+  const label = resolveFieldLabelFromLookup(mergedFieldLabels(catalog, context), key);
+  if (label) {
+    return label;
+  }
   if (isStateLikeFieldKey(key)) {
     return fallbackFieldLabel(key);
   }
-  const label = resolveFieldLabelFromLookup(mergedFieldLabels(catalog, context), key);
-  return label || fallbackFieldLabel(key);
+  return fallbackFieldLabel(key);
 }
 
 function resolveStateLabelMap(
@@ -514,6 +522,21 @@ function resolveStateLabelMap(
   return resolveObjectModel(catalog, context?.objectType)?.stateLabelByToken;
 }
 
+function isStateFieldForContext(
+  catalog: OntologyDisplayCatalog,
+  key: string,
+  context: OntologyDisplayValueContext | undefined
+): boolean {
+  if (isStateLikeFieldKey(key)) {
+    return true;
+  }
+  const modelStateFieldKey = resolveObjectModel(catalog, context?.objectType)?.stateFilterFieldKey;
+  if (!modelStateFieldKey) {
+    return false;
+  }
+  return normalizeComparableToken(modelStateFieldKey) === normalizeComparableToken(key);
+}
+
 function displayFieldValue(
   catalog: OntologyDisplayCatalog,
   key: string,
@@ -523,7 +546,7 @@ function displayFieldValue(
   if (typeof value !== "string" || !value.trim()) {
     return value;
   }
-  if (!isStateLikeFieldKey(key)) {
+  if (!isStateFieldForContext(catalog, key, context)) {
     return value;
   }
   const stateLabelByToken = resolveStateLabelMap(catalog, context);

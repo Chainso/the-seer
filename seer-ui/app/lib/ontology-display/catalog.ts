@@ -12,8 +12,10 @@ export type OntologyDisplayObjectModel = {
   fieldLabelByKey: Map<string, string>;
   canonicalFieldKeys: string[];
   stateLabelByToken: Map<string, string>;
+  stateCarrierPropertyUri: string | null;
   stateFilterFieldKey: string | null;
   stateFilterOptions: OntologyDisplayStateOption[];
+  initialStateValue: string | null;
   propertyValueTypeByKey: Map<string, string>;
 };
 
@@ -100,6 +102,9 @@ function registerPropertyAliases(
 function scoreStateFieldKey(key: string): number {
   if (normalizeComparableToken(key) === "state") {
     return 0;
+  }
+  if (normalizeComparableToken(key) === "status") {
+    return 1;
   }
   return 99;
 }
@@ -217,6 +222,9 @@ function buildObjectModelDescriptor(
   const stateFilterOptionsByValue = new Map<string, string>();
   const canonicalFieldKeys: string[] = [];
   const propertyValueTypeByKey = new Map<string, string>();
+  let stateCarrierPropertyUri: string | null = null;
+  let stateFilterFieldKey: string | null = null;
+  let initialStateValue: string | null = null;
 
   const objectLocalName = iriLocalName(node.uri);
   const objectSlug = objectLocalName.startsWith("obj_")
@@ -241,6 +249,21 @@ function buildObjectModelDescriptor(
         propertyValueTypeByKey.set(canonicalKey, prop.valueTypeUri);
       }
     }
+
+    const propertyIsStateCarrier = booleanish(propertyNode?.properties?.isStateCarrier);
+    if (propertyIsStateCarrier) {
+      stateCarrierPropertyUri = prop.uri || stateCarrierPropertyUri;
+      if (canonicalKey) {
+        stateFilterFieldKey = canonicalKey;
+      }
+      initialStateValue =
+        stringProperty(propertyNode?.properties?.initialStateValue) || initialStateValue;
+      readStateOptions(propertyNode?.properties?.stateOptions).forEach((option) => {
+        stateFilterOptionsByValue.set(option.value, option.label);
+        registerStateAliases(stateLabelByToken, option.value, option.label);
+      });
+    }
+
     registerPropertyAliases(
       fieldLabelByKey,
       [prop.fieldKey, prop.name, prop.uri ? iriLocalName(prop.uri) : undefined],
@@ -248,52 +271,62 @@ function buildObjectModelDescriptor(
     );
   }
 
-  const stateUris = edges
-    .filter((edge) => edge.fromUri === node.uri && edge.type === "hasPossibleState")
-    .map((edge) => edge.toUri);
-  stateUris.sort((a, b) => a.localeCompare(b));
+  readStateOptions(node.properties?.stateOptions).forEach((option) => {
+    stateFilterOptionsByValue.set(option.value, option.label);
+    registerStateAliases(stateLabelByToken, option.value, option.label);
+  });
 
-  for (const stateUri of stateUris) {
-    const stateNode = nodesByUri.get(stateUri);
-    const stateLocalName = iriLocalName(stateUri);
-    const stateName = preferredOntologyName(stateNode?.properties) || stateLocalName;
-    const aliases = new Set<string>([stateName, stateLocalName]);
-    const scopedPrefix = `state_${objectSlug}_`;
-    const stateValue =
-      objectSlug && stateLocalName.startsWith(scopedPrefix)
-        ? stateLocalName.slice(scopedPrefix.length)
-        : stateLocalName.startsWith("state_")
-          ? stateLocalName.slice(6)
-          : stateLocalName;
-    if (stateValue) {
-      stateFilterOptionsByValue.set(stateValue, stateName);
-      aliases.add(stateValue);
-    }
-    if (stateLocalName.startsWith("state_")) {
-      aliases.add(stateLocalName.slice(6));
-    }
-    if (objectSlug && stateLocalName.startsWith(scopedPrefix)) {
-      aliases.add(stateLocalName.slice(scopedPrefix.length));
-    }
-    for (const alias of aliases) {
-      for (const token of tokenVariants(alias)) {
-        if (token && !stateLabelByToken.has(token)) {
-          stateLabelByToken.set(token, stateName);
-        }
+  stateCarrierPropertyUri =
+    stringProperty(node.properties?.stateCarrierPropertyUri) || stateCarrierPropertyUri;
+  stateFilterFieldKey = stringProperty(node.properties?.stateCarrierFieldKey) || stateFilterFieldKey;
+  initialStateValue = stringProperty(node.properties?.initialStateValue) || initialStateValue;
+
+  if (stateFilterOptionsByValue.size === 0) {
+    const stateUris = edges
+      .filter((edge) => edge.fromUri === node.uri && edge.type === "hasPossibleState")
+      .map((edge) => edge.toUri);
+    stateUris.sort((a, b) => a.localeCompare(b));
+
+    for (const stateUri of stateUris) {
+      const stateNode = nodesByUri.get(stateUri);
+      const stateLocalName = iriLocalName(stateUri);
+      const stateName = preferredOntologyName(stateNode?.properties) || stateLocalName;
+      const aliases = new Set<string>([stateName, stateLocalName]);
+      const scopedPrefix = `state_${objectSlug}_`;
+      const stateValue =
+        objectSlug && stateLocalName.startsWith(scopedPrefix)
+          ? stateLocalName.slice(scopedPrefix.length)
+          : stateLocalName.startsWith("state_")
+            ? stateLocalName.slice(6)
+            : stateLocalName;
+      if (stateValue) {
+        stateFilterOptionsByValue.set(stateValue, stateName);
+        aliases.add(stateValue);
+      }
+      if (stateLocalName.startsWith("state_")) {
+        aliases.add(stateLocalName.slice(6));
+      }
+      if (objectSlug && stateLocalName.startsWith(scopedPrefix)) {
+        aliases.add(stateLocalName.slice(scopedPrefix.length));
+      }
+      for (const alias of aliases) {
+        registerStateAliases(stateLabelByToken, alias, stateName);
       }
     }
   }
 
-  const stateFieldKeyCandidate = canonicalFieldKeys
-    .slice()
-    .sort((a, b) => {
-      const scoreDiff = scoreStateFieldKey(a) - scoreStateFieldKey(b);
-      return scoreDiff !== 0 ? scoreDiff : a.localeCompare(b);
-    })[0];
-  const stateFilterFieldKey =
-    stateFieldKeyCandidate && scoreStateFieldKey(stateFieldKeyCandidate) < 99
-      ? stateFieldKeyCandidate
-      : null;
+  if (!stateFilterFieldKey) {
+    const stateFieldKeyCandidate = canonicalFieldKeys
+      .slice()
+      .sort((a, b) => {
+        const scoreDiff = scoreStateFieldKey(a) - scoreStateFieldKey(b);
+        return scoreDiff !== 0 ? scoreDiff : a.localeCompare(b);
+      })[0];
+    stateFilterFieldKey =
+      stateFieldKeyCandidate && scoreStateFieldKey(stateFieldKeyCandidate) < 99
+        ? stateFieldKeyCandidate
+        : null;
+  }
   const uniqueCanonicalFieldKeys = Array.from(new Set(canonicalFieldKeys)).sort((a, b) =>
     a.localeCompare(b)
   );
@@ -305,12 +338,78 @@ function buildObjectModelDescriptor(
     fieldLabelByKey,
     canonicalFieldKeys: uniqueCanonicalFieldKeys,
     stateLabelByToken,
+    stateCarrierPropertyUri,
     stateFilterFieldKey,
     stateFilterOptions: Array.from(stateFilterOptionsByValue.entries())
       .map(([value, label]) => ({ value, label }))
       .sort((a, b) => a.label.localeCompare(b.label)),
+    initialStateValue,
     propertyValueTypeByKey,
   };
+}
+
+function booleanish(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    return value.trim().toLowerCase() === "true";
+  }
+  return false;
+}
+
+function stringProperty(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function readStateOptions(value: unknown): OntologyDisplayStateOption[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const options: OntologyDisplayStateOption[] = [];
+  value.forEach((entry) => {
+    if (!entry || typeof entry !== "object") {
+      return;
+    }
+    const rawValue = "value" in entry ? stringProperty(entry.value) : null;
+    if (!rawValue) {
+      return;
+    }
+    const label =
+      ("label" in entry ? stringProperty(entry.label) : null) || formatStateOptionLabel(rawValue);
+    options.push({ value: rawValue, label });
+  });
+  return options;
+}
+
+function registerStateAliases(
+  stateLabelByToken: Map<string, string>,
+  rawValue: string,
+  label: string
+): void {
+  for (const alias of new Set([rawValue, label, iriLocalName(rawValue)])) {
+    for (const token of tokenVariants(alias)) {
+      if (token && !stateLabelByToken.has(token)) {
+        stateLabelByToken.set(token, label);
+      }
+    }
+  }
+}
+
+function formatStateOptionLabel(value: string): string {
+  return value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_./-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .map((token) => (token ? `${token[0]?.toUpperCase()}${token.slice(1)}` : token))
+    .join(" ");
 }
 
 function setLookupIfMissing<T>(lookup: Map<string, T>, tokens: string[], value: T): void {
