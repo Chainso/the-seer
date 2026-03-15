@@ -9,12 +9,13 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 1. `VISION.md`
 2. `DESIGN.md`
 3. `ARCHITECTURE.md`
-4. `docs/design-docs/index.md`
-5. `docs/product-specs/index.md`
-6. `docs/exec-plans/active/`
-7. `docs/exec-plans/completed/`
-8. `docs/exec-plans/tech-debt-tracker.md`
-9. `prophet/prophet.ttl`
+4. `PLANS.md`
+5. `docs/design-docs/index.md`
+6. `docs/product-specs/index.md`
+7. `docs/exec-plans/active/`
+8. `docs/exec-plans/completed/`
+9. `docs/exec-plans/tech-debt-tracker.md`
+10. `prophet/prophet.ttl`
 
 ## Operating Model
 
@@ -35,15 +36,17 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 2. Technical approach and boundaries: `DESIGN.md`, then `ARCHITECTURE.md`.
 3. Deep design decisions: `docs/design-docs/index.md`, then selected topic docs.
 4. User-facing behavior and acceptance: `docs/product-specs/index.md`, then specific spec.
-5. Delivery status and sequencing: `docs/exec-plans/active/`.
+5. Multi-step execution planning and plan maintenance: `PLANS.md`, then `docs/exec-plans/active/`.
+6. Delivery status and sequencing: `docs/exec-plans/active/`.
 
 ## Execution Plan Lifecycle
 
 1. Multi-step work must have a checked-in plan under `docs/exec-plans/active/`.
-2. Active plans are living documents; update progress and decision log during execution.
-3. Plan completion requires acceptance criteria to be met and recorded.
-4. Completed plans move to `docs/exec-plans/completed/`.
-5. Known gaps or intentionally deferred work go to `docs/exec-plans/tech-debt-tracker.md`.
+2. `PLANS.md` is the canonical contract for what an execution plan must contain and how it must be maintained.
+3. Active plans are living documents; keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` current during execution.
+4. Plan completion requires acceptance criteria to be met and recorded.
+5. Completed plans move to `docs/exec-plans/completed/`.
+6. Known gaps or intentionally deferred work go to `docs/exec-plans/tech-debt-tracker.md`.
 
 ## Documentation Update Matrix
 
@@ -85,7 +88,7 @@ These checks should be automated as repository tooling matures:
 
 1. Validate required docs exist and core indexes reference current files.
 2. Flag broken internal markdown links.
-3. Flag plans in `active/` with stale status/progress metadata.
+3. Flag plans in `active/` that do not conform to `PLANS.md` required sections or have stale status/progress metadata.
 4. Flag specs/design docs not indexed by their corresponding index files.
 5. Run recurring doc-gardening passes to reduce stale guidance drift.
 
@@ -108,5 +111,5 @@ These checks should be automated as repository tooling matures:
 
 1. Skills are loaded from `.agent/skills` (symlink to `.agents/skills`).
 2. Use `plan-and-execute` when a request asks to plan work and execute it end-to-end.
-3. For multi-phase execution, pair `plan-and-execute` with execution-plan docs under `docs/exec-plans/active/`.
-4. When executing a phase in a plan, use the `execute-phase` skill.
+3. `plan-and-execute` must operate against `PLANS.md` and the relevant execution-plan docs under `docs/exec-plans/active/`.
+4. When executing a single phase in an existing plan, use the `execute-phase` skill together with `PLANS.md`.

@@ -13,6 +13,8 @@ Use this skill when the user wants:
 4. Strong handoffs, validation gates, and phase-level commits.
 5. Plan/doc updates as part of delivery, not an afterthought.
 
+Read `AGENTS.md` and `PLANS.md` before creating or revising an execution plan. `PLANS.md` is the canonical source for plan structure and maintenance rules. This skill governs controller behavior, not the plan document format.
+
 ## Compatibility Stance
 
 1. Default to forward-only delivery: do not preserve legacy implementation behavior unless explicitly requested.
@@ -28,36 +30,45 @@ Use this skill when the user wants:
 
 ## Core Workflow
 
-## Step 1: Define The Phase Map
+## Step 1: Create Or Refresh The Active Plan
 
-Create or update an execution plan doc that includes:
+Create or update a plan under `docs/exec-plans/active/` that conforms to `PLANS.md`.
 
-1. Objective and invariant(s).
-2. Numbered phases with explicit scope boundaries.
-3. Exit criteria per phase.
-4. Validation commands per phase.
-5. Required documentation updates.
-6. Progress checklist and decision log.
-7. Explicit UI/backend legacy behavior removals and rationale.
+At minimum, verify that the plan already contains or is updated to contain:
+
+1. the required living sections from `PLANS.md`,
+2. the relevant repository context and file paths,
+3. numbered phases or milestones with explicit scope boundaries,
+4. a `Phase Handoff` subsection for each phase in a multi-phase plan you intend to execute,
+5. validation and acceptance guidance,
+6. idempotence and recovery guidance,
+7. required documentation updates,
+8. explicit legacy behavior removals and rationale when behavior changes.
 
 Rules:
 
 1. One phase in progress at a time.
-2. Later phases cannot start until current phase commit is verified.
+2. Later phases cannot start until current phase evidence is verified.
+3. Update `docs/exec-plans/active/index.md` when a new active plan is opened or its status changes materially.
 
 ## Step 2: Build A Phase Handoff Packet
+
+Before spawning each worker, refresh the assigned phase's `Phase Handoff` subsection in the plan. If it is missing required fields from `PLANS.md`, repair it before delegation. The worker prompt is a projection of that checked-in handoff capsule, not an independent source of truth.
 
 Before spawning each worker, include:
 
 1. Work-so-far summary (commits + files + current plan state).
-2. Initial lookup list (exact files to read first).
-3. Phase-only scope constraints.
-4. Required outputs:
+2. Plan path and explicit instruction to read `PLANS.md` plus the active plan first.
+3. Initial lookup list (exact files to read first).
+4. Phase-only scope constraints.
+5. Reference to the exact `Phase Handoff` subsection to execute.
+6. Required outputs:
    - code changes,
    - tests/validation evidence,
    - plan/doc updates,
    - commit hash.
-5. Explicit instruction to ignore unrelated edits and never revert others' work.
+7. Exact plan sections that must be updated during the phase.
+8. Explicit instruction to ignore unrelated edits and never revert others' work.
 
 Template snippet:
 
@@ -67,22 +78,30 @@ Work-so-far summary:
 - Files landed: ...
 - Plan status: ...
 
+Read first:
+- AGENTS.md
+- PLANS.md
+- <active plan path>
+- <Phase Handoff subsection location>
+
 Initial lookup (required):
 1) ...
 2) ...
 
-Phase N goals:
-- ...
+Phase Handoff:
+- Goal: ...
+- Scope Boundary: ...
+- Read First: ...
+- Files Expected To Change: ...
+- Validation: ...
+- Plan / Docs To Update: ...
+- Deliverables: ...
+- Commit Expectation: ...
+- Known Constraints / Baseline Failures: ...
 
 Scope constraints:
 - ...
 - no default legacy-compatibility retention for UI/backend behavior
-
-Validation required:
-- <commands>
-
-Plan/doc update required:
-- <exact file + expected updates>
 
 Git requirements:
 - stage only phase-relevant files
@@ -103,8 +122,10 @@ After each worker run, verify locally:
 1. Commit exists and message matches phase intent.
 2. Only expected files changed.
 3. Required tests ran (or failures documented as pre-existing).
-4. Plan doc updated with dated progress/decision entry.
-5. Phase checkbox/status updated accurately.
+4. Plan doc updated with dated `Progress`, `Decision Log`, and any newly relevant `Surprises & Discoveries` or `Outcomes & Retrospective` entries required by `PLANS.md`.
+5. The assigned `Phase Handoff` subsection reflects the actual phase state, including status and next-starter context when relevant.
+6. Other plan sections remain internally consistent after the phase changes.
+7. Phase checkbox/status updated accurately.
 
 If a gate fails, spawn a phase-finisher worker with only the gap list.
 
@@ -123,7 +144,8 @@ For workflows that change behavior/invariants, final phase must:
 1. Update canonical product/design/architecture docs.
 2. Update relevant specs.
 3. Update active/completed indexes.
-4. Verify links and status coherence.
+4. Confirm the plan's living sections reflect final state.
+5. Verify links and status coherence.
 
 ## Step 7: Archive The Plan
 
@@ -150,12 +172,13 @@ When the plan lifecycle is complete:
    - Prevent duplicated work and drift.
 
 4. Mandatory phase-close proof:
-   - Worker report must include: changed files, validation output summary, exact plan updates, commit hash.
+   - Worker report must include: changed files, validation output summary, exact plan updates, exact `Phase Handoff` updates, commit hash.
    - Controller verifies with local git/log/test checks before advancing.
 
 5. Plan-log discipline:
    - One dated decision/progress entry per phase completion.
    - Include rationale for any accepted pre-existing failures.
+   - Capture surprises and final outcomes in the plan, not only in agent chat.
 
 6. Cleaner validation strategy:
    - Require targeted tests every phase.
@@ -175,5 +198,7 @@ A phase is complete only when all are true:
 4. Commit created.
 5. Controller verification passes.
 6. Legacy behavior removals are documented for both UI and backend impact.
+7. The active plan remains resume-safe and internally consistent per `PLANS.md`.
+8. The assigned `Phase Handoff` subsection is accurate enough for the next worker to resume from the plan alone.
 
 If any condition fails, phase remains open.
