@@ -25,7 +25,7 @@ const navigation = [
     icon: Sparkles,
   },
   {
-    name: 'Workflow Runs',
+    name: 'Managed Agents',
     href: '/inspector/agentic-workflows',
     icon: Waypoints,
   },
