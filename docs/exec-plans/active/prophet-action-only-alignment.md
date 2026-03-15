@@ -28,7 +28,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - [x] 2026-03-15 Open active execution plan, update active index, and lock the forward-only migration stance in repository docs.
 - [x] 2026-03-15 Run baseline backend/frontend validation commands once, record any unrelated failures in this plan, and confirm the current breakpoints before implementation.
 - [x] 2026-03-15 Phase 1 complete: backend ontology/action contracts now classify runnable ontology concepts as `action | agentic_workflow`, bootstrap `seer:AgenticWorkflow` as a `prophet:Action` subtype without touching the dirty `prophet` submodule, and pass the targeted backend validation commands.
-- [ ] Phase 2 complete: managed-agent APIs/UI use action-first terminology and `action_uri`, while `seer:AgenticWorkflow` remains a subtype of `prophet:Action`.
+- [x] 2026-03-15 Phase 2 complete: managed-agent APIs/UI use action-first terminology and `action_uri`, while `seer:AgenticWorkflow` remains a subtype of `prophet:Action`.
 - [ ] Phase 3 complete: ontology graph, shared display helpers, Object Store, and lifecycle rendering use state-carrier metadata instead of explicit state/transition resources.
 - [ ] Phase 4 complete: ontology explorer and analytics/RCA surfaces drop obsolete Prophet taxonomy and operate on `Action`, `Event`, `EventTrigger`, and state-carrier semantics only.
 - [ ] Phase 5 complete: canonical docs/specs are ratified, full validation evidence is recorded, and the plan is ready to archive.
@@ -49,6 +49,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
   - 2 `tests/test_root_cause_fake_data.py` errors currently fail to map the small-business Turtle local identifiers and need reassessment after the ontology/lifecycle migration.
 - 2026-03-15: The backend validator was already prepared to load a Seer ontology extension next to `prophet.ttl`, but no tracked `seer.ttl` is present in the superproject. Phase 1 therefore had to embed the Seer extension Turtle in backend ontology bootstrap so the dirty `prophet` submodule could remain untouched.
 - 2026-03-15: The first Phase 1 validation rerun exposed one more old-kind dependency outside the original handoff file list: `seer-backend/src/seer_backend/api/actions.py` and `seer-backend/src/seer_backend/api/agentic_workflows.py` still constrained `action_kind` to `process|workflow|agentic_workflow`, so Pydantic rejected the new `action` enum value until those literals were collapsed too.
+- 2026-03-15: The agent-orchestration tests outside the Phase 2 handoff `Read First` list still asserted removed `ActionKind.PROCESS|WORKFLOW` members and `workflow_uri` transcript fields, so Phase 2 had to update `tests/test_agent_orchestration_phase3.py` and `tests/test_agent_orchestration_phase4.py` alongside the production contract rename to keep the related suite truthful.
 
 ## Decision Log
 
@@ -58,6 +59,7 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15, Codex: Generic execution classification should collapse to `action | agentic_workflow`. Rationale: the shared control plane still needs one small classifier for ordinary versus managed-agent execution rows, but Prophet's old `process | workflow` taxonomy must be removed.
 - 2026-03-15, Codex: Phase 1 should ship the Seer ontology extension as backend-owned bootstrap Turtle instead of editing files inside `prophet/`. Rationale: the `prophet` submodule is already dirty and explicitly out of scope for this phase, while backend validation/query bootstrap already owns the base graph composition seam.
 - 2026-03-15, Codex: Phase 1 may update backend response-model literals in `api/actions.py` and `api/agentic_workflows.py` even though managed-agent contract renames belong to Phase 2. Rationale: the shared execution-kind collapse is a Phase 1 deliverable, and the backend cannot serialize `action` records correctly until those schema literals accept the new value.
+- 2026-03-15, Codex: Phase 2 keeps the ClickHouse transcript table column name `workflow_uri` unchanged while remapping every managed-agent service/API/UI field to `action_uri`. Rationale: the storage column is an internal persistence detail, and avoiding a schema migration keeps the phase scoped to public contract correction instead of storage churn.
 
 ## Outcomes & Retrospective
 
@@ -69,14 +71,24 @@ Phase 1 validation evidence:
 1. `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_actions_submit.py tests/test_ontology_phase1.py` passed with `33 passed in 22.62s`.
 2. `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests` passed with `All checks passed!`.
 
-Remaining work stays in later phases: managed-agent public contract renames from `workflow_uri` to `action_uri`, state-carrier lifecycle migration, and the unrelated baseline RCA fake-data failures in `tests/test_root_cause_fake_data.py`.
+2026-03-15 Phase 2 closed with the managed-agent list/detail/transcript surface exposing `action_uri` only. Backend query params, response payloads, transcript snapshots/messages, frontend TypeScript contracts, API clients, and inspector UI filters now use action-first terminology without introducing compatibility shims for `workflow_uri`.
+
+Phase 2 also updated the related agent-orchestration tests to the new action-first contracts and current `ActionKind` enum so later contributors can use those tests to verify managed-agent list/detail/message behavior instead of reading stale workflow-era assertions.
+
+Phase 2 validation evidence:
+1. `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_actions_submit.py` passed with `5 passed in 5.71s`.
+2. `cd /workspaces/seer-python/seer-ui && npm run build` passed and produced a successful Next.js production build.
+3. Additional confidence check: `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_actions_submit.py tests/test_agent_orchestration_phase3.py tests/test_agent_orchestration_phase4.py` passed with `14 passed in 7.89s`.
+4. Additional confidence check: `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests/test_actions_submit.py tests/test_agent_orchestration_phase3.py tests/test_agent_orchestration_phase4.py` passed with `All checks passed!`.
+
+Remaining work stays in later phases: state-carrier lifecycle migration, explorer/analytics taxonomy cleanup, and the unrelated baseline RCA fake-data failures in `tests/test_root_cause_fake_data.py`.
 
 ## Context and Orientation
 
 The current migration touches five connected surfaces.
 
-1. `seer-backend/src/seer_backend/actions/` currently validates executable ontology concepts and classifies them using stale Prophet kinds. The main seams are the action contract query and action-kind resolver in `service.py`, plus the shared execution enum in `models.py`.
-2. `seer-backend/src/seer_backend/api/agentic_workflows.py`, `seer-backend/src/seer_backend/agent_orchestration/`, and `seer-ui/app/lib/api/agentic-workflows.ts` currently model managed-agent runs as workflow executions filtered by `workflow_uri`.
+1. `seer-backend/src/seer_backend/actions/` now validates executable ontology concepts against the Phase 1 `action | agentic_workflow` contract. Later phases should treat that classifier as stable and avoid reintroducing `process` or `workflow` kinds.
+2. `seer-backend/src/seer_backend/api/agentic_workflows.py`, `seer-backend/src/seer_backend/agent_orchestration/`, and `seer-ui/app/lib/api/agentic-workflows.ts` still use internal `agentic_workflow` module names and routes, but their public managed-agent contracts now filter and serialize runs by `action_uri`.
 3. `seer-backend/src/seer_backend/ontology/service.py` and `seer-ui/app/components/ontology/` still categorize graph nodes using labels such as `Process`, `Workflow`, `Signal`, `Transition`, and `State`. The frontend explorer, read-only dialogs, and helpers assume those labels are live.
 4. `seer-ui/app/lib/ontology-display/`, `seer-ui/app/components/inspector/history-*`, and related Object Store helpers currently derive state filters and lifecycle labels from explicit ontology state/transition resources. Prophet's current model instead marks one enum-backed field on an object as the state carrier.
 5. `seer-ui/app/components/inspector/process-*`, `seer-ui/app/components/inspector/object-store-insights-workspace.tsx`, and related analytics helpers still treat event outcome choices and lifecycle interpretation as `Event | Signal | Transition` plus transition-resource joins.
@@ -170,7 +182,7 @@ Baseline results captured on 2026-03-15 before implementation:
 Phase acceptance expectations:
 
 1. Phase 1 is complete when current Prophet Turtle ingests successfully, `POST /api/v1/actions/submit` classifies ordinary Prophet actions as `action`, and managed-agent actions as `agentic_workflow`, with no dependency on `prophet:Process` or `prophet:Workflow`.
-2. Phase 2 is complete when managed-agent APIs/UI/filtering use `action_uri` only, and user-facing labels describe managed-agent actions rather than ontology workflows.
+2. Phase 2 is complete when managed-agent APIs/UI/filtering use `action_uri` only, including `/api/v1/agentic-workflows/executions?action_uri=...` and transcript snapshot/message payloads, and user-facing labels describe managed-agent actions rather than ontology workflows.
 3. Phase 3 is complete when state filters, state labels, and lifecycle badges render from state-carrier metadata and observed value deltas instead of ontology state/transition resources.
 4. Phase 4 is complete when `/ontology` surfaces and analytics/RCA setup no longer require `Signal`, `Transition`, `Process`, `Workflow`, or explicit ontology `State` categories.
 5. Phase 5 is complete when canonical docs/specs describe the new model accurately and the final backend/frontend validation commands pass or any known unrelated failures are explicitly logged here.
@@ -351,9 +363,16 @@ Rename managed-agent contracts from workflow-first to action-first without reint
 - Known Constraints / Baseline Failures:
   1. Internal module names may stay if renaming is pure churn, but public payloads and UI copy must switch fully.
   2. Do not preserve deprecated `workflow_uri` fields for compatibility.
-- Status: pending
-- Completion Notes: none yet
-- Next Starter Context: Start from the response models and TS types, then update query params and UI call sites in one pass to avoid mixed contracts.
+- Status: complete
+- Completion Notes:
+  1. Backend managed-agent list/message/snapshot contracts now expose `action_uri` only, and the list filter query param is `action_uri`.
+  2. Agent-orchestration transcript and resume/message page models now use `action_uri` while the internal ClickHouse column name remains unchanged.
+  3. Frontend types, API client helpers, list/detail selectors, and inspector copy now describe managed-agent actions and runs instead of workflow capabilities or workflow URIs.
+  4. Related tests were updated to assert the action-first contracts and current `ActionKind` enum members.
+  5. Validation passed:
+     - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_actions_submit.py` -> `5 passed in 5.71s`
+     - `cd /workspaces/seer-python/seer-ui && npm run build` -> successful Next.js production build
+- Next Starter Context: Phase 3 can start from stable action-first managed-agent contracts. Keep the `agentic-workflows` module/route shell if it avoids churn, but do not reintroduce `workflow_uri` fields while migrating lifecycle/state-carrier rendering.
 
 ## Phase 3
 

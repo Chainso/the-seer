@@ -1,4 +1,4 @@
-"""Agentic workflow execution list/detail/message API endpoints."""
+"""Managed-agent execution list/detail/message API endpoints."""
 
 from __future__ import annotations
 
@@ -72,7 +72,7 @@ class AgenticWorkflowExecutionSummaryResponse(BaseModel):
 
 class AgenticWorkflowExecutionListResponse(BaseModel):
     status: str | None = None
-    workflow_uri: str | None = None
+    action_uri: str | None = None
     search: str | None = None
     page: int
     size: int
@@ -102,7 +102,7 @@ class AgenticWorkflowExecutionDetailResponse(BaseModel):
 class AgenticWorkflowTranscriptMessageResponse(BaseModel):
     ordinal: int
     execution_id: UUID
-    workflow_uri: str
+    action_uri: str
     attempt_no: int
     sequence_no: int
     role: Literal["system", "user", "assistant", "tool"]
@@ -114,7 +114,7 @@ class AgenticWorkflowTranscriptMessageResponse(BaseModel):
 
 class AgenticWorkflowMessagesResponse(BaseModel):
     execution_id: UUID
-    workflow_uri: str
+    action_uri: str
     total_messages: int
     returned_messages: int
     last_ordinal: int
@@ -123,7 +123,7 @@ class AgenticWorkflowMessagesResponse(BaseModel):
 
 class AgenticWorkflowTranscriptSnapshotResponse(BaseModel):
     execution_id: UUID
-    workflow_uri: str
+    action_uri: str
     status: Literal[
         "queued",
         "running",
@@ -188,7 +188,7 @@ async def list_agentic_workflow_executions(
     request: Request,
     user_id: str | None = Query(default=None, min_length=1, max_length=255),
     execution_status: ActionStatus | None = Query(default=None, alias="status"),
-    workflow_uri: str | None = Query(default=None, min_length=1, max_length=2048),
+    action_uri: str | None = Query(default=None, min_length=1, max_length=2048),
     search: str | None = Query(default=None, min_length=1, max_length=255),
     page: int = Query(default=1, ge=1, le=10_000),
     size: int = Query(default=20, ge=1, le=200),
@@ -213,7 +213,7 @@ async def list_agentic_workflow_executions(
         executions, total = await service.list_executions(
             user_id=user_id,
             status=execution_status,
-            workflow_uri=workflow_uri,
+            action_uri=action_uri,
             search=search,
             page=page,
             size=size,
@@ -227,7 +227,7 @@ async def list_agentic_workflow_executions(
 
     return AgenticWorkflowExecutionListResponse(
         status=execution_status.value if execution_status is not None else None,
-        workflow_uri=workflow_uri,
+        action_uri=action_uri,
         search=search,
         page=page,
         size=size,
@@ -328,7 +328,7 @@ async def stream_agentic_workflow_execution_messages(
             "snapshot",
             _snapshot_payload(
                 execution_id=execution_id,
-                workflow_uri=initial_messages.workflow_uri,
+                action_uri=initial_messages.action_uri,
                 status_summary=initial_status,
                 last_ordinal=last_ordinal,
             ),
@@ -338,7 +338,7 @@ async def stream_agentic_workflow_execution_messages(
                 "terminal",
                 _snapshot_payload(
                     execution_id=execution_id,
-                    workflow_uri=initial_messages.workflow_uri,
+                    action_uri=initial_messages.action_uri,
                     status_summary=initial_status,
                     last_ordinal=last_ordinal,
                 ),
@@ -395,7 +395,7 @@ async def stream_agentic_workflow_execution_messages(
                     "terminal",
                     _snapshot_payload(
                         execution_id=execution_id,
-                        workflow_uri=page.workflow_uri,
+                        action_uri=page.action_uri,
                         status_summary=current_status,
                         last_ordinal=last_ordinal,
                     ),
@@ -467,7 +467,7 @@ def _message_response(
     return AgenticWorkflowTranscriptMessageResponse(
         ordinal=message.ordinal,
         execution_id=message.execution_id,
-        workflow_uri=message.workflow_uri,
+        action_uri=message.action_uri,
         attempt_no=message.attempt_no,
         sequence_no=message.sequence_no,
         role=message.message_role,
@@ -481,7 +481,7 @@ def _message_response(
 def _messages_response(page: AgentExecutionMessagesPage) -> AgenticWorkflowMessagesResponse:
     return AgenticWorkflowMessagesResponse(
         execution_id=page.execution_id,
-        workflow_uri=page.workflow_uri,
+        action_uri=page.action_uri,
         total_messages=page.total_messages,
         returned_messages=page.returned_messages,
         last_ordinal=page.last_ordinal,
@@ -492,13 +492,13 @@ def _messages_response(page: AgentExecutionMessagesPage) -> AgenticWorkflowMessa
 def _snapshot_payload(
     *,
     execution_id: UUID,
-    workflow_uri: str,
+    action_uri: str,
     status_summary: AgentExecutionActionSummary,
     last_ordinal: int,
 ) -> dict[str, Any]:
     return AgenticWorkflowTranscriptSnapshotResponse(
         execution_id=execution_id,
-        workflow_uri=workflow_uri,
+        action_uri=action_uri,
         status=status_summary.status.value,
         attempt_count=status_summary.attempt_count,
         last_ordinal=last_ordinal,

@@ -1,4 +1,4 @@
-"""Transcript persistence and resume orchestration for agentic workflow runs."""
+"""Transcript persistence and query orchestration for managed-agent runs."""
 
 from __future__ import annotations
 
@@ -55,14 +55,14 @@ class AgentTranscriptService:
         self,
         *,
         execution_id: UUID,
-        workflow_uri: str,
+        action_uri: str,
         attempt_no: int,
         completion_messages: list[dict[str, Any] | AgentTranscriptMessage],
     ) -> list[AgentTranscriptMessageRecord]:
         await self._ensure_schema()
-        normalized_workflow_uri = workflow_uri.strip()
-        if not normalized_workflow_uri:
-            raise ValueError("workflow_uri must not be blank")
+        normalized_action_uri = action_uri.strip()
+        if not normalized_action_uri:
+            raise ValueError("action_uri must not be blank")
         if attempt_no < 1:
             raise ValueError("attempt_no must be >= 1")
         if not completion_messages:
@@ -84,7 +84,7 @@ class AgentTranscriptService:
             records.append(
                 AgentTranscriptMessageRecord(
                     execution_id=execution_id,
-                    workflow_uri=normalized_workflow_uri,
+                    action_uri=normalized_action_uri,
                     attempt_no=attempt_no,
                     sequence_no=next_sequence_no + offset,
                     message_role=message_role,
@@ -139,7 +139,7 @@ class AgentTranscriptService:
 
 
 class AgentOrchestrationService:
-    """Query surface for agentic workflow execution list/detail/message views."""
+    """Query surface for managed-agent execution list/detail/message views."""
 
     def __init__(
         self,
@@ -157,20 +157,20 @@ class AgentOrchestrationService:
         *,
         user_id: str | None,
         status: ActionStatus | None,
-        workflow_uri: str | None,
+        action_uri: str | None,
         search: str | None,
         page: int,
         size: int,
         submitted_after: datetime | None,
         submitted_before: datetime | None,
     ) -> tuple[list[AgentExecutionSummary], int]:
-        normalized_workflow_uri = _normalize_optional_text(workflow_uri)
+        normalized_action_uri = _normalize_optional_text(action_uri)
         normalized_search = _normalize_optional_text(search)
         actions, total = await self._actions_service.list_actions(
             user_id=user_id,
             status=status,
             action_kind=ActionKind.AGENTIC_WORKFLOW,
-            action_uri=normalized_workflow_uri,
+            action_uri=normalized_action_uri,
             search=normalized_search,
             page=page,
             size=size,
@@ -217,10 +217,10 @@ class AgentOrchestrationService:
         transcript_rows = await self._transcript_service.load_transcript_messages(
             execution_id=execution_id
         )
-        workflow_uri = action.action_uri
+        action_uri = action.action_uri
         messages = _message_page_from_records(
             execution_id=execution_id,
-            workflow_uri=workflow_uri,
+            action_uri=action_uri,
             records=transcript_rows,
             after_ordinal=after_ordinal,
             limit=limit,
@@ -250,7 +250,7 @@ class AgentOrchestrationService:
         except ActionError as exc:
             raise AgentOrchestrationDependencyUnavailableError(str(exc)) from exc
         if action is None or action.action_kind is not ActionKind.AGENTIC_WORKFLOW:
-            raise ValueError(f"agentic workflow execution '{execution_id}' was not found")
+            raise ValueError(f"managed-agent execution '{execution_id}' was not found")
         return action
 
     async def _load_produced_events(
@@ -283,14 +283,14 @@ class UnavailableAgentOrchestrationService:
         *,
         user_id: str | None,
         status: ActionStatus | None,
-        workflow_uri: str | None,
+        action_uri: str | None,
         search: str | None,
         page: int,
         size: int,
         submitted_after: datetime | None,
         submitted_before: datetime | None,
     ) -> tuple[list[AgentExecutionSummary], int]:
-        del user_id, status, workflow_uri, search, page, size, submitted_after, submitted_before
+        del user_id, status, action_uri, search, page, size, submitted_after, submitted_before
         raise AgentOrchestrationDependencyUnavailableError(self.reason)
 
     async def get_execution_detail(self, execution_id: UUID) -> AgentExecutionDetail:
@@ -319,11 +319,11 @@ def resume_state_from_records(
     records: list[AgentTranscriptMessageRecord],
 ) -> AgentTranscriptResumeState:
     ordered = sorted(records, key=lambda record: (record.attempt_no, record.sequence_no))
-    workflow_uri = ordered[-1].workflow_uri if ordered else None
+    action_uri = ordered[-1].action_uri if ordered else None
     next_sequence_no = (ordered[-1].sequence_no + 1) if ordered else 1
     return AgentTranscriptResumeState(
         execution_id=execution_id,
-        workflow_uri=workflow_uri,
+        action_uri=action_uri,
         attempt_no=attempt_no,
         next_sequence_no=next_sequence_no,
         completion_messages=[dict(record.message_json) for record in ordered],
@@ -451,7 +451,7 @@ def _event_summary(event: EventHistoryItem) -> AgentExecutionEventSummary:
 def _message_page_from_records(
     *,
     execution_id: UUID,
-    workflow_uri: str,
+    action_uri: str,
     records: list[AgentTranscriptMessageRecord],
     after_ordinal: int,
     limit: int,
@@ -465,7 +465,7 @@ def _message_page_from_records(
         AgentExecutionMessage(
             ordinal=index,
             execution_id=execution_id,
-            workflow_uri=record.workflow_uri,
+            action_uri=record.action_uri,
             attempt_no=record.attempt_no,
             sequence_no=record.sequence_no,
             message_role=record.message_role,
@@ -478,10 +478,10 @@ def _message_page_from_records(
         if index > after_ordinal
     ][:page_size]
     last_ordinal = len(ordered)
-    effective_workflow_uri = ordered[-1].workflow_uri if ordered else workflow_uri
+    effective_action_uri = ordered[-1].action_uri if ordered else action_uri
     return AgentExecutionMessagesPage(
         execution_id=execution_id,
-        workflow_uri=effective_workflow_uri,
+        action_uri=effective_action_uri,
         total_messages=last_ordinal,
         returned_messages=len(messages),
         last_ordinal=last_ordinal,

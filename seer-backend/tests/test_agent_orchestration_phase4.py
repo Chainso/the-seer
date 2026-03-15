@@ -81,7 +81,7 @@ def _append_messages(
     transcript_service: AgentTranscriptService,
     *,
     execution_id: UUID,
-    workflow_uri: str,
+    action_uri: str,
     attempt_no: int,
     messages: list[dict[str, object]],
 ) -> None:
@@ -90,7 +90,7 @@ def _append_messages(
     asyncio.run(
         transcript_service.append_completion_messages(
             execution_id=execution_id,
-            workflow_uri=workflow_uri,
+            action_uri=action_uri,
             attempt_no=attempt_no,
             completion_messages=messages,
         )
@@ -153,28 +153,28 @@ def test_execution_list_filters_to_agentic_workflows_and_exposes_transcript_coun
     running_id = _create_action(
         repository,
         user_id="user-phase4",
-        action_uri="urn:seer:test:workflow.invoice.follow-up",
+        action_uri="urn:seer:test:action.invoice.follow-up",
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base,
     )
     completed_id = _create_action(
         repository,
         user_id="user-phase4",
-        action_uri="urn:seer:test:workflow.invoice.overdue",
+        action_uri="urn:seer:test:action.invoice.overdue",
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base + timedelta(minutes=1),
     )
     _create_action(
         repository,
         user_id="user-phase4",
-        action_uri="urn:seer:test:process.invoice.sync",
-        action_kind=ActionKind.PROCESS,
+        action_uri="urn:seer:test:action.invoice.sync",
+        action_kind=ActionKind.ACTION,
         submitted_at=base + timedelta(minutes=2),
     )
     _create_action(
         repository,
         user_id="other-user",
-        action_uri="urn:seer:test:workflow.other",
+        action_uri="urn:seer:test:action.other",
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base + timedelta(minutes=3),
     )
@@ -195,7 +195,7 @@ def test_execution_list_filters_to_agentic_workflows_and_exposes_transcript_coun
     _append_messages(
         transcript_service,
         execution_id=completed_id,
-        workflow_uri="urn:seer:test:workflow.invoice.overdue",
+        action_uri="urn:seer:test:action.invoice.overdue",
         attempt_no=1,
         messages=[
             {"role": "user", "content": "Handle invoice"},
@@ -229,28 +229,28 @@ def test_execution_list_allows_optional_user_scope_for_agentic_workflow_queries(
     first_execution_id = _create_action(
         repository,
         user_id="user-phase5-a",
-        action_uri="urn:seer:test:workflow.invoice.follow-up",
+        action_uri="urn:seer:test:action.invoice.follow-up",
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base,
     )
     second_execution_id = _create_action(
         repository,
         user_id="user-phase5-b",
-        action_uri="urn:seer:test:workflow.invoice.follow-up",
+        action_uri="urn:seer:test:action.invoice.follow-up",
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base + timedelta(minutes=1),
     )
     _create_action(
         repository,
         user_id="user-phase5-b",
-        action_uri="urn:seer:test:process.invoice.sync",
-        action_kind=ActionKind.PROCESS,
+        action_uri="urn:seer:test:action.invoice.sync",
+        action_kind=ActionKind.ACTION,
         submitted_at=base + timedelta(minutes=2),
     )
 
     response = client.get(
         "/api/v1/agentic-workflows/executions",
-        params={"workflow_uri": "urn:seer:test:workflow.invoice.follow-up"},
+        params={"action_uri": "urn:seer:test:action.invoice.follow-up"},
     )
 
     assert response.status_code == 200, response.text
@@ -273,23 +273,23 @@ def test_execution_detail_includes_child_actions_produced_events_and_parent_cont
     execution_id = _create_action(
         repository,
         user_id="user-phase4-detail",
-        action_uri="urn:seer:test:workflow.invoice.recovery",
+        action_uri="urn:seer:test:action.invoice.recovery",
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base,
     )
-    child_process_id = _create_action(
+    child_action_id = _create_action(
         repository,
         user_id="user-phase4-detail",
-        action_uri="urn:seer:test:process.email.customer",
-        action_kind=ActionKind.PROCESS,
+        action_uri="urn:seer:test:action.email.customer",
+        action_kind=ActionKind.ACTION,
         submitted_at=base + timedelta(minutes=1),
         parent_execution_id=execution_id,
     )
-    child_workflow_id = _create_action(
+    child_agent_action_id = _create_action(
         repository,
         user_id="user-phase4-detail",
-        action_uri="urn:seer:test:workflow.flag.shipping",
-        action_kind=ActionKind.WORKFLOW,
+        action_uri="urn:seer:test:action.flag.shipping",
+        action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base + timedelta(minutes=2),
         parent_execution_id=execution_id,
     )
@@ -303,12 +303,12 @@ def test_execution_detail_includes_child_actions_produced_events_and_parent_cont
         now=base + timedelta(minutes=3),
     )
     repository.complete_action(
-        action_id=child_process_id,
+        action_id=child_action_id,
         instance_id="instance-detail",
         now=base + timedelta(minutes=3, seconds=5),
     )
     repository.complete_action(
-        action_id=child_workflow_id,
+        action_id=child_agent_action_id,
         instance_id="instance-detail",
         now=base + timedelta(minutes=3, seconds=10),
     )
@@ -316,7 +316,7 @@ def test_execution_detail_includes_child_actions_produced_events_and_parent_cont
     _append_messages(
         transcript_service,
         execution_id=execution_id,
-        workflow_uri="urn:seer:test:workflow.invoice.recovery",
+        action_uri="urn:seer:test:action.invoice.recovery",
         attempt_no=1,
         messages=[
             {"role": "user", "content": "Recover the overdue invoice"},
@@ -338,7 +338,7 @@ def test_execution_detail_includes_child_actions_produced_events_and_parent_cont
         event_id=uuid4(),
         occurred_at=base + timedelta(minutes=3, seconds=6),
         event_type="urn:seer:test:event.customer.emailed",
-        produced_by_execution_id=child_process_id,
+        produced_by_execution_id=child_action_id,
     )
 
     response = client.get(f"/api/v1/agentic-workflows/executions/{execution_id}")
@@ -349,11 +349,11 @@ def test_execution_detail_includes_child_actions_produced_events_and_parent_cont
     assert body["execution"]["transcript_message_count"] == 2
     assert len(body["child_executions"]) == 2
     assert {item["action_id"] for item in body["child_executions"]} == {
-        str(child_process_id),
-        str(child_workflow_id),
+        str(child_action_id),
+        str(child_agent_action_id),
     }
     assert len(body["produced_events"]) == 1
-    assert body["produced_events"][0]["produced_by_execution_id"] == str(child_process_id)
+    assert body["produced_events"][0]["produced_by_execution_id"] == str(child_action_id)
     assert body["parent_execution"] is None
 
 
@@ -363,21 +363,21 @@ def test_messages_endpoint_uses_monotonic_ordinals_across_attempts() -> None:
     execution_id = _create_action(
         repository,
         user_id="user-phase4-messages",
-        action_uri="urn:seer:test:workflow.messages",
+        action_uri="urn:seer:test:action.messages",
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base,
     )
     _append_messages(
         transcript_service,
         execution_id=execution_id,
-        workflow_uri="urn:seer:test:workflow.messages",
+        action_uri="urn:seer:test:action.messages",
         attempt_no=1,
         messages=[{"role": "user", "content": "Attempt 1"}],
     )
     _append_messages(
         transcript_service,
         execution_id=execution_id,
-        workflow_uri="urn:seer:test:workflow.messages",
+        action_uri="urn:seer:test:action.messages",
         attempt_no=2,
         messages=[
             {"role": "user", "content": "Attempt 2"},
@@ -399,12 +399,14 @@ def test_messages_endpoint_uses_monotonic_ordinals_across_attempts() -> None:
     second_body = second_response.json()
 
     assert [item["ordinal"] for item in first_body["messages"]] == [1, 2, 3]
+    assert first_body["action_uri"] == "urn:seer:test:action.messages"
     assert [(item["attempt_no"], item["sequence_no"]) for item in first_body["messages"]] == [
         (1, 1),
         (2, 1),
         (2, 2),
     ]
     assert [item["ordinal"] for item in second_body["messages"]] == [2, 3]
+    assert second_body["action_uri"] == "urn:seer:test:action.messages"
     assert second_body["last_ordinal"] == 3
 
 
@@ -414,7 +416,7 @@ def test_message_stream_emits_snapshot_then_persisted_message_then_terminal() ->
     execution_id = _create_action(
         repository,
         user_id="user-phase4-stream",
-        action_uri="urn:seer:test:workflow.stream",
+        action_uri="urn:seer:test:action.stream",
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base,
     )
@@ -432,7 +434,7 @@ def test_message_stream_emits_snapshot_then_persisted_message_then_terminal() ->
         _append_messages(
             transcript_service,
             execution_id=execution_id,
-            workflow_uri="urn:seer:test:workflow.stream",
+            action_uri="urn:seer:test:action.stream",
             attempt_no=1,
             messages=[{"role": "assistant", "content": "Persisted update"}],
         )
@@ -453,10 +455,13 @@ def test_message_stream_emits_snapshot_then_persisted_message_then_terminal() ->
 
     assert [event_name for event_name, _payload in events] == ["snapshot", "message", "terminal"]
     assert events[0][1]["last_ordinal"] == 0
+    assert events[0][1]["action_uri"] == "urn:seer:test:action.stream"
     assert events[0][1]["status"] == "running"
     assert events[1][1]["ordinal"] == 1
+    assert events[1][1]["action_uri"] == "urn:seer:test:action.stream"
     assert events[1][1]["message"]["content"] == "Persisted update"
     assert events[2][1]["terminal"] is True
+    assert events[2][1]["action_uri"] == "urn:seer:test:action.stream"
     assert events[2][1]["last_ordinal"] == 1
 
 
@@ -465,8 +470,8 @@ def test_non_agentic_execution_ids_return_404_for_agentic_surfaces() -> None:
     execution_id = _create_action(
         repository,
         user_id="user-phase4-404",
-        action_uri="urn:seer:test:process.not-agentic",
-        action_kind=ActionKind.PROCESS,
+        action_uri="urn:seer:test:action.not-agentic",
+        action_kind=ActionKind.ACTION,
         submitted_at=datetime(2026, 3, 8, 14, 0, tzinfo=UTC),
     )
 

@@ -10,7 +10,7 @@ export default async function AgenticWorkflowExecutionDetailsPage({
 }: AgenticWorkflowExecutionDetailsPageProps) {
   const { executionId } = await params;
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading workflow execution...</div>}>
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading managed-agent run...</div>}>
       <AgenticWorkflowExecutionDetailsPanel executionId={executionId} />
     </Suspense>
   );

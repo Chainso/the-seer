@@ -12,25 +12,25 @@ import type {
   AgenticWorkflowTranscriptSnapshotEvent,
 } from '@/app/types/agentic-workflows';
 
-const REGISTERED_AGENTIC_WORKFLOW_QUERY = `
+const REGISTERED_AGENTIC_ACTION_QUERY = `
 PREFIX prophet: <http://prophet.platform/ontology#>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX seer: <http://seer.platform/ontology#>
-SELECT DISTINCT ?workflow ?label
+SELECT DISTINCT ?action ?label
 WHERE {
-  ?workflow a ?workflowType .
-  ?workflowType rdfs:subClassOf* seer:AgenticWorkflow .
-  FILTER(isIRI(?workflow))
-  OPTIONAL { ?workflow prophet:name ?prophetName . }
-  OPTIONAL { ?workflow rdfs:label ?rdfsLabel . }
-  BIND(COALESCE(STR(?prophetName), STR(?rdfsLabel), STR(?workflow)) AS ?label)
+  ?action a ?actionType .
+  ?actionType rdfs:subClassOf* seer:AgenticWorkflow .
+  FILTER(isIRI(?action))
+  OPTIONAL { ?action prophet:name ?prophetName . }
+  OPTIONAL { ?action rdfs:label ?rdfsLabel . }
+  BIND(COALESCE(STR(?prophetName), STR(?rdfsLabel), STR(?action)) AS ?label)
 }
 `.trim();
 
 export async function listAgenticWorkflowExecutions(options: {
   userId?: string;
   status?: AgenticWorkflowStatus;
-  workflowUri?: string;
+  actionUri?: string;
   search?: string;
   page?: number;
   size?: number;
@@ -44,8 +44,8 @@ export async function listAgenticWorkflowExecutions(options: {
   if (options.status) {
     query.set('status', options.status);
   }
-  if (options.workflowUri?.trim()) {
-    query.set('workflow_uri', options.workflowUri.trim());
+  if (options.actionUri?.trim()) {
+    query.set('action_uri', options.actionUri.trim());
   }
   if (options.search?.trim()) {
     query.set('search', options.search.trim());
@@ -63,13 +63,13 @@ export async function listAgenticWorkflowExecutions(options: {
   );
 }
 
-export async function listRegisteredAgenticWorkflows(): Promise<
+export async function listRegisteredAgenticActions(): Promise<
   AgenticWorkflowCapabilityOption[]
 > {
-  const rows = await queryOntologySelect(REGISTERED_AGENTIC_WORKFLOW_QUERY);
+  const rows = await queryOntologySelect(REGISTERED_AGENTIC_ACTION_QUERY);
   const options = new Map<string, AgenticWorkflowCapabilityOption>();
   rows.forEach((row) => {
-    const value = row.workflow?.trim();
+    const value = row.action?.trim();
     if (!value || options.has(value)) {
       return;
     }
@@ -232,7 +232,7 @@ function _handleEvent(
       const detail =
         typeof eventPayload.message === 'string' && eventPayload.message.trim().length > 0
           ? eventPayload.message
-          : 'Agentic workflow transcript stream failed';
+          : 'Managed-agent transcript stream failed';
       throw new Error(detail);
     }
     default:

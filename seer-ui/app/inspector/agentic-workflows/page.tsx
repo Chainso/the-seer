@@ -3,7 +3,7 @@ import { AgenticWorkflowExecutionPanel } from '@/app/components/inspector/agenti
 
 export default function AgenticWorkflowExecutionsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading workflow executions...</div>}>
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading managed-agent runs...</div>}>
       <AgenticWorkflowExecutionPanel />
     </Suspense>
   );

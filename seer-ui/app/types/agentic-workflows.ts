@@ -6,7 +6,7 @@ export type AgenticWorkflowStatus =
   | 'failed_terminal'
   | 'dead_letter';
 
-export type AgenticWorkflowActionKind = 'process' | 'workflow' | 'agentic_workflow';
+export type AgenticWorkflowActionKind = 'action' | 'agentic_workflow';
 export type AgenticWorkflowMessageRole = 'system' | 'user' | 'assistant' | 'tool';
 
 export interface AgenticWorkflowActionSummary {
@@ -35,7 +35,7 @@ export interface AgenticWorkflowExecutionSummary {
 
 export interface AgenticWorkflowExecutionListResponse {
   status: AgenticWorkflowStatus | null;
-  workflow_uri: string | null;
+  action_uri: string | null;
   search: string | null;
   page: number;
   size: number;
@@ -70,7 +70,7 @@ export interface AgenticWorkflowExecutionDetailResponse {
 export interface AgenticWorkflowTranscriptMessage {
   ordinal: number;
   execution_id: string;
-  workflow_uri: string;
+  action_uri: string;
   attempt_no: number;
   sequence_no: number;
   role: AgenticWorkflowMessageRole;
@@ -82,7 +82,7 @@ export interface AgenticWorkflowTranscriptMessage {
 
 export interface AgenticWorkflowMessagesResponse {
   execution_id: string;
-  workflow_uri: string;
+  action_uri: string;
   total_messages: number;
   returned_messages: number;
   last_ordinal: number;
@@ -91,7 +91,7 @@ export interface AgenticWorkflowMessagesResponse {
 
 export interface AgenticWorkflowTranscriptSnapshotEvent {
   execution_id: string;
-  workflow_uri: string;
+  action_uri: string;
   status: AgenticWorkflowStatus;
   attempt_count: number;
   last_ordinal: number;

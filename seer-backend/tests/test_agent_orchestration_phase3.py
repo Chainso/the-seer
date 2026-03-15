@@ -19,7 +19,7 @@ def test_agent_transcript_service_ensure_schema_runs_once() -> None:
     _run_async(
         service.append_completion_messages(
             execution_id=execution_id,
-            workflow_uri="urn:seer:test:agent.workflow",
+            action_uri="urn:seer:test:action.invoice.follow-up",
             attempt_no=1,
             completion_messages=[{"role": "user", "content": "Investigate overdue invoice"}],
         )
@@ -42,7 +42,7 @@ def test_append_completion_messages_assigns_order_and_resume_state_from_persiste
     first_batch = _run_async(
         service.append_completion_messages(
             execution_id=execution_id,
-            workflow_uri="urn:seer:test:agent.workflow",
+            action_uri="urn:seer:test:action.invoice.follow-up",
             attempt_no=1,
             completion_messages=[
                 {"role": "user", "content": "Find overdue invoices"},
@@ -69,7 +69,7 @@ def test_append_completion_messages_assigns_order_and_resume_state_from_persiste
     second_batch = _run_async(
         service.append_completion_messages(
             execution_id=execution_id,
-            workflow_uri="urn:seer:test:agent.workflow",
+            action_uri="urn:seer:test:action.invoice.follow-up",
             attempt_no=1,
             completion_messages=[
                 {"role": "assistant", "content": "Loaded the action and ready to proceed."}
@@ -91,7 +91,7 @@ def test_append_completion_messages_assigns_order_and_resume_state_from_persiste
     assert transcript_rows[1].call_id == "call_overdue-invoices"
     assert transcript_rows[2].message_kind == "tool_result"
     assert transcript_rows[2].call_id == "call_overdue-invoices"
-    assert resume_state.workflow_uri == "urn:seer:test:agent.workflow"
+    assert resume_state.action_uri == "urn:seer:test:action.invoice.follow-up"
     assert resume_state.next_sequence_no == 5
     assert [message["role"] for message in resume_state.completion_messages] == [
         "user",
@@ -109,7 +109,7 @@ def test_resume_state_scopes_to_attempt_but_transcript_queries_can_read_all_atte
     _run_async(
         service.append_completion_messages(
             execution_id=execution_id,
-            workflow_uri="urn:seer:test:agent.workflow",
+            action_uri="urn:seer:test:action.invoice.follow-up",
             attempt_no=1,
             completion_messages=[{"role": "user", "content": "Attempt one"}],
         )
@@ -117,7 +117,7 @@ def test_resume_state_scopes_to_attempt_but_transcript_queries_can_read_all_atte
     _run_async(
         service.append_completion_messages(
             execution_id=execution_id,
-            workflow_uri="urn:seer:test:agent.workflow",
+            action_uri="urn:seer:test:action.invoice.follow-up",
             attempt_no=2,
             completion_messages=[
                 {"role": "user", "content": "Attempt two"},

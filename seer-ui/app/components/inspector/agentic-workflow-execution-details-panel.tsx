@@ -219,7 +219,7 @@ function ExecutionRunCard({
           <span title={action.action_id}>Run {shortIdentifier(action.action_id, 10)}</span>
           <span>{formatDateTime(action.updated_at)}</span>
           <span>{action.action_kind}</span>
-          {!targetHref && !isCurrent ? <span>No workflow detail route</span> : null}
+          {!targetHref && !isCurrent ? <span>No managed-agent detail route</span> : null}
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -284,7 +284,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
         if (!active) return;
         setDetail(null);
         setMessages([]);
-        setError(cause instanceof Error ? cause.message : "Failed to load workflow execution");
+        setError(cause instanceof Error ? cause.message : "Failed to load managed-agent run");
         setStreamReady(false);
       });
 
@@ -345,7 +345,9 @@ export function AgenticWorkflowExecutionDetailsPanel({
       if (controller.signal.aborted) {
         return;
       }
-      setStreamError(cause instanceof Error ? cause.message : "Live transcript stream failed");
+      setStreamError(
+        cause instanceof Error ? cause.message : "Live managed-agent transcript stream failed"
+      );
     });
 
     return () => {
@@ -495,7 +497,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
   if (loading) {
     return (
       <Card className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">
-        Loading workflow run...
+        Loading managed-agent run...
       </Card>
     );
   }
@@ -503,13 +505,13 @@ export function AgenticWorkflowExecutionDetailsPanel({
   if (error || !detail) {
     return (
       <Card className="rounded-2xl border border-destructive/40 bg-destructive/10 p-8 text-sm text-destructive">
-        {error || "Workflow execution not found."}
+        {error || "Managed-agent execution not found."}
       </Card>
     );
   }
 
   const currentAction = detail.execution.action;
-  const workflowLabel = ontologyDisplay.displayConcept(currentAction.action_uri);
+  const actionLabel = ontologyDisplay.displayConcept(currentAction.action_uri);
   const transcriptCountLabel = `${messages.length} loaded / ${detail.execution.transcript_message_count} persisted`;
   const producedEventCountLabel =
     detail.produced_events.length === 1
@@ -523,7 +525,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
     <div className="space-y-6" data-agentic-workflow-execution-details-panel>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-3">
-          <h1 className="font-display text-3xl">{workflowLabel}</h1>
+          <h1 className="font-display text-3xl">{actionLabel}</h1>
           <div className="flex flex-wrap gap-2">
             <Badge
               variant="outline"
@@ -561,8 +563,8 @@ export function AgenticWorkflowExecutionDetailsPanel({
               Run Summary
             </div>
             <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-              Start here for the workflow identity, current state, lineage, and recent execution
-              activity before drilling into raw transcript detail.
+              Start here for the managed-agent action, current state, lineage, and recent
+              execution activity before drilling into raw transcript detail.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -577,8 +579,8 @@ export function AgenticWorkflowExecutionDetailsPanel({
 
         <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <SummaryStat
-            label="Workflow Capability"
-            value={workflowLabel}
+            label="Managed-Agent Action"
+            value={actionLabel}
             supporting={`Run ${shortIdentifier(currentAction.action_id, 10)}`}
           />
           <SummaryStat
@@ -599,7 +601,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
           <SummaryStat
             label="Lineage"
             value={`${detail.child_executions.length} child runs`}
-            supporting={detail.parent_execution ? "Parent run linked" : "Top-level workflow run"}
+            supporting={detail.parent_execution ? "Parent run linked" : "Top-level managed-agent run"}
           />
         </div>
 
@@ -647,7 +649,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-border p-4 text-sm text-muted-foreground">
-                  This workflow run has not launched any child ontology actions yet.
+                  This managed-agent run has not launched any child ontology actions yet.
                 </div>
               )}
             </div>
@@ -664,7 +666,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                  Workflow URI
+                  Action URI
                 </dt>
                 <dd className="mt-1 break-all text-xs text-muted-foreground">
                   {currentAction.action_uri}
@@ -833,8 +835,8 @@ export function AgenticWorkflowExecutionDetailsPanel({
                               </summary>
                               <dl className="mt-3 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
                                 <div>
-                                  <dt className="uppercase tracking-[0.18em]">Workflow URI</dt>
-                                  <dd className="mt-1 break-all">{message.workflow_uri}</dd>
+                                  <dt className="uppercase tracking-[0.18em]">Action URI</dt>
+                                  <dd className="mt-1 break-all">{message.action_uri}</dd>
                                 </div>
                                 <div>
                                   <dt className="uppercase tracking-[0.18em]">Execution ID</dt>

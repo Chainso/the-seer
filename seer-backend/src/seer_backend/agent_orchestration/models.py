@@ -16,7 +16,7 @@ MessageRole = Literal["system", "user", "assistant", "tool"]
 
 
 class AgentTranscriptMessage(BaseModel):
-    """Canonical persisted completion message for agentic workflow runs."""
+    """Canonical persisted completion message for managed-agent runs."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -30,7 +30,7 @@ class AgentTranscriptMessage(BaseModel):
 @dataclass(slots=True)
 class AgentTranscriptMessageRecord:
     execution_id: UUID
-    workflow_uri: str
+    action_uri: str
     attempt_no: int
     sequence_no: int
     message_role: MessageRole
@@ -43,7 +43,7 @@ class AgentTranscriptMessageRecord:
 @dataclass(slots=True)
 class AgentTranscriptResumeState:
     execution_id: UUID
-    workflow_uri: str | None
+    action_uri: str | None
     attempt_no: int
     next_sequence_no: int
     completion_messages: list[JsonObject]
@@ -53,7 +53,7 @@ class AgentTranscriptResumeState:
 class AgentExecutionMessage:
     ordinal: int
     execution_id: UUID
-    workflow_uri: str
+    action_uri: str
     attempt_no: int
     sequence_no: int
     message_role: MessageRole
@@ -113,7 +113,7 @@ class AgentExecutionDetail:
 @dataclass(slots=True)
 class AgentExecutionMessagesPage:
     execution_id: UUID
-    workflow_uri: str
+    action_uri: str
     total_messages: int
     returned_messages: int
     last_ordinal: int

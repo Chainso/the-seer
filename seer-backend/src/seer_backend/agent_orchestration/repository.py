@@ -112,7 +112,7 @@ class ClickHouseAgentTranscriptRepository:
         payload_rows = [
             {
                 "execution_id": str(record.execution_id),
-                "workflow_uri": record.workflow_uri,
+                "workflow_uri": record.action_uri,
                 "attempt_no": int(record.attempt_no),
                 "sequence_no": int(record.sequence_no),
                 "message_role": record.message_role,
@@ -242,7 +242,7 @@ class InMemoryAgentTranscriptRepository:
 def _transcript_row_from_clickhouse(row: dict[str, Any]) -> AgentTranscriptMessageRecord:
     return AgentTranscriptMessageRecord(
         execution_id=UUID(str(row["execution_id"])),
-        workflow_uri=str(row["workflow_uri"]),
+        action_uri=str(row["workflow_uri"]),
         attempt_no=int(row["attempt_no"]),
         sequence_no=int(row["sequence_no"]),
         message_role=str(row["message_role"]),  # type: ignore[arg-type]

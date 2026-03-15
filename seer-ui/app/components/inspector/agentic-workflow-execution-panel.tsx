@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import {
   listAgenticWorkflowExecutions,
-  listRegisteredAgenticWorkflows,
+  listRegisteredAgenticActions,
 } from "@/app/lib/api/agentic-workflows";
 import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import type {
@@ -25,7 +25,7 @@ import { SearchableSelect } from "../ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 const PAGE_SIZE = 20;
-const ALL_WORKFLOWS_VALUE = "__all_workflows__";
+const ALL_ACTIONS_VALUE = "__all_actions__";
 const STATUS_OPTIONS: Array<{ value: AgenticWorkflowStatus; label: string }> = [
   { value: "running", label: "Running" },
   { value: "completed", label: "Completed" },
@@ -110,7 +110,7 @@ export function AgenticWorkflowExecutionPanel() {
   const ontologyDisplay = useOntologyDisplay();
 
   const status = (searchParams.get("status")?.trim() as AgenticWorkflowStatus | null) || null;
-  const workflowUri = searchParams.get("workflow_uri")?.trim() || "";
+  const actionUri = searchParams.get("action_uri")?.trim() || "";
   const submittedAfter = searchParams.get("submitted_after")?.trim() || "";
   const submittedBefore = searchParams.get("submitted_before")?.trim() || "";
   const page = Number.parseInt(searchParams.get("page") || "1", 10);
@@ -119,7 +119,7 @@ export function AgenticWorkflowExecutionPanel() {
   const [statusDraft, setStatusDraft] = useState<AgenticWorkflowStatus | "all">(
     status || "all"
   );
-  const [workflowUriDraft, setWorkflowUriDraft] = useState(workflowUri);
+  const [actionUriDraft, setActionUriDraft] = useState(actionUri);
   const [submittedAfterDraft, setSubmittedAfterDraft] = useState(
     toDateTimeLocalValue(submittedAfter)
   );
@@ -132,33 +132,33 @@ export function AgenticWorkflowExecutionPanel() {
   const [total, setTotal] = useState(0);
   const [loadedRequestKey, setLoadedRequestKey] = useState("");
 
-  const [workflowOptions, setWorkflowOptions] = useState<AgenticWorkflowCapabilityOption[]>([]);
-  const [workflowOptionsLoaded, setWorkflowOptionsLoaded] = useState(false);
-  const [workflowOptionsError, setWorkflowOptionsError] = useState<string | null>(null);
+  const [actionOptions, setActionOptions] = useState<AgenticWorkflowCapabilityOption[]>([]);
+  const [actionOptionsLoaded, setActionOptionsLoaded] = useState(false);
+  const [actionOptionsError, setActionOptionsError] = useState<string | null>(null);
 
-  const requestKey = `${status || "all"}|${workflowUri}|${submittedAfter}|${submittedBefore}|${currentPage}`;
+  const requestKey = `${status || "all"}|${actionUri}|${submittedAfter}|${submittedBefore}|${currentPage}`;
 
   useEffect(() => {
     let active = true;
 
-    listRegisteredAgenticWorkflows()
+    listRegisteredAgenticActions()
       .then((options) => {
         if (!active) {
           return;
         }
-        setWorkflowOptions(options);
-        setWorkflowOptionsError(null);
-        setWorkflowOptionsLoaded(true);
+        setActionOptions(options);
+        setActionOptionsError(null);
+        setActionOptionsLoaded(true);
       })
       .catch((cause) => {
         if (!active) {
           return;
         }
-        setWorkflowOptions([]);
-        setWorkflowOptionsError(
-          cause instanceof Error ? cause.message : "Failed to load workflow capabilities"
+        setActionOptions([]);
+        setActionOptionsError(
+          cause instanceof Error ? cause.message : "Failed to load managed-agent actions"
         );
-        setWorkflowOptionsLoaded(true);
+        setActionOptionsLoaded(true);
       });
 
     return () => {
@@ -171,7 +171,7 @@ export function AgenticWorkflowExecutionPanel() {
 
     listAgenticWorkflowExecutions({
       status: status || undefined,
-      workflowUri: workflowUri || undefined,
+      actionUri: actionUri || undefined,
       page: currentPage,
       size: PAGE_SIZE,
       submittedAfter: submittedAfter || undefined,
@@ -188,18 +188,18 @@ export function AgenticWorkflowExecutionPanel() {
         if (!active) return;
         setExecutions([]);
         setTotal(0);
-        setError(cause instanceof Error ? cause.message : "Failed to load workflow executions");
+        setError(cause instanceof Error ? cause.message : "Failed to load managed-agent runs");
         setLoadedRequestKey(requestKey);
       });
 
     return () => {
       active = false;
     };
-  }, [currentPage, requestKey, status, submittedAfter, submittedBefore, workflowUri]);
+  }, [actionUri, currentPage, requestKey, status, submittedAfter, submittedBefore]);
 
-  const resolvedWorkflowOptions = useMemo(() => {
+  const resolvedActionOptions = useMemo(() => {
     const options = new Map(
-      workflowOptions.map((option) => [
+      actionOptions.map((option) => [
         option.value,
         {
           value: option.value,
@@ -209,18 +209,18 @@ export function AgenticWorkflowExecutionPanel() {
         },
       ])
     );
-    if (workflowUri && !options.has(workflowUri)) {
-      options.set(workflowUri, {
-        value: workflowUri,
-        label: ontologyDisplay.displayConcept(workflowUri),
+    if (actionUri && !options.has(actionUri)) {
+      options.set(actionUri, {
+        value: actionUri,
+        label: ontologyDisplay.displayConcept(actionUri),
       });
     }
     return Array.from(options.values()).sort((left, right) => left.label.localeCompare(right.label));
-  }, [ontologyDisplay, workflowOptions, workflowUri]);
+  }, [actionOptions, actionUri, ontologyDisplay]);
 
-  const workflowLabelLookup = useMemo(
-    () => new Map(resolvedWorkflowOptions.map((option) => [option.value, option.label])),
-    [resolvedWorkflowOptions]
+  const actionLabelLookup = useMemo(
+    () => new Map(resolvedActionOptions.map((option) => [option.value, option.label])),
+    [resolvedActionOptions]
   );
 
   const loading = loadedRequestKey !== requestKey;
@@ -232,22 +232,22 @@ export function AgenticWorkflowExecutionPanel() {
     if (status) {
       items.push(`Status: ${STATUS_OPTIONS.find((option) => option.value === status)?.label || status}`);
     }
-    if (workflowUri) {
-      items.push(`Workflow: ${workflowLabelLookup.get(workflowUri) || ontologyDisplay.displayConcept(workflowUri)}`);
+    if (actionUri) {
+      items.push(`Action: ${actionLabelLookup.get(actionUri) || ontologyDisplay.displayConcept(actionUri)}`);
     }
     if (submittedAfter || submittedBefore) {
       items.push(`Submitted: ${displayDateRangeLabel(submittedAfter, submittedBefore)}`);
     }
     return items;
-  }, [ontologyDisplay, status, submittedAfter, submittedBefore, workflowLabelLookup, workflowUri]);
+  }, [actionLabelLookup, actionUri, ontologyDisplay, status, submittedAfter, submittedBefore]);
 
   const applyFilters = () => {
     const params = new URLSearchParams();
     if (statusDraft !== "all") {
       params.set("status", statusDraft);
     }
-    if (workflowUriDraft.trim()) {
-      params.set("workflow_uri", workflowUriDraft.trim());
+    if (actionUriDraft.trim()) {
+      params.set("action_uri", actionUriDraft.trim());
     }
     const afterIso = localDateTimeToIso(submittedAfterDraft);
     const beforeIso = localDateTimeToIso(submittedBeforeDraft);
@@ -264,7 +264,7 @@ export function AgenticWorkflowExecutionPanel() {
 
   const clearFilters = () => {
     setStatusDraft("all");
-    setWorkflowUriDraft("");
+    setActionUriDraft("");
     setSubmittedAfterDraft("");
     setSubmittedBeforeDraft("");
     router.push("/inspector/agentic-workflows");
@@ -302,7 +302,7 @@ export function AgenticWorkflowExecutionPanel() {
             </Badge>
             {activeFilterBadges.length === 0 ? (
               <Badge variant="outline" className="rounded-full bg-muted/20 px-3 py-1 text-xs font-normal">
-                Showing all recent workflow runs
+                Showing all recent managed-agent runs
               </Badge>
             ) : (
               activeFilterBadges.map((item) => (
@@ -341,31 +341,31 @@ export function AgenticWorkflowExecutionPanel() {
           </div>
 
           <div className="space-y-2 rounded-2xl border border-border/70 bg-muted/15 p-4">
-            <Label htmlFor="agentic-workflow-uri">Workflow capability</Label>
+            <Label htmlFor="agentic-action-uri">Managed-agent action</Label>
             <SearchableSelect
-              triggerId="agentic-workflow-uri"
-              value={workflowUriDraft || ALL_WORKFLOWS_VALUE}
+              triggerId="agentic-action-uri"
+              value={actionUriDraft || ALL_ACTIONS_VALUE}
               onValueChange={(value) =>
-                setWorkflowUriDraft(value === ALL_WORKFLOWS_VALUE ? "" : value)
+                setActionUriDraft(value === ALL_ACTIONS_VALUE ? "" : value)
               }
-              disabled={!workflowOptionsLoaded && resolvedWorkflowOptions.length === 0}
+              disabled={!actionOptionsLoaded && resolvedActionOptions.length === 0}
               groups={[
                 {
-                  label: "Workflow capabilities",
+                  label: "Managed-agent actions",
                   options: [
-                    { value: ALL_WORKFLOWS_VALUE, label: "All workflow capabilities" },
-                    ...resolvedWorkflowOptions,
+                    { value: ALL_ACTIONS_VALUE, label: "All managed-agent actions" },
+                    ...resolvedActionOptions,
                   ],
                 },
               ]}
               placeholder={
-                workflowOptionsLoaded ? "All workflow capabilities" : "Loading capabilities..."
+                actionOptionsLoaded ? "All managed-agent actions" : "Loading managed-agent actions..."
               }
-              searchPlaceholder="Search workflow capabilities..."
-              emptyMessage="No workflow capabilities found."
+              searchPlaceholder="Search managed-agent actions..."
+              emptyMessage="No managed-agent actions found."
             />
-            {workflowOptionsError && (
-              <p className="text-xs text-muted-foreground">{workflowOptionsError}</p>
+            {actionOptionsError && (
+              <p className="text-xs text-muted-foreground">{actionOptionsError}</p>
             )}
           </div>
 
@@ -410,7 +410,7 @@ export function AgenticWorkflowExecutionPanel() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Workflow Runs
+              Managed-Agent Runs
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               Page {visiblePages === 0 ? 0 : currentPage} of {visiblePages}
@@ -423,13 +423,13 @@ export function AgenticWorkflowExecutionPanel() {
 
         {executions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
-            {loading ? "Loading workflow runs..." : "No workflow runs match the active filters."}
+            {loading ? "Loading managed-agent runs..." : "No managed-agent runs match the active filters."}
           </div>
         ) : (
           <div className="space-y-3">
             {executions.map((execution) => {
               const href = buildExecutionHref(execution.action.action_id);
-              const workflowLabel = ontologyDisplay.displayConcept(execution.action.action_uri);
+              const actionLabel = ontologyDisplay.displayConcept(execution.action.action_uri);
               const submittedLabel = formatDateTime(execution.action.submitted_at);
               const updatedLabel = formatDateTime(execution.action.updated_at);
               const lastPersistedLabel = formatDateTime(execution.last_transcript_persisted_at);
@@ -443,9 +443,9 @@ export function AgenticWorkflowExecutionPanel() {
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                        Workflow capability
+                        Managed-agent action
                       </div>
-                      <div className="truncate font-display text-xl">{workflowLabel}</div>
+                      <div className="truncate font-display text-xl">{actionLabel}</div>
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                         <span title={execution.action.action_id}>
                           Run {shortIdentifier(execution.action.action_id, 10)}
@@ -509,7 +509,7 @@ export function AgenticWorkflowExecutionPanel() {
 
                   <div className="mt-4 flex items-center justify-between gap-4 border-t border-border/70 pt-3">
                     <div className="min-w-0 text-[11px] text-muted-foreground">
-                      <div className="uppercase tracking-[0.18em]">Capability URI</div>
+                      <div className="uppercase tracking-[0.18em]">Action URI</div>
                       <div className="truncate" title={execution.action.action_uri}>
                         {execution.action.action_uri}
                       </div>
@@ -527,7 +527,7 @@ export function AgenticWorkflowExecutionPanel() {
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">
-            {loading ? "Refreshing workflow runs..." : "Transcript counts reflect persisted messages."}
+            {loading ? "Refreshing managed-agent runs..." : "Transcript counts reflect persisted messages."}
           </p>
           <div className="flex items-center gap-2">
             <Button
