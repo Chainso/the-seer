@@ -259,7 +259,7 @@ export function AgenticWorkflowExecutionPanel() {
     }
     params.set("page", "1");
     const query = params.toString();
-    router.push(query ? `/inspector/agentic-workflows?${query}` : "/inspector/agentic-workflows");
+    router.push(query ? `/inspector/managed-agents?${query}` : "/inspector/managed-agents");
   };
 
   const clearFilters = () => {
@@ -267,20 +267,20 @@ export function AgenticWorkflowExecutionPanel() {
     setActionUriDraft("");
     setSubmittedAfterDraft("");
     setSubmittedBeforeDraft("");
-    router.push("/inspector/agentic-workflows");
+    router.push("/inspector/managed-agents");
   };
 
   const buildExecutionHref = (executionId: string) => {
     const query = searchParams.toString();
     return query
-      ? `/inspector/agentic-workflows/${executionId}?${query}`
-      : `/inspector/agentic-workflows/${executionId}`;
+      ? `/inspector/managed-agents/${executionId}?${query}`
+      : `/inspector/managed-agents/${executionId}`;
   };
 
   const changePage = (nextPage: number) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("page", String(nextPage));
-    router.push(`/inspector/agentic-workflows?${params.toString()}`);
+    router.push(`/inspector/managed-agents?${params.toString()}`);
   };
 
   return (

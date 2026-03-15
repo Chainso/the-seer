@@ -42,7 +42,7 @@ At any point, the user should be able to answer:
 
 ### Inspect Agent Run History
 
-1. User opens `/inspector/agentic-workflows`.
+1. User opens `/inspector/managed-agents`.
 2. User filters execution history by runtime state such as running, completed, failed, or dead-letter.
 3. User can also narrow by time window and ontology-backed action selection.
 4. User opens one execution from a browseable inspector card rather than an action-column-only table flow.

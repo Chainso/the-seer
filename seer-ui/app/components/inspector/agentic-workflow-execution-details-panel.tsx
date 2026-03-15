@@ -357,13 +357,13 @@ export function AgenticWorkflowExecutionDetailsPanel({
 
   const query = useMemo(() => searchParams.toString(), [searchParams]);
   const backHref = useMemo(
-    () => (query ? `/inspector/agentic-workflows?${query}` : "/inspector/agentic-workflows"),
+    () => (query ? `/inspector/managed-agents?${query}` : "/inspector/managed-agents"),
     [query]
   );
   const buildExecutionHref = (targetExecutionId: string) =>
     query
-      ? `/inspector/agentic-workflows/${targetExecutionId}?${query}`
-      : `/inspector/agentic-workflows/${targetExecutionId}`;
+      ? `/inspector/managed-agents/${targetExecutionId}?${query}`
+      : `/inspector/managed-agents/${targetExecutionId}`;
   const buildExecutionHrefForAction = (action: AgenticWorkflowActionSummary) =>
     action.action_kind === "agentic_workflow" ? buildExecutionHref(action.action_id) : undefined;
 

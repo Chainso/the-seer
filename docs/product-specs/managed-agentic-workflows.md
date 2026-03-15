@@ -62,7 +62,7 @@ That means:
 
 ## Primary User Flow
 
-1. User opens `/inspector/agentic-workflows`.
+1. User opens `/inspector/managed-agents`.
 2. Seer lists recent managed-agent runs without requiring a `user_id` entry gate.
 3. User filters by lifecycle state, time window, and ontology-backed action selection.
 4. User opens one run.

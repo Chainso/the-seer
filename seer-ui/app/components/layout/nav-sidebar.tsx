@@ -26,7 +26,7 @@ const navigation = [
   },
   {
     name: 'Managed Agents',
-    href: '/inspector/agentic-workflows',
+    href: '/inspector/managed-agents',
     icon: Waypoints,
   },
   {

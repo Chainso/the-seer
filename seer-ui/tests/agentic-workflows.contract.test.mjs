@@ -13,8 +13,8 @@ function read(relativePath) {
 }
 
 test("agentic workflow inspector surfaces expose dedicated execution list and detail routes", () => {
-  const listPage = read("app/inspector/agentic-workflows/page.tsx");
-  const detailPage = read("app/inspector/agentic-workflows/[executionId]/page.tsx");
+  const listPage = read("app/inspector/managed-agents/page.tsx");
+  const detailPage = read("app/inspector/managed-agents/[executionId]/page.tsx");
   const listPanel = read("app/components/inspector/agentic-workflow-execution-panel.tsx");
   const detailsPanel = read("app/components/inspector/agentic-workflow-execution-details-panel.tsx");
   const nav = read("app/components/layout/nav-sidebar.tsx");
@@ -22,18 +22,18 @@ test("agentic workflow inspector surfaces expose dedicated execution list and de
   assert.match(listPage, /AgenticWorkflowExecutionPanel/);
   assert.match(detailPage, /AgenticWorkflowExecutionDetailsPanel/);
   assert.match(listPanel, /matching runs/);
-  assert.match(listPanel, /Workflow capability/);
+  assert.match(listPanel, /Managed-agent action/);
   assert.match(listPanel, /buildExecutionHref/);
   assert.match(listPanel, /Open run/);
-  assert.match(listPanel, /\/inspector\/agentic-workflows\/\$\{executionId\}/);
+  assert.match(listPanel, /\/inspector\/managed-agents\/\$\{executionId\}/);
   assert.doesNotMatch(listPanel, /Browse managed workflow runs/);
   assert.match(detailsPanel, /Back to Runs/);
   assert.match(detailsPanel, /Transcript/);
   assert.match(detailsPanel, /Related Actions/);
   assert.match(detailsPanel, /Produced Events/);
   assert.doesNotMatch(detailsPanel, /Review persisted transcript history/);
-  assert.match(nav, /name:\s*'Workflow Runs'/);
-  assert.match(nav, /href:\s*'\/inspector\/agentic-workflows'/);
+  assert.match(nav, /name:\s*'Managed Agents'/);
+  assert.match(nav, /href:\s*'\/inspector\/managed-agents'/);
 });
 
 test("agentic workflow API client targets dedicated execution and transcript endpoints", () => {
@@ -42,7 +42,7 @@ test("agentic workflow API client targets dedicated execution and transcript end
 
   assert.match(apiClient, /\/agentic-workflows\/executions\?/);
   assert.match(apiClient, /\/agentic-workflows\/executions\/\$\{executionId\}/);
-  assert.match(apiClient, /listRegisteredAgenticWorkflows/);
+  assert.match(apiClient, /listRegisteredAgenticActions/);
   assert.match(apiClient, /queryOntologySelect/);
   assert.match(apiClient, /after_ordinal/);
   assert.match(apiClient, /messages\/stream/);
