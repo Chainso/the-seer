@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from seer_backend.ontology.constants import SEER_EXTENSION_TURTLE
 from seer_backend.ontology.errors import OntologyDependencyUnavailableError
 from seer_backend.ontology.models import ValidationDiagnostic, ValidationOutcome
 
@@ -30,9 +31,7 @@ class ShaclValidator:
         self.metamodel_path = str(Path(metamodel_path).resolve())
         self._base_graph = Graph()
         self._base_graph.parse(self.metamodel_path, format="turtle")
-        extension_path = Path(self.metamodel_path).with_name("seer.ttl")
-        if extension_path.exists():
-            self._base_graph.parse(str(extension_path), format="turtle")
+        self._base_graph.parse(data=SEER_EXTENSION_TURTLE, format="turtle")
         serialized = self._base_graph.serialize(format="turtle")
         self._base_turtle = (
             serialized.decode("utf-8")

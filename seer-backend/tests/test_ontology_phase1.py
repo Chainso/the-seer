@@ -126,7 +126,7 @@ def _agentic_workflow_turtle() -> str:
         [
             "@prefix seer: <http://seer.platform/ontology#> .",
             source.replace(
-                "support_local:act_triage_ticket a prophet:Process ;",
+                "support_local:act_triage_ticket a prophet:Action ;",
                 "support_local:act_triage_ticket a seer:AgenticWorkflow ;",
             ),
         ]
@@ -224,7 +224,7 @@ PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX seer: <http://seer.platform/ontology#>
 ASK {{
   <{TRIAGE_ACTION_URI}> a seer:AgenticWorkflow .
-  seer:AgenticWorkflow rdfs:subClassOf prophet:Workflow .
+  seer:AgenticWorkflow rdfs:subClassOf prophet:Action .
 }}
 """.strip()
         },
@@ -836,11 +836,7 @@ def test_concepts_endpoint_returns_user_graph_nodes_only(client: TestClient) -> 
     allowed_categories = {
         "ObjectModel",
         "Action",
-        "Process",
-        "Workflow",
         "Event",
-        "Signal",
-        "Transition",
         "EventTrigger",
     }
     assert all(concept["category"] in allowed_categories for concept in concepts)

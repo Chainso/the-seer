@@ -52,11 +52,7 @@ _GRAPH_CONCEPT_CATEGORIES = frozenset(
     {
         "ObjectModel",
         "Action",
-        "Process",
-        "Workflow",
         "Event",
-        "Signal",
-        "Transition",
         "EventTrigger",
     }
 )
@@ -68,14 +64,11 @@ WHERE {{
   VALUES ?categoryIri {{
     prophet:ObjectModel
     prophet:Action
-    prophet:Process
-    prophet:Workflow
     prophet:Event
-    prophet:Signal
-    prophet:Transition
     prophet:EventTrigger
   }}
-  ?concept a ?categoryIri .
+  ?concept a ?typeIri .
+  ?typeIri rdfs:subClassOf* ?categoryIri .
   OPTIONAL {{ ?concept prophet:name ?prophetName . }}
   OPTIONAL {{ ?concept rdfs:label ?rdfsLabel . }}
   BIND(COALESCE(STR(?prophetName), STR(?rdfsLabel), STR(?concept)) AS ?label)
@@ -187,7 +180,14 @@ SELECT ?label ?comment ?category
 WHERE {{
   BIND(<{iri}> AS ?concept)
   OPTIONAL {{
-    ?concept a ?categoryIri .
+    VALUES ?categoryIri {{
+      prophet:ObjectModel
+      prophet:Action
+      prophet:Event
+      prophet:EventTrigger
+    }}
+    ?concept a ?typeIri .
+    ?typeIri rdfs:subClassOf* ?categoryIri .
     BIND(REPLACE(STR(?categoryIri), "^.*[#/]", "") AS ?category)
   }}
   OPTIONAL {{ ?concept prophet:name ?prophetName . }}
@@ -242,10 +242,15 @@ LIMIT 50
                 "rdflib is required for ontology graph loading"
             )
         pointer = await self._current_pointer_or_raise()
+        base_turtle = await self._repository.get_graph_turtle(self._base_graph_iri)
         turtle = await self._repository.get_graph_turtle(pointer.graph_iri)
+        classification_graph = RdfGraph()
+        if base_turtle.strip():
+            classification_graph.parse(data=base_turtle, format="turtle")
         dataset_graph = RdfGraph()
         if turtle.strip():
             dataset_graph.parse(data=turtle, format="turtle")
+            classification_graph += dataset_graph
 
         prophet_name_predicate = URIRef(f"{_PROPHET_NS}name")
         nodes_by_iri: dict[str, OntologyGraphNode] = {}
@@ -275,8 +280,9 @@ LIMIT 50
 
             if predicate == RDF.type and isinstance(obj, URIRef):
                 category_iri = str(obj)
-                if category_iri.startswith(_PROPHET_NS):
-                    subject_node.category = _iri_local_name(category_iri)
+                category = _classify_graph_category(category_iri, classification_graph)
+                if category is not None:
+                    subject_node.category = category
                     subject_node.properties["category"] = subject_node.category
                 continue
 
@@ -437,6 +443,24 @@ def _is_user_concept_iri(concept_iri: str) -> bool:
 
 def _is_graph_concept_category(category: str) -> bool:
     return category in _GRAPH_CONCEPT_CATEGORIES
+
+
+def _classify_graph_category(type_iri: str, classification_graph: RdfGraph) -> str | None:
+    direct_category = _iri_local_name(type_iri)
+    if type_iri.startswith(_PROPHET_NS) and direct_category in _GRAPH_CONCEPT_CATEGORIES:
+        return direct_category
+
+    if URIRef is None or RDFS is None:
+        return None
+
+    type_ref = URIRef(type_iri)
+    for category in _GRAPH_CONCEPT_CATEGORIES:
+        category_ref = URIRef(f"{_PROPHET_NS}{category}")
+        if type_ref == category_ref:
+            return category
+        if category_ref in classification_graph.transitive_objects(type_ref, RDFS.subClassOf):
+            return category
+    return None
 
 
 def _iri_local_name(iri: str) -> str:

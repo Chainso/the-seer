@@ -21,8 +21,7 @@ class ActionStatus(StrEnum):
 
 
 class ActionKind(StrEnum):
-    PROCESS = "process"
-    WORKFLOW = "workflow"
+    ACTION = "action"
     AGENTIC_WORKFLOW = "agentic_workflow"
 
 
@@ -47,7 +46,7 @@ class ActionCreate:
     validation_contract_hash: str
     action_id: UUID = field(default_factory=uuid4)
     parent_execution_id: UUID | None = None
-    action_kind: ActionKind = ActionKind.WORKFLOW
+    action_kind: ActionKind = ActionKind.ACTION
     priority: int = 0
     idempotency_key: str | None = None
     max_attempts: int = 3

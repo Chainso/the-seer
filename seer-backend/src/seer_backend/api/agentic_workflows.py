@@ -43,7 +43,7 @@ class AgenticWorkflowActionSummaryResponse(BaseModel):
     action_id: UUID
     user_id: str
     action_uri: str
-    action_kind: Literal["process", "workflow", "agentic_workflow"]
+    action_kind: Literal["action", "agentic_workflow"]
     status: Literal[
         "queued",
         "running",

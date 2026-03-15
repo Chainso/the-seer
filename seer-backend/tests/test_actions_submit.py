@@ -72,7 +72,7 @@ def test_submit_enqueues_action_with_ontology_release_and_contract_hash() -> Non
     assert response.status_code == 200, response.text
     body = response.json()
     assert body["status"] == "queued"
-    assert body["action_kind"] == ActionKind.PROCESS.value
+    assert body["action_kind"] == ActionKind.ACTION.value
     assert body["dedupe_hit"] is False
     assert body["ontology_release_id"] == "rel-2026-03-01"
 
@@ -80,7 +80,7 @@ def test_submit_enqueues_action_with_ontology_release_and_contract_hash() -> Non
     stored = repository.get_action(action_id)
     assert stored is not None
     assert stored.action_uri == TRIAGE_ACTION_URI
-    assert stored.action_kind == ActionKind.PROCESS
+    assert stored.action_kind == ActionKind.ACTION
     assert stored.ontology_release_id == "rel-2026-03-01"
     assert len(stored.validation_contract_hash) == 64
 
@@ -136,8 +136,8 @@ def test_submit_idempotency_key_returns_stable_dedupe_response() -> None:
     assert first_body["action_id"] == second_body["action_id"]
     assert first_body["dedupe_hit"] is False
     assert second_body["dedupe_hit"] is True
-    assert first_body["action_kind"] == ActionKind.PROCESS.value
-    assert second_body["action_kind"] == ActionKind.PROCESS.value
+    assert first_body["action_kind"] == ActionKind.ACTION.value
+    assert second_body["action_kind"] == ActionKind.ACTION.value
 
 
 def test_submit_classifies_agentic_workflow_from_seer_ontology_extension() -> None:
@@ -147,7 +147,7 @@ def test_submit_classifies_agentic_workflow_from_seer_ontology_extension() -> No
         [
             "@prefix seer: <http://seer.platform/ontology#> .",
             source_turtle.replace(
-                "support_local:act_triage_ticket a prophet:Process ;",
+                "support_local:act_triage_ticket a prophet:Action ;",
                 "support_local:act_triage_ticket a seer:AgenticWorkflow ;",
             ),
         ]

@@ -59,9 +59,8 @@ WHERE {{
 
   OPTIONAL {{
     VALUES (?actionKind ?kindType) {{
+      ("action" prophet:Action)
       ("agentic_workflow" seer:AgenticWorkflow)
-      ("process" prophet:Process)
-      ("workflow" prophet:Workflow)
     }}
     FILTER EXISTS {{ ?actionType rdfs:subClassOf* ?kindType . }}
   }}
@@ -824,10 +823,8 @@ def _resolve_action_kind(
 ) -> ActionKind:
     if "agentic_workflow" in action_kind_tokens or SEER_AGENTIC_WORKFLOW_IRI in action_type_iris:
         return ActionKind.AGENTIC_WORKFLOW
-    if "process" in action_kind_tokens:
-        return ActionKind.PROCESS
-    if "workflow" in action_kind_tokens:
-        return ActionKind.WORKFLOW
+    if "action" in action_kind_tokens or action_type_iris:
+        return ActionKind.ACTION
     raise ActionValidationError(
         f"Action URI '{action_uri}' did not resolve to a supported executable kind",
         issues=[
@@ -836,7 +833,7 @@ def _resolve_action_kind(
                 field="action_uri",
                 message=(
                     "Action URI resolved to an executable action, but it was not classified as "
-                    "a process, workflow, or agentic workflow."
+                    "an action or agentic workflow."
                 ),
             )
         ],

@@ -68,7 +68,7 @@ class ActionSubmitValidationDetail(BaseModel):
 class ActionSubmitResponse(BaseModel):
     action_id: UUID
     status: Literal["queued"] = "queued"
-    action_kind: Literal["process", "workflow", "agentic_workflow"]
+    action_kind: Literal["action", "agentic_workflow"]
     ontology_release_id: str
     dedupe_hit: bool
 
@@ -83,7 +83,7 @@ class ActionClaimRequest(BaseModel):
 class ClaimedAction(BaseModel):
     action_id: UUID
     action_uri: str
-    action_kind: Literal["process", "workflow", "agentic_workflow"]
+    action_kind: Literal["action", "agentic_workflow"]
     parent_execution_id: UUID | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     ontology_release_id: str
@@ -153,7 +153,7 @@ class ActionStatusResponse(BaseModel):
     action_id: UUID
     user_id: str
     action_uri: str
-    action_kind: Literal["process", "workflow", "agentic_workflow"]
+    action_kind: Literal["action", "agentic_workflow"]
     parent_execution_id: UUID | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     status: Literal[
