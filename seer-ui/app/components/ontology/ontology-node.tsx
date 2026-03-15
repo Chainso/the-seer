@@ -1,6 +1,7 @@
 'use client';
 
 import { Handle, Position } from '@xyflow/react';
+import { getOntologyConceptLabel } from './ontology-concept-label';
 import { GraphNodeCard } from '@/app/components/graph/graph-node-card';
 
 /**
@@ -41,7 +42,7 @@ export function OntologyNode({ data }: { data: OntologyNodeData }) {
     <>
       <Handle type="target" position={Position.Top} style={{ opacity: 0 }} />
       <GraphNodeCard
-        header={data.label}
+        header={getOntologyConceptLabel(data.label)}
         title={data.name || data.uri}
         description={data.description}
         bgVar={colors.bg}

@@ -85,9 +85,15 @@ function loadTsModule(modulePath) {
 
 const catalogModule = loadTsModule(path.join(root, "app/lib/ontology-display/catalog.ts"));
 const resolverModule = loadTsModule(path.join(root, "app/lib/ontology-display/resolver.ts"));
+const edgePresentationModule = loadTsModule(
+  path.join(root, "app/components/ontology/ontology-edge-presentation.ts")
+);
+const referenceEdgeModule = loadTsModule(path.join(root, "app/components/ontology/graph-reference-edges.ts"));
 
 const { buildOntologyDisplayCatalog, tokenVariants } = catalogModule;
 const { createOntologyDisplayResolver } = resolverModule;
+const { getOntologyEdgePresentation } = edgePresentationModule;
+const { buildReferenceEdges } = referenceEdgeModule;
 
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), "utf8");
@@ -279,14 +285,83 @@ test("explorer taxonomy stays on live Prophet concepts without lifecycle relabel
   const graphSource = read("app/components/ontology/ontology-graph.tsx");
 
   assert.match(explorerSource, /labels:\s*\['ObjectModel', 'Action', 'Event', 'EventTrigger'\]/);
-  assert.match(explorerSource, /const RELATIONSHIP_SCOPE_LABEL: Record<RelationshipScope, string> = \{\s*structure:/);
+  assert.match(explorerSource, /const RELATIONSHIP_SCOPE_LABEL: Record<RelationshipScope, string> = \{\s*automation:/);
+  assert.doesNotMatch(explorerSource, /structure:\s*'Structure'/);
   assert.doesNotMatch(explorerSource, /lifecycleLabelMode:\s*['"]explicit['"]/);
   assert.doesNotMatch(explorerSource, /\b(state|process|workflow|signal)\b/i);
   assert.match(explorerSource, /displayNodeName=\{displayNameForNode\}/);
+  assert.match(explorerSource, /buildReferenceEdges/);
+  assert.match(explorerSource, /listOntologyEdgePresentations/);
+  assert.match(explorerSource, /'listensTo', 'invokes', 'triggers', 'producesEvent'/);
+  assert.doesNotMatch(explorerSource, /deriveAuthoringReferenceEdges/);
+  assert.match(explorerSource, /return scope \? relationshipFilters\[scope\] : true/);
   assert.match(graphSource, /'ObjectModel',\s*'Action',\s*'Event',\s*'EventTrigger'/);
   assert.match(graphSource, /displayNodeName\?:\s*\(node:\s*OntologyGraphNode\)\s*=>\s*string/);
   assert.match(graphSource, /displayNodeName\?\.\(node\)/);
+  assert.match(graphSource, /getOntologyEdgePresentation\(edge\.type\)/);
+  assert.match(graphSource, /ontology-edge-presentation/);
+  assert.doesNotMatch(graphSource, /EdgeLabelRenderer/);
+  assert.doesNotMatch(graphSource, /label:\s*prettifyEdgeLabel\(edge\.type\)/);
   assert.doesNotMatch(graphSource, /\b(process|workflow|signal)\b/i);
+});
+
+test("shared edge presentation utility keeps automation edge types visually distinct", () => {
+  const produces = getOntologyEdgePresentation("producesEvent");
+  const triggers = getOntologyEdgePresentation("triggers");
+  const listens = getOntologyEdgePresentation("listensTo");
+  const invokes = getOntologyEdgePresentation("invokes");
+  const references = getOntologyEdgePresentation("referencesObjectModel");
+
+  assert.equal(produces.label, "Produces Event");
+  assert.equal(produces.stroke, "var(--graph-edge-transition)");
+  assert.equal(produces.strokeDasharray, undefined);
+
+  assert.equal(triggers.stroke, "var(--graph-edge-transition)");
+  assert.equal(triggers.strokeDasharray, "10 4");
+
+  assert.equal(listens.strokeDasharray, "2 6");
+  assert.equal(invokes.strokeDasharray, "1 5");
+
+  assert.equal(references.stroke, "var(--graph-edge-reference)");
+  assert.equal(references.strokeDasharray, "6 4");
+});
+
+test("shared reference-edge helper derives action links through produced event output schemas", () => {
+  const graph = {
+    nodes: [
+      { uri: "urn:act:ship-order", label: "Action", properties: {} },
+      { uri: "urn:input:ship-order", label: "ActionInput", properties: {} },
+      { uri: "urn:event:order-shipped", label: "Event", properties: {} },
+      { uri: "urn:model:order", label: "ObjectModel", properties: {} },
+      { uri: "urn:prop:event-payload", label: "PropertyDefinition", properties: {} },
+      { uri: "urn:type:shipment-payload", label: "StructType", properties: {} },
+      { uri: "urn:prop:orders", label: "PropertyDefinition", properties: {} },
+      { uri: "urn:type:order-list", label: "ListType", properties: {} },
+      { uri: "urn:type:order-ref", label: "ObjectReference", properties: {} },
+    ],
+    edges: [
+      { fromUri: "urn:act:ship-order", toUri: "urn:input:ship-order", type: "acceptsInput" },
+      { fromUri: "urn:act:ship-order", toUri: "urn:event:order-shipped", type: "producesEvent" },
+      { fromUri: "urn:event:order-shipped", toUri: "urn:prop:event-payload", type: "hasProperty" },
+      { fromUri: "urn:prop:event-payload", toUri: "urn:type:shipment-payload", type: "valueType" },
+      { fromUri: "urn:type:shipment-payload", toUri: "urn:prop:orders", type: "hasProperty" },
+      { fromUri: "urn:prop:orders", toUri: "urn:type:order-list", type: "valueType" },
+      { fromUri: "urn:type:order-list", toUri: "urn:type:order-ref", type: "itemType" },
+      { fromUri: "urn:type:order-ref", toUri: "urn:model:order", type: "referencesObjectModel" },
+    ],
+  };
+
+  const references = buildReferenceEdges(graph.nodes, graph.edges);
+  const serialized = references.map((edge) => `${edge.fromUri}|${edge.type}|${edge.toUri}`).sort();
+
+  assert.ok(
+    serialized.includes("urn:act:ship-order|referencesObjectModel|urn:model:order"),
+    "action should inherit object-model references from its produced event schema"
+  );
+  assert.ok(
+    serialized.includes("urn:event:order-shipped|referencesObjectModel|urn:model:order"),
+    "event should retain its own derived object-model reference"
+  );
 });
 
 test("ontology page host and assistant canvas host share the explorer display surface", () => {

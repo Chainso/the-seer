@@ -9,6 +9,9 @@ import { Button } from '@/app/components/ui/button';
 import type { OntologyEdge, OntologyGraph, OntologyNode } from '@/app/types/ontology';
 import { buildOntologyDisplayCatalog } from '@/app/lib/ontology-display/catalog';
 import { createOntologyDisplayResolver } from '@/app/lib/ontology-display/resolver';
+import { getOntologyConceptLabel } from './ontology-concept-label';
+import { listOntologyEdgePresentations } from './ontology-edge-presentation';
+import { buildReferenceEdges } from './graph-reference-edges';
 import { OntologyGraphVisualization } from './ontology-graph';
 import { Search, Network, Activity, ArrowRightLeft } from 'lucide-react';
 
@@ -23,14 +26,13 @@ interface OntologyExplorerTabsProps {
 }
 
 type ExplorerTab = 'overview' | 'objects' | 'actions' | 'events' | 'triggers';
-type RelationshipScope = 'structure' | 'automation' | 'reference';
+type RelationshipScope = 'automation' | 'reference';
 type RelationshipFilters = Record<RelationshipScope, boolean>;
 
 const MAX_GRAPH_RENDER_NODES = 220;
 const MAX_GRAPH_RENDER_EDGES = 520;
 
 const RELATIONSHIP_SCOPE_LABEL: Record<RelationshipScope, string> = {
-  structure: 'Structure',
   automation: 'Automation',
   reference: 'Reference',
 };
@@ -62,7 +64,8 @@ function toSearchText(node: OntologyNode, nodeDisplayName: string) {
   const props = node.properties ?? {};
   const name = typeof props.name === 'string' ? props.name : nodeDisplayName;
   const description = typeof props.description === 'string' ? props.description : '';
-  return `${node.uri} ${node.label} ${nodeDisplayName} ${name} ${description}`.toLowerCase();
+  const conceptLabel = getOntologyConceptLabel(node.label);
+  return `${node.uri} ${node.label} ${conceptLabel} ${nodeDisplayName} ${name} ${description}`.toLowerCase();
 }
 
 function isStandardTypeNode(node: OntologyNode) {
@@ -88,14 +91,14 @@ function relatedEdges(edges: OntologyEdge[], nodeUri: string) {
   return { outgoing, incoming };
 }
 
-function relationshipScopeForEdge(edgeType: string): RelationshipScope {
-  if (['listensTo', 'invokes', 'eventTrigger', 'producesEvent'].includes(edgeType)) {
+function relationshipScopeForEdge(edgeType: string): RelationshipScope | null {
+  if (['listensTo', 'invokes', 'triggers', 'producesEvent'].includes(edgeType)) {
     return 'automation';
   }
   if (edgeType === 'referencesObjectModel') {
     return 'reference';
   }
-  return 'structure';
+  return null;
 }
 
 function applyGraphControls(
@@ -104,7 +107,10 @@ function applyGraphControls(
   selectedUri: string | null,
   focusNeighborhoodOnly: boolean
 ): OntologyGraph {
-  const enabledEdges = graph.edges.filter((edge) => relationshipFilters[relationshipScopeForEdge(edge.type)]);
+  const enabledEdges = graph.edges.filter((edge) => {
+    const scope = relationshipScopeForEdge(edge.type);
+    return scope ? relationshipFilters[scope] : true;
+  });
 
   if (focusNeighborhoodOnly && selectedUri) {
     const focusedEdges = enabledEdges.filter(
@@ -129,6 +135,7 @@ function applyGraphControls(
 
 function buildVisibleGraph(
   graphData: OntologyGraph,
+  derivedReferenceEdges: OntologyEdge[],
   labels: Set<string>,
   query: string,
   displayNameForNode: (node: OntologyNode) => string,
@@ -143,7 +150,7 @@ function buildVisibleGraph(
   );
   if (!query.trim()) {
     const baseUris = new Set(baseNodes.map((node) => node.uri));
-    const edges = buildVisibleEdges(graphData, baseUris);
+    const edges = buildVisibleEdges(graphData, derivedReferenceEdges, baseUris);
     return { nodes: baseNodes, edges };
   }
 
@@ -162,8 +169,10 @@ function buildVisibleGraph(
   }
 
   const baseUris = new Set(baseNodes.map((node) => node.uri));
-  const derivedReferenceEdges = deriveAuthoringReferenceEdges(graphData, baseUris);
-  for (const edge of derivedReferenceEdges) {
+  const scopedReferenceEdges = derivedReferenceEdges.filter(
+    (edge) => baseUris.has(edge.fromUri) && baseUris.has(edge.toUri)
+  );
+  for (const edge of scopedReferenceEdges) {
     if (visibleUris.has(edge.fromUri) || visibleUris.has(edge.toUri)) {
       visibleUris.add(edge.fromUri);
       visibleUris.add(edge.toUri);
@@ -178,122 +187,28 @@ function buildVisibleGraph(
       !isStandardTypeNode(node)
   );
   const nodeUris = new Set(nodes.map((node) => node.uri));
-  const edges = buildVisibleEdges(graphData, nodeUris);
+  const edges = buildVisibleEdges(graphData, derivedReferenceEdges, nodeUris);
   return { nodes, edges };
 }
 
-function buildVisibleEdges(graphData: OntologyGraph, nodeUris: Set<string>): OntologyEdge[] {
+function buildVisibleEdges(
+  graphData: OntologyGraph,
+  derivedReferenceEdges: OntologyEdge[],
+  nodeUris: Set<string>
+): OntologyEdge[] {
   const directEdges = graphData.edges
     .filter(
     (edge) => nodeUris.has(edge.fromUri) && nodeUris.has(edge.toUri)
     );
-  const derivedReferences = deriveAuthoringReferenceEdges(graphData, nodeUris);
+  const derivedReferences = derivedReferenceEdges.filter(
+    (edge) => nodeUris.has(edge.fromUri) && nodeUris.has(edge.toUri)
+  );
   const merged = [...directEdges, ...derivedReferences];
   const deduped = new Map<string, OntologyEdge>();
   for (const edge of merged) {
     deduped.set(`${edge.fromUri}|${edge.type}|${edge.toUri}`, edge);
   }
   return Array.from(deduped.values());
-}
-
-function deriveAuthoringReferenceEdges(graphData: OntologyGraph, nodeUris: Set<string>): OntologyEdge[] {
-  const nodeByUri = new Map(graphData.nodes.map((node) => [node.uri, node]));
-  const outgoing = new Map<string, Map<string, string[]>>();
-
-  for (const edge of graphData.edges) {
-    if (!outgoing.has(edge.fromUri)) {
-      outgoing.set(edge.fromUri, new Map());
-    }
-    const byType = outgoing.get(edge.fromUri)!;
-    if (!byType.has(edge.type)) {
-      byType.set(edge.type, []);
-    }
-    byType.get(edge.type)!.push(edge.toUri);
-  }
-
-  const next = (fromUri: string, edgeType: string) => outgoing.get(fromUri)?.get(edgeType) ?? [];
-
-  const referenceTargetsByRefNode = new Map<string, string[]>();
-  for (const edge of graphData.edges) {
-    if (edge.type !== 'referencesObjectModel') {
-      continue;
-    }
-    const refNode = nodeByUri.get(edge.fromUri);
-    if (!refNode || refNode.label !== 'ObjectReference') {
-      continue;
-    }
-    if (!referenceTargetsByRefNode.has(edge.fromUri)) {
-      referenceTargetsByRefNode.set(edge.fromUri, []);
-    }
-    referenceTargetsByRefNode.get(edge.fromUri)!.push(edge.toUri);
-  }
-
-  const cache = new Map<string, Set<string>>();
-  const collectReferenceTargets = (startUri: string): Set<string> => {
-    if (cache.has(startUri)) {
-      return cache.get(startUri)!;
-    }
-
-    const result = new Set<string>();
-    const queue: Array<{ uri: string; depth: number }> = [{ uri: startUri, depth: 0 }];
-    const visited = new Set<string>();
-
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      if (visited.has(current.uri)) {
-        continue;
-      }
-      visited.add(current.uri);
-
-      const directTargets = referenceTargetsByRefNode.get(current.uri) ?? [];
-      directTargets.forEach((target) => result.add(target));
-
-      if (current.depth >= 4) {
-        continue;
-      }
-      for (const toUri of next(current.uri, 'valueType')) {
-        queue.push({ uri: toUri, depth: current.depth + 1 });
-      }
-      for (const toUri of next(current.uri, 'itemType')) {
-        queue.push({ uri: toUri, depth: current.depth + 1 });
-      }
-    }
-
-    cache.set(startUri, result);
-    return result;
-  };
-
-  const derived = new Map<string, OntologyEdge>();
-  for (const sourceUri of nodeUris) {
-    const sourceNode = nodeByUri.get(sourceUri);
-    if (!sourceNode || !isAuthoringConceptNode(sourceNode)) {
-      continue;
-    }
-
-    const propertyContainerUris = new Set<string>([sourceUri]);
-    if (sourceNode.label === 'Action') {
-      next(sourceUri, 'acceptsInput').forEach((inputUri) => propertyContainerUris.add(inputUri));
-    }
-
-    for (const containerUri of propertyContainerUris) {
-      for (const propertyUri of next(containerUri, 'hasProperty')) {
-        const targets = collectReferenceTargets(propertyUri);
-        for (const targetUri of targets) {
-          if (!nodeUris.has(targetUri) || targetUri === sourceUri) {
-            continue;
-          }
-          const key = `${sourceUri}|referencesObjectModel|${targetUri}`;
-          derived.set(key, {
-            fromUri: sourceUri,
-            toUri: targetUri,
-            type: 'referencesObjectModel',
-          });
-        }
-      }
-    }
-  }
-
-  return Array.from(derived.values());
 }
 
 function limitGraphForPerformance(
@@ -382,7 +297,6 @@ export function OntologyExplorerTabs({
   const [query, setQuery] = useState('');
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [relationshipFilters, setRelationshipFilters] = useState<RelationshipFilters>({
-    structure: true,
     automation: true,
     reference: true,
   });
@@ -398,7 +312,6 @@ export function OntologyExplorerTabs({
     setSelectedUri(null);
     setFocusNeighborhoodOnly(initialFocusNeighborhoodOnly);
     setRelationshipFilters({
-      structure: true,
       automation: true,
       reference: true,
     });
@@ -448,24 +361,46 @@ export function OntologyExplorerTabs({
       visibleConceptUris.filter((uri): uri is string => typeof uri === 'string' && uri.length > 0)
     );
   }, [visibleConceptUris]);
+  const derivedReferenceEdges = useMemo(
+    () => buildReferenceEdges(graphData.nodes, graphData.edges),
+    [graphData]
+  );
   const scopedBaseGraph = useMemo(
-    () => buildVisibleGraph(graphData, allowedLabels, '', displayNameForNode, visibleConceptUriSet),
-    [graphData, allowedLabels, displayNameForNode, visibleConceptUriSet]
+    () =>
+      buildVisibleGraph(
+        graphData,
+        derivedReferenceEdges,
+        allowedLabels,
+        '',
+        displayNameForNode,
+        visibleConceptUriSet
+      ),
+    [graphData, derivedReferenceEdges, allowedLabels, displayNameForNode, visibleConceptUriSet]
   );
 
   const scopedGraph = useMemo(
-    () => buildVisibleGraph(graphData, allowedLabels, query, displayNameForNode, visibleConceptUriSet),
-    [graphData, allowedLabels, query, displayNameForNode, visibleConceptUriSet]
+    () =>
+      buildVisibleGraph(
+        graphData,
+        derivedReferenceEdges,
+        allowedLabels,
+        query,
+        displayNameForNode,
+        visibleConceptUriSet
+      ),
+    [graphData, derivedReferenceEdges, allowedLabels, query, displayNameForNode, visibleConceptUriSet]
   );
 
   const relationshipScopeCounts = useMemo(() => {
     const counts: Record<RelationshipScope, number> = {
-      structure: 0,
       automation: 0,
       reference: 0,
     };
     for (const edge of scopedGraph.edges) {
-      counts[relationshipScopeForEdge(edge.type)] += 1;
+      const scope = relationshipScopeForEdge(edge.type);
+      if (scope) {
+        counts[scope] += 1;
+      }
     }
     return counts;
   }, [scopedGraph.edges]);
@@ -500,6 +435,10 @@ export function OntologyExplorerTabs({
   const visibleLabelSet = useMemo(
     () => Array.from(new Set(mapGraphState.graph.nodes.map((node) => node.label))),
     [mapGraphState.graph.nodes]
+  );
+  const edgeLegend = useMemo(
+    () => listOntologyEdgePresentations(visibleGraph.edges.map((edge) => edge.type)),
+    [visibleGraph.edges]
   );
 
   const selectedNode = useMemo(
@@ -554,7 +493,7 @@ export function OntologyExplorerTabs({
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm font-medium">{displayNameForNode(node)}</span>
                   <Badge variant="outline" className="text-[10px]">
-                    {node.label}
+                    {getOntologyConceptLabel(node.label)}
                   </Badge>
                 </div>
               </div>
@@ -574,7 +513,7 @@ export function OntologyExplorerTabs({
     <Card className="rounded-2xl border border-border bg-card p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <h3 className="font-display text-base">Concept Inspector</h3>
-        {selectedNode && <Badge variant="secondary">{selectedNode.label}</Badge>}
+        {selectedNode && <Badge variant="secondary">{getOntologyConceptLabel(selectedNode.label)}</Badge>}
       </div>
       {!selectedNode && (
         <p className="mt-3 text-sm text-muted-foreground">
@@ -749,6 +688,27 @@ export function OntologyExplorerTabs({
                       onNodeSelect={(nodeUri) => setSelectedUri(nodeUri)}
                     />
                   </div>
+                  {edgeLegend.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                      {edgeLegend.map((item) => (
+                        <div key={item.type} className="flex items-center gap-2 rounded-full border border-border px-3 py-1">
+                          <svg width="34" height="8" viewBox="0 0 34 8" aria-hidden="true">
+                            <line
+                              x1="1"
+                              y1="4"
+                              x2="33"
+                              y2="4"
+                              stroke={item.stroke}
+                              strokeWidth={item.strokeWidth}
+                              strokeDasharray={item.strokeDasharray}
+                              strokeLinecap="round"
+                            />
+                          </svg>
+                          <span className="text-foreground">{item.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </Card>
                 <div className="grid gap-4 xl:grid-cols-[2fr_1fr]">
                   {renderInspector()}
@@ -760,7 +720,7 @@ export function OntologyExplorerTabs({
                     <div className="mt-3 space-y-2">
                       {allLabelCounts.slice(0, 12).map(([label, count]) => (
                         <div key={label} className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
-                          <span className="text-sm">{label}</span>
+                          <span className="text-sm">{getOntologyConceptLabel(label)}</span>
                           <Badge variant="secondary">{count}</Badge>
                         </div>
                       ))}

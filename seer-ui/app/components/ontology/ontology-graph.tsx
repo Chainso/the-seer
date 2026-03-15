@@ -19,6 +19,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import type { OntologyGraph, OntologyNode as OntologyGraphNode } from '@/app/types/ontology';
+import { getOntologyEdgePresentation } from './ontology-edge-presentation';
 import { OntologyNode, OntologyNodeData } from './ontology-node';
 import { OntologyToolbar } from './ontology-toolbar';
 import ELK from 'elkjs/lib/elk.bundled.js';
@@ -66,9 +67,7 @@ function ElkEdge(props: EdgeProps<Edge<ElkEdgeData>>) {
     return null;
   }
   const path = buildPolylinePath(points);
-  return (
-    <BaseEdge path={path} style={style} markerEnd={markerEnd} />
-  );
+  return <BaseEdge path={path} style={style} markerEnd={markerEnd} />;
 }
 
 const ELK_NODE_WIDTH = 200;
@@ -104,17 +103,6 @@ async function layoutNodes(
   allowedLabelsOverride?: string[],
   displayNodeName?: (node: OntologyGraphNode) => string
 ): Promise<{ nodes: Node<OntologyNodeData>[]; edges: Edge[] }> {
-  const edgeColors = {
-    default: 'var(--graph-edge-default)',
-    reference: 'var(--graph-edge-reference)',
-    automation: 'var(--graph-edge-transition)',
-    labelDefault: 'var(--graph-edge-label-default)',
-    labelReference: 'var(--graph-edge-label-reference)',
-    labelAutomation: 'var(--graph-edge-label-transition)',
-    labelBg: 'var(--graph-edge-label-bg)',
-    labelBorder: 'var(--graph-edge-label-border)',
-  };
-
   const defaultAllowedLabels = [
     'ObjectModel',
     'Action',
@@ -150,18 +138,7 @@ async function layoutNodes(
   const visibleEdges = data.edges.filter(edge => visibleNodeIds.has(edge.fromUri) && visibleNodeIds.has(edge.toUri));
 
   const edges: Edge<ElkEdgeData>[] = visibleEdges.map((edge, index) => {
-    const isReference = edge.type === 'referencesObjectModel';
-    const isAutomationEdge = ['eventTrigger', 'listensTo', 'invokes', 'producesEvent'].includes(edge.type);
-    const strokeColor = isReference
-      ? edgeColors.reference
-      : isAutomationEdge
-      ? edgeColors.automation
-      : edgeColors.default;
-    const labelColor = isReference
-      ? edgeColors.labelReference
-      : isAutomationEdge
-      ? edgeColors.labelAutomation
-      : edgeColors.labelDefault;
+    const presentation = getOntologyEdgePresentation(edge.type);
     return {
       id: `${edge.fromUri}-${edge.toUri}-${index}`,
       source: edge.fromUri,
@@ -169,25 +146,13 @@ async function layoutNodes(
       type: 'elk',
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: strokeColor,
+        color: presentation.stroke,
       },
       style: {
-        stroke: strokeColor,
-        strokeDasharray: isReference ? '6 4' : isAutomationEdge ? '1 4' : undefined,
-        strokeWidth: isReference ? 1.6 : isAutomationEdge ? 1.4 : 1.2,
+        stroke: presentation.stroke,
+        strokeDasharray: presentation.strokeDasharray,
+        strokeWidth: presentation.strokeWidth,
       },
-      labelStyle: {
-        fontSize: 10,
-        fill: labelColor,
-        fontWeight: isReference || isAutomationEdge ? 600 : 400,
-      },
-      labelBgStyle: {
-        fill: edgeColors.labelBg,
-        stroke: edgeColors.labelBorder,
-        strokeWidth: 0.8,
-      },
-      labelBgPadding: [6, 3],
-      labelBgBorderRadius: 6,
     };
   });
 

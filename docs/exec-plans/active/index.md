@@ -1,3 +1,4 @@
+---
 # MVP Phase Execution Index
 
 **Status:** Canonical per-phase execution map  
@@ -69,6 +70,7 @@ None.
 
 ## Post-MVP Status Tracking
 
+- [x] Ontology graph reference linkage fix complete
 - [x] UI Experience Replatform complete
 - [x] Ontology Copilot OpenAI client migration complete
 - [x] Old UI adaptation for read-only ontology + process analytics complete
@@ -84,10 +86,11 @@ Current post-MVP execution state:
 
 - `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/ontology-graph-reference-linkage-fix.md` (archived on 2026-03-15 after replacing duplicate explorer reference-edge derivation with the shared traversal, restoring action/event links to object models, centralizing per-edge-type presentation in a shared utility, adding a legend-backed relationship encoding, and aligning automation-edge classification to Prophet `triggers`)
 - `completed`: `docs/exec-plans/completed/prophet-action-only-alignment.md` (archived on 2026-03-15 after aligning Seer to Prophet's action-only executable model, renaming public managed-agent contracts to `action_uri`, migrating lifecycle display to state-carrier field semantics, removing stale explorer/analytics taxonomy, ratifying canonical docs/specs, and recording the remaining internal `workflow_uri` storage column as explicit tech debt)
 - `completed`: `docs/exec-plans/completed/object-store-combined-rca-ocdfg-workspace.md` (archived on 2026-03-14 after replacing Object Store's embedded RCA/OC-DFG tabs with one combined workspace, adding anchor-only OC-DFG comparison support for RCA results, updating the relevant specs, and validating with backend Ruff/pytest plus targeted UI contract tests and `npm run build`)
 - `completed`: `docs/exec-plans/completed/remove-ocpn-and-inductive-miner.md` (archived on 2026-03-14 after removing the legacy OCPN/BPMN process-mining UI path, migrating the remaining frontend analytics overlay off `/process/mine`, deleting the unused route, and validating with targeted UI contract/build plus backend pytest/Ruff)
-- `completed`: `docs/exec-plans/completed/ocdfg-trace-workflow-scope-removal.md` (archived on 2026-03-14 after removing stale `traceId` / `workflowId` process-mining scope inputs from the inspector and analytics UI, tightening shared frontend contracts, and validating with targeted UI contract/build plus backend pytest/Ruff)
+- `completed`: `docs/exec-plans/completed/ocdfg-trace-workflow-scope-removal.md` (archived on 2026-03-14 after removing stale `traceId` / `workflowId` process-mining scope inputs from the inspector and analytics UI, tightening shared frontend contracts, and validating with targeted contract/build plus backend pytest/Ruff)
 - `completed`: `docs/exec-plans/completed/ocdfg-edge-query-null-lag-fix.md` (archived on 2026-03-14 after fixing ClickHouse `lagInFrame` default leakage that emitted synthetic empty-source OC-DFG edges and epoch-scale durations, adding regression coverage, and validating with targeted backend pytest/Ruff plus the OC-DFG UI contract test)
 - `completed`: `docs/exec-plans/completed/ocpn-pm4py-placeholder-removal.md` (archived on 2026-03-13 after removing the legacy OCPN pseudo-`pm4py` branch, making the deterministic `/process/mine` miner explicit, dropping the backend `pm4py` dependency, and validating with backend Ruff plus targeted process/AI tests)
 - `completed`: `docs/exec-plans/completed/ocdfg-clickhouse-native-replacement.md` (archived on 2026-03-13 after replacing backend `pm4py` OC-DFG discovery with ClickHouse-native mining over the existing history tables, preserving the OC-DFG API shape, adding metric-family counts on OC-DFG elements, and validating with targeted backend Ruff plus `cd seer-backend && uv run pytest tests/test_process_phase3.py`)
