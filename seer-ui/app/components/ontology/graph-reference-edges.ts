@@ -7,7 +7,7 @@ const EDGE_ITEM_TYPE = 'itemType';
 const EDGE_ACCEPTS_INPUT = 'acceptsInput';
 const EDGE_PRODUCES_OUTPUT = 'producesEvent';
 
-const ACTION_LABELS = new Set(['Action', 'Process', 'Workflow']);
+const ACTION_LABELS = new Set(['Action']);
 
 export function buildReferenceEdges(nodes: OntologyNode[], edges: OntologyEdge[]): OntologyEdge[] {
   const edgesByFrom = new Map<string, OntologyEdge[]>();

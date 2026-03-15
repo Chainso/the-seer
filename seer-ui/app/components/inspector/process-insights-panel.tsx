@@ -13,10 +13,10 @@ import { SearchableSelect } from "../ui/searchable-select";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { InspectorScopeFilters, type SharedWindowPreset } from "./inspector-scope-filters";
 import { RootCauseResultsSurface } from "./root-cause-results-surface";
+import { buildRuntimeOutcomeOptions } from "./ontology-runtime-semantics";
 
 import { cn } from "@/app/lib/utils";
 import { getOntologyGraph, queryOntologySelect } from "@/app/lib/api/ontology";
-import { buildReferenceEdges } from "@/app/components/ontology/graph-reference-edges";
 import {
   iriLocalName,
   type OntologyDisplayFieldKind,
@@ -75,7 +75,6 @@ interface FilterOperatorOption {
 
 type ReadableSearchParams = Pick<URLSearchParams, "get" | "getAll">;
 
-const EVENT_NODE_LABELS = new Set(["Event", "Signal", "Transition"]);
 const OUTCOME_SENTINEL = "__select_outcome__";
 const FILTER_FIELD_SENTINEL = "__select_filter_field__";
 const RCA_FILTER_PARAM = "rca_filter";
@@ -106,80 +105,7 @@ function buildOutcomeOptions(
   anchorModelUri: string,
   displayEventType: (eventType: string) => string
 ): OutcomeOption[] {
-  if (!graph || !anchorModelUri) {
-    return [];
-  }
-
-  const nodeByUri = new Map(graph.nodes.map((node) => [node.uri, node]));
-  const allEdges = [...graph.edges, ...buildReferenceEdges(graph.nodes, graph.edges)];
-  const candidateUris = new Set<string>();
-
-  const transitionUris = allEdges
-    .filter((edge) => edge.type === "transitionOf" && edge.toUri === anchorModelUri)
-    .map((edge) => edge.fromUri);
-
-  transitionUris.forEach((uri) => candidateUris.add(uri));
-
-  allEdges.forEach((edge) => {
-    if (edge.fromUri === anchorModelUri) {
-      const target = nodeByUri.get(edge.toUri);
-      if (target && EVENT_NODE_LABELS.has(target.label)) {
-        candidateUris.add(target.uri);
-      }
-    }
-    if (edge.toUri === anchorModelUri) {
-      const source = nodeByUri.get(edge.fromUri);
-      if (source && EVENT_NODE_LABELS.has(source.label)) {
-        candidateUris.add(source.uri);
-      }
-    }
-  });
-
-  allEdges.forEach((edge) => {
-    if (edge.type !== "referencesObjectModel" || edge.toUri !== anchorModelUri) {
-      return;
-    }
-    const source = nodeByUri.get(edge.fromUri);
-    if (source && EVENT_NODE_LABELS.has(source.label)) {
-      candidateUris.add(source.uri);
-    }
-  });
-
-  const transitionSet = new Set(transitionUris);
-  allEdges.forEach((edge) => {
-    if (transitionSet.has(edge.fromUri)) {
-      const target = nodeByUri.get(edge.toUri);
-      if (target && EVENT_NODE_LABELS.has(target.label)) {
-        candidateUris.add(target.uri);
-      }
-    }
-    if (transitionSet.has(edge.toUri)) {
-      const source = nodeByUri.get(edge.fromUri);
-      if (source && EVENT_NODE_LABELS.has(source.label)) {
-        candidateUris.add(source.uri);
-      }
-    }
-  });
-
-  const byValue = new Map<string, OutcomeOption>();
-  candidateUris.forEach((uri) => {
-    const node = nodeByUri.get(uri);
-    if (!node) {
-      return;
-    }
-    const value = uri;
-    if (!value || byValue.has(value)) {
-      return;
-    }
-    const source = node.label === "Transition" ? "Transition" : "Event";
-    byValue.set(value, {
-      value,
-      label: displayEventType(value),
-      source,
-    });
-  });
-
-  return Array.from(byValue.values()).sort((a, b) => a.label.localeCompare(b.label));
+  return buildRuntimeOutcomeOptions({ graph, anchorModelUri, displayEventType });
 }
 
 async function fetchAnchorPropertyKinds(

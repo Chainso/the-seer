@@ -8,13 +8,9 @@ import { GraphNodeCard } from '@/app/components/graph/graph-node-card';
  */
 const NODE_COLORS: Record<string, { bg: string; border: string }> = {
   ObjectModel: { bg: '--graph-node-object-bg', border: '--graph-node-object-border' },
-  State: { bg: '--graph-node-state-bg', border: '--graph-node-state-border' },
-  Process: { bg: '--graph-node-action-bg', border: '--graph-node-action-border' },
-  Workflow: { bg: '--graph-node-action-bg', border: '--graph-node-action-border' },
   Action: { bg: '--graph-node-action-bg', border: '--graph-node-action-border' },
   ActionInput: { bg: '--graph-node-action-input-bg', border: '--graph-node-action-input-border' },
-  Signal: { bg: '--graph-node-signal-bg', border: '--graph-node-signal-border' },
-  Transition: { bg: '--graph-node-transition-bg', border: '--graph-node-transition-border' },
+  Event: { bg: '--graph-node-signal-bg', border: '--graph-node-signal-border' },
   EventTrigger: { bg: '--graph-node-trigger-bg', border: '--graph-node-trigger-border' },
   ObjectInterface: { bg: '--graph-node-object-bg', border: '--graph-node-object-border' },
   Taxonomy: { bg: '--graph-node-taxonomy-bg', border: '--graph-node-taxonomy-border' },

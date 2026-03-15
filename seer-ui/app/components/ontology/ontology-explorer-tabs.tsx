@@ -23,7 +23,7 @@ interface OntologyExplorerTabsProps {
 }
 
 type ExplorerTab = 'overview' | 'objects' | 'actions' | 'events' | 'triggers';
-type RelationshipScope = 'structure' | 'lifecycle' | 'automation' | 'reference';
+type RelationshipScope = 'structure' | 'automation' | 'reference';
 type RelationshipFilters = Record<RelationshipScope, boolean>;
 
 const MAX_GRAPH_RENDER_NODES = 220;
@@ -31,7 +31,6 @@ const MAX_GRAPH_RENDER_EDGES = 520;
 
 const RELATIONSHIP_SCOPE_LABEL: Record<RelationshipScope, string> = {
   structure: 'Structure',
-  lifecycle: 'Lifecycle',
   automation: 'Automation',
   reference: 'Reference',
 };
@@ -39,32 +38,23 @@ const RELATIONSHIP_SCOPE_LABEL: Record<RelationshipScope, string> = {
 const TAB_CONFIG: Record<ExplorerTab, { title: string; labels: string[] }> = {
   overview: {
     title: 'Ecosystem',
-    labels: [
-      'ObjectModel',
-      'State',
-      'Action',
-      'Process',
-      'Workflow',
-      'Signal',
-      'Transition',
-      'EventTrigger',
-    ],
+    labels: ['ObjectModel', 'Action', 'Event', 'EventTrigger'],
   },
   objects: {
-    title: 'Object Lifecycles',
-    labels: ['ObjectModel', 'State', 'Transition'],
+    title: 'Object Models',
+    labels: ['ObjectModel', 'Action', 'Event'],
   },
   actions: {
     title: 'Action Contracts',
-    labels: ['Action', 'Process', 'Workflow', 'Signal', 'Transition'],
+    labels: ['Action', 'ObjectModel', 'Event', 'EventTrigger'],
   },
   events: {
     title: 'Event Semantics',
-    labels: ['Signal', 'Transition', 'EventTrigger'],
+    labels: ['Event', 'Action', 'ObjectModel', 'EventTrigger'],
   },
   triggers: {
     title: 'Trigger Network',
-    labels: ['EventTrigger', 'Signal', 'Transition', 'Action', 'Process', 'Workflow'],
+    labels: ['EventTrigger', 'Event', 'Action'],
   },
 };
 
@@ -89,16 +79,7 @@ function isStandardTypeNode(node: OntologyNode) {
 }
 
 function isAuthoringConceptNode(node: OntologyNode) {
-  return [
-    'ObjectModel',
-    'State',
-    'Transition',
-    'Action',
-    'Process',
-    'Workflow',
-    'Signal',
-    'EventTrigger',
-  ].includes(node.label);
+  return ['ObjectModel', 'Action', 'Event', 'EventTrigger'].includes(node.label);
 }
 
 function relatedEdges(edges: OntologyEdge[], nodeUri: string) {
@@ -108,11 +89,6 @@ function relatedEdges(edges: OntologyEdge[], nodeUri: string) {
 }
 
 function relationshipScopeForEdge(edgeType: string): RelationshipScope {
-  if (
-    ['hasPossibleState', 'initialState', 'transitionOf', 'fromState', 'toState', 'isStateOf'].includes(edgeType)
-  ) {
-    return 'lifecycle';
-  }
   if (['listensTo', 'invokes', 'eventTrigger', 'producesEvent'].includes(edgeType)) {
     return 'automation';
   }
@@ -210,8 +186,7 @@ function buildVisibleEdges(graphData: OntologyGraph, nodeUris: Set<string>): Ont
   const directEdges = graphData.edges
     .filter(
     (edge) => nodeUris.has(edge.fromUri) && nodeUris.has(edge.toUri)
-    )
-    .map(normalizeViewerEdgeDirection);
+    );
   const derivedReferences = deriveAuthoringReferenceEdges(graphData, nodeUris);
   const merged = [...directEdges, ...derivedReferences];
   const deduped = new Map<string, OntologyEdge>();
@@ -296,7 +271,7 @@ function deriveAuthoringReferenceEdges(graphData: OntologyGraph, nodeUris: Set<s
     }
 
     const propertyContainerUris = new Set<string>([sourceUri]);
-    if (['Action', 'Process', 'Workflow'].includes(sourceNode.label)) {
+    if (sourceNode.label === 'Action') {
       next(sourceUri, 'acceptsInput').forEach((inputUri) => propertyContainerUris.add(inputUri));
     }
 
@@ -319,17 +294,6 @@ function deriveAuthoringReferenceEdges(graphData: OntologyGraph, nodeUris: Set<s
   }
 
   return Array.from(derived.values());
-}
-
-function normalizeViewerEdgeDirection(edge: OntologyEdge): OntologyEdge {
-  if (edge.type === 'fromState') {
-    return {
-      fromUri: edge.toUri,
-      toUri: edge.fromUri,
-      type: edge.type,
-    };
-  }
-  return edge;
 }
 
 function limitGraphForPerformance(
@@ -419,7 +383,6 @@ export function OntologyExplorerTabs({
   const [selectedUri, setSelectedUri] = useState<string | null>(null);
   const [relationshipFilters, setRelationshipFilters] = useState<RelationshipFilters>({
     structure: true,
-    lifecycle: true,
     automation: true,
     reference: true,
   });
@@ -436,7 +399,6 @@ export function OntologyExplorerTabs({
     setFocusNeighborhoodOnly(initialFocusNeighborhoodOnly);
     setRelationshipFilters({
       structure: true,
-      lifecycle: true,
       automation: true,
       reference: true,
     });
@@ -463,9 +425,7 @@ export function OntologyExplorerTabs({
     [graphData.nodes]
   );
   const displayNameForNode = useMemo(
-    () =>
-      (node: OntologyNode) =>
-        ontologyDisplayResolver.displayNode(node, { lifecycleLabelMode: 'explicit' }),
+    () => (node: OntologyNode) => ontologyDisplayResolver.displayNode(node),
     [ontologyDisplayResolver]
   );
   const displayNameForUri = useMemo(
@@ -475,7 +435,7 @@ export function OntologyExplorerTabs({
         if (node) {
           return displayNameForNode(node);
         }
-        return ontologyDisplayResolver.displayConcept(uri, { lifecycleLabelMode: 'explicit' });
+        return ontologyDisplayResolver.displayConcept(uri);
       },
     [displayNameForNode, nodeByUri, ontologyDisplayResolver]
   );
@@ -501,7 +461,6 @@ export function OntologyExplorerTabs({
   const relationshipScopeCounts = useMemo(() => {
     const counts: Record<RelationshipScope, number> = {
       structure: 0,
-      lifecycle: 0,
       automation: 0,
       reference: 0,
     };
@@ -809,7 +768,7 @@ export function OntologyExplorerTabs({
                     <div className="mt-4 rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
                       <div className="flex items-center gap-2">
                         <ArrowRightLeft className="h-3.5 w-3.5" />
-                        <span>Inspect concept relationships, schema fields, and lifecycle connections across the ontology.</span>
+                        <span>Inspect concept relationships, schema fields, and automation links across the ontology.</span>
                       </div>
                     </div>
                   </Card>

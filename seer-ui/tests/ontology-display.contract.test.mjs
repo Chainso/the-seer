@@ -274,15 +274,19 @@ test("catalog omits legacy alias rewrite tables", () => {
   assert.doesNotMatch(catalogSource, /FIELD_ALIAS_REWRITES/);
 });
 
-test("explorer opts into explicit lifecycle naming in catalog, inspector, and graph map", () => {
+test("explorer taxonomy stays on live Prophet concepts without lifecycle relabeling", () => {
   const explorerSource = read("app/components/ontology/ontology-explorer-tabs.tsx");
   const graphSource = read("app/components/ontology/ontology-graph.tsx");
 
-  assert.match(explorerSource, /displayNode\(\s*node,\s*\{\s*lifecycleLabelMode:\s*'explicit'\s*\}\s*\)/);
-  assert.match(explorerSource, /displayConcept\(\s*uri,\s*\{\s*lifecycleLabelMode:\s*'explicit'\s*\}\s*\)/);
+  assert.match(explorerSource, /labels:\s*\['ObjectModel', 'Action', 'Event', 'EventTrigger'\]/);
+  assert.match(explorerSource, /const RELATIONSHIP_SCOPE_LABEL: Record<RelationshipScope, string> = \{\s*structure:/);
+  assert.doesNotMatch(explorerSource, /lifecycleLabelMode:\s*['"]explicit['"]/);
+  assert.doesNotMatch(explorerSource, /\bState\b|\bProcess\b|\bWorkflow\b|\bSignal\b|\bTransition\b/);
   assert.match(explorerSource, /displayNodeName=\{displayNameForNode\}/);
+  assert.match(graphSource, /'ObjectModel',\s*'Action',\s*'Event',\s*'EventTrigger'/);
   assert.match(graphSource, /displayNodeName\?:\s*\(node:\s*OntologyGraphNode\)\s*=>\s*string/);
   assert.match(graphSource, /displayNodeName\?\.\(node\)/);
+  assert.doesNotMatch(graphSource, /\bProcess\b|\bWorkflow\b|\bSignal\b|\bTransition\b/);
 });
 
 test("ontology page host and assistant canvas host share the explorer display surface", () => {

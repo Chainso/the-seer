@@ -31,8 +31,8 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - [x] 2026-03-15 Phase 2 complete: managed-agent APIs/UI use action-first terminology and `action_uri`, while `seer:AgenticWorkflow` remains a subtype of `prophet:Action`.
 - [x] 2026-03-15 Phase 3 backend/shared-display slice complete: ontology graph nodes now project state-carrier metadata from Prophet field annotations and the shared ontology-display catalog/resolver consume that metadata for state labels and filters.
 - [x] 2026-03-15 Phase 3 consumer/history slice complete: Object Store and history consumers now derive lifecycle badges from adjacent state-carrier snapshots and no longer parse explicit `fromState` / `toState` payload keys.
-- [ ] Phase 3 complete: ontology graph, shared display helpers, Object Store, and lifecycle rendering use state-carrier metadata instead of explicit state/transition resources.
-- [ ] Phase 4 complete: ontology explorer and analytics/RCA surfaces drop obsolete Prophet taxonomy and operate on `Action`, `Event`, `EventTrigger`, and state-carrier semantics only.
+- [x] 2026-03-15 Phase 3 complete: controller merged-branch validation passed for the backend/shared-display and consumer/history slices, closing the state-carrier lifecycle migration.
+- [x] 2026-03-15 Phase 4 complete: ontology explorer and analytics/RCA surfaces now use live `Action`, `Event`, and `EventTrigger` concepts, while dead read-only ontology editor and analytics affordances were deleted instead of migrated.
 - [ ] Phase 5 complete: canonical docs/specs are ratified, full validation evidence is recorded, and the plan is ready to archive.
 
 ## Surprises & Discoveries
@@ -55,6 +55,8 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15: Phase 3 backend work could not rely on explicit enum member nodes in generated Turtle. Prophet emits state options only through `sh:in (...)` on the enum constraint shape, while `prophet:initialEnumValue` points at an `enumv_*` IRI with no separate label triples, so the backend graph had to derive initial literal values by matching the enum-value IRI suffix back to the SHACL option list.
 - 2026-03-15: The shared resolver still short-circuited every state-like field label to `"State"` before checking ontology labels. Once the state carrier field became `status`, Phase 3 had to change `displayFieldLabel` to consult ontology field labels first so state-carrier fields keep their real labels.
 - 2026-03-15: The canonical object-history contract exposes only the event-linked object snapshot, not an explicit previous snapshot or `fromState` / `toState` payload fields, so the consumer lane had to derive lifecycle badges by diffing adjacent snapshots in timeline order on the shared `stateFilterFieldKey`.
+- 2026-03-15: The old read-only ontology editor and standalone ontology analytics panel were completely unmounted from the live app. Phase 4 could therefore delete those files outright instead of preserving mutation-era scaffolding that only referenced removed Prophet concepts.
+- 2026-03-15: RCA setup, Object Store insights, and process mining all needed the same event-to-model traversal after `Signal` / `Transition` removal, so Phase 4 introduced one shared frontend runtime helper instead of leaving three slightly divergent copies of the old logic.
 
 ## Decision Log
 
@@ -67,6 +69,8 @@ After this work lands, a contributor should be able to ingest current Prophet Tu
 - 2026-03-15, Codex: Phase 2 keeps the ClickHouse transcript table column name `workflow_uri` unchanged while remapping every managed-agent service/API/UI field to `action_uri`. Rationale: the storage column is an internal persistence detail, and avoiding a schema migration keeps the phase scoped to public contract correction instead of storage churn.
 - 2026-03-15, Codex: Phase 3 is safe to split into two implementation lanes as long as the backend/shared-display lane lands first and the consumer/UI lane only reads the new metadata. Rationale: the backend graph plus shared resolver files are largely disjoint from the inspector history consumers, and sequencing the metadata producer first reduces merge risk while keeping the plan truthful about the phase still being open.
 - 2026-03-15, Codex: The history/Object Store consumer lane should use adjacent object snapshots as the lifecycle diff source and treat explicit transition payload fields as removed legacy behavior. Rationale: this matches the real history API contract and keeps the UI aligned to Prophet's state-carrier model instead of reconstructing obsolete transition resources.
+- 2026-03-15, Codex: Phase 4 should delete dead read-only ontology editor and ontology analytics files rather than porting them to the new model. Rationale: those surfaces were unmounted, mutations are already unsupported, and keeping them would preserve removed Prophet taxonomy as misleading dead code.
+- 2026-03-15, Codex: Explorer and analytics runtime discovery should share one `ontology-runtime-semantics` helper that is `Event`-only. Rationale: one event-only traversal path keeps RCA, Object Store insights, and process mining aligned to Prophet's current model and reduces the chance of stale `Signal` / `Transition` logic reappearing in one panel.
 
 ## Outcomes & Retrospective
 
@@ -105,6 +109,25 @@ Phase 3 backend/shared-display validation evidence:
 Phase 3 consumer/history validation evidence:
 1. `cd /workspaces/seer-python/seer-ui && node --test tests/history.contract.test.mjs` passed with `1 pass, 0 fail`.
 2. `cd /workspaces/seer-python/seer-ui && npm run build` passed and produced a successful Next.js production build.
+
+2026-03-15 Phase 3 is now fully closed at the controller gate after the backend/shared-display and consumer/history commits were merged together. The controller reran the combined validation set on the merged branch, which confirmed the full state-carrier lifecycle migration rather than only the individual worker slices.
+
+Phase 3 controller validation evidence:
+1. `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ontology_phase1.py` passed with `28 passed in 20.07s`.
+2. `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests/test_ontology_phase1.py` passed with `All checks passed!`.
+3. `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` passed with `11 pass, 0 fail`.
+4. `cd /workspaces/seer-python/seer-ui && node --test tests/history.contract.test.mjs` passed with `1 pass, 0 fail`.
+5. `cd /workspaces/seer-python/seer-ui && npm run build` passed with a successful Next.js production build.
+
+2026-03-15 Phase 4 closed with the live ontology explorer and analytics setup surfaces fully aligned to Prophet's current taxonomy. Explorer tabs and graph rendering now present only `ObjectModel`, `Action`, `Event`, and `EventTrigger` as live categories, analytics outcome discovery is `Event`-only through a shared runtime semantics helper, and dead read-only ontology editor / standalone ontology analytics files were deleted instead of migrated.
+
+Phase 4 also simplified the read-only ontology boundary in the frontend. `app/types/ontology.ts` now carries only the graph/query contracts the live app still uses, `app/lib/api/ontology.ts` no longer exposes dead mutation stubs, and `app/lib/ontology-helpers.ts` keeps only the property-definition mapping used by the shared ontology display catalog.
+
+Phase 4 validation evidence:
+1. `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` passed with `11 pass, 0 fail`.
+2. `cd /workspaces/seer-python/seer-ui && node tests/insights.contract.test.mjs` passed with `5 pass, 0 fail`.
+3. `cd /workspaces/seer-python/seer-ui && node tests/process-mining.contract.test.mjs` passed with `1 pass, 0 fail`.
+4. `cd /workspaces/seer-python/seer-ui && npm run build` passed with a successful Next.js production build.
 
 ## Context and Orientation
 
@@ -445,14 +468,20 @@ Move ontology display and lifecycle interpretation to the state-carrier field mo
 - Known Constraints / Baseline Failures:
   1. Prophet generated Turtle currently exposes `prophet:isStateField` and `prophet:initialEnumValue`, but not explicit enum member resources in the examples; fallback label logic may be required.
   2. Do not recreate fake `State` or `Transition` nodes for compatibility.
-- Status: in_progress
+- Status: complete
 - Completion Notes:
   1. Backend/shared-display producer work is complete. `seer_backend.ontology.service` now derives state-carrier metadata from `prophet:isStateField`, `prophet:initialEnumValue`, and enum constraint `sh:in` lists, and the shared catalog/resolver consume that metadata for object-model state filters and value display.
   2. Consumer/history work is complete. `seer-ui/app/components/inspector/use-object-history-display-data.ts` now derives lifecycle badges from adjacent state-carrier snapshot deltas, and `seer-ui/tests/history.contract.test.mjs` guards against reintroducing explicit `fromState` / `toState` payload parsing.
   3. Validation passed for the consumer lane:
      - `cd /workspaces/seer-python/seer-ui && node --test tests/history.contract.test.mjs` -> `1 pass, 0 fail`
      - `cd /workspaces/seer-python/seer-ui && npm run build` -> successful Next.js production build
-- Next Starter Context: Phase 3 should now be closed by the controller after integrating the backend/shared-display commit with this consumer/history commit and re-running controller validation. Phase 4 can then start from the new shared `stateFilterFieldKey`, `stateFilterOptions`, and `initialStateValue` metadata without reintroducing explicit ontology state or transition concepts.
+  4. Controller merged-branch validation also passed:
+     - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ontology_phase1.py` -> `28 passed in 20.07s`
+     - `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src tests/test_ontology_phase1.py` -> `All checks passed!`
+     - `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` -> `11 pass, 0 fail`
+     - `cd /workspaces/seer-python/seer-ui && node --test tests/history.contract.test.mjs` -> `1 pass, 0 fail`
+     - `cd /workspaces/seer-python/seer-ui && npm run build` -> successful Next.js production build
+- Next Starter Context: Historical only. Phase 4 started from the new shared `stateFilterFieldKey`, `stateFilterOptions`, and `initialStateValue` metadata without reintroducing explicit ontology state or transition concepts.
 
 ## Phase 4
 
@@ -495,9 +524,18 @@ Remove obsolete Prophet taxonomy from explorer and analytics surfaces.
 - Known Constraints / Baseline Failures:
   1. Some read-only ontology editor affordances are already dead code because mutations throw read-only errors; prefer deletion to migration.
   2. If a conformance visualization cannot be rebuilt cleanly, record the dropped behavior explicitly rather than preserving fake transition concepts.
-- Status: pending
-- Completion Notes: none yet
-- Next Starter Context: Start by shrinking the explorer taxonomy, then update analytics option derivation and conformance helpers to match the new graph model.
+- Status: complete
+- Completion Notes:
+  1. The live explorer taxonomy was reduced to `ObjectModel`, `Action`, `Event`, and `EventTrigger`. Relationship scopes now distinguish only structure, automation, and references; no explorer tab or graph legend presents `State`, `Process`, `Workflow`, `Signal`, or `Transition` as current truth.
+  2. RCA setup, Object Store insights, and process mining now share `app/components/inspector/ontology-runtime-semantics.ts` for event-only outcome discovery and depth-scoped object-model traversal.
+  3. Dead read-only ontology editor files, the standalone ontology analytics panel/graph, and the unused `app/lib/api/analytics.ts` / `app/types/analytics.ts` contracts were deleted instead of migrated.
+  4. The frontend read-only ontology boundary was simplified by removing dead mutation/request contracts from `app/types/ontology.ts`, trimming `app/lib/ontology-helpers.ts` to property-definition mapping only, and dropping mutation stubs from `app/lib/api/ontology.ts`.
+  5. Validation passed:
+     - `cd /workspaces/seer-python/seer-ui && node tests/ontology-display.contract.test.mjs` -> `11 pass, 0 fail`
+     - `cd /workspaces/seer-python/seer-ui && node tests/insights.contract.test.mjs` -> `5 pass, 0 fail`
+     - `cd /workspaces/seer-python/seer-ui && node tests/process-mining.contract.test.mjs` -> `1 pass, 0 fail`
+     - `cd /workspaces/seer-python/seer-ui && npm run build` -> successful Next.js production build
+- Next Starter Context: Phase 5 can now ratify the canonical docs and capture final broad validation. Keep the event-only runtime helper as the shared source of truth for analytics traversal, and do not recreate deleted read-only ontology editor or standalone analytics scaffolding.
 
 ## Phase 5
 

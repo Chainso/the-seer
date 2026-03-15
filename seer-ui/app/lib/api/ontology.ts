@@ -10,17 +10,6 @@ import type {
   OntologyGraph,
   OntologyNode,
   OntologyEdge,
-  CreateObjectModelRequest,
-  CreateActionRequest,
-  CreateSignalRequest,
-  CreateStateRequest,
-  CreateTransitionRequest,
-  CreateEventTriggerRequest,
-  CreateLocalOntologyRequest,
-  CreateCustomTypeRequest,
-  CreateStructTypeRequest,
-  CreateListTypeRequest,
-  UpdateConceptRequest,
   NodeLabel,
 } from '@/app/types/ontology';
 import { fetchApi } from './client';
@@ -74,12 +63,7 @@ const USER_CONCEPT_PREFIX_EXCLUSIONS = [
 
 const CATEGORY_TO_NODE_LABEL: Record<string, NodeLabel> = {
   ObjectModel: 'ObjectModel',
-  State: 'State',
   Action: 'Action',
-  Process: 'Process',
-  Workflow: 'Workflow',
-  Signal: 'Signal',
-  Transition: 'Transition',
   Event: 'Event',
   ActionInput: 'ActionInput',
   EventTrigger: 'EventTrigger',
@@ -331,12 +315,6 @@ async function composeOntologyGraph(): Promise<OntologyGraph> {
   };
 }
 
-function throwReadOnlyMutationError(functionName: string): never {
-  throw new Error(
-    `Ontology mutation API '${functionName}' is disabled: ontology integrations are read-only via canonical /api/v1 contracts.`
-  );
-}
-
 // ===== Graph Queries =====
 
 /**
@@ -372,203 +350,4 @@ export async function getNodesByLabel(label: NodeLabel | NodeLabel[]): Promise<O
     console.debug('[ontology] nodes by label', { labels, count: filtered.length });
   }
   return filtered;
-}
-
-// ===== Mutation APIs (Unsupported in read-only mode) =====
-
-export async function createObjectModel(
-  data: CreateObjectModelRequest
-): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createObjectModel');
-}
-
-export async function updateObjectModel(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateObjectModel');
-}
-
-export async function updateObjectModelDefinition(
-  uri: string,
-  data: CreateObjectModelRequest
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateObjectModelDefinition');
-}
-
-export async function createAction(data: CreateActionRequest): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createAction');
-}
-
-export async function updateAction(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateAction');
-}
-
-export async function updateActionDefinition(
-  uri: string,
-  data: CreateActionRequest
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateActionDefinition');
-}
-
-export async function createSignal(data: CreateSignalRequest): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createSignal');
-}
-
-export async function updateSignal(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateSignal');
-}
-
-export async function updateSignalDefinition(
-  uri: string,
-  data: CreateSignalRequest
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateSignalDefinition');
-}
-
-export async function createState(data: CreateStateRequest): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createState');
-}
-
-export async function updateState(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateState');
-}
-
-export async function createTransition(data: CreateTransitionRequest): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createTransition');
-}
-
-export async function updateTransition(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateTransition');
-}
-
-export async function updateTransitionDefinition(
-  uri: string,
-  data: CreateTransitionRequest
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateTransitionDefinition');
-}
-
-export async function createEventTrigger(
-  data: CreateEventTriggerRequest
-): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createEventTrigger');
-}
-
-export async function updateEventTrigger(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateEventTrigger');
-}
-
-export async function updateEventTriggerDefinition(
-  uri: string,
-  data: CreateEventTriggerRequest
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateEventTriggerDefinition');
-}
-
-export async function createLocalOntology(
-  data: CreateLocalOntologyRequest
-): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createLocalOntology');
-}
-
-export async function updateLocalOntology(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateLocalOntology');
-}
-
-export async function createCustomType(
-  data: CreateCustomTypeRequest
-): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createCustomType');
-}
-
-export async function createStructType(
-  data: CreateStructTypeRequest
-): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createStructType');
-}
-
-export async function createListType(
-  data: CreateListTypeRequest
-): Promise<OntologyNode> {
-  void data;
-  return throwReadOnlyMutationError('createListType');
-}
-
-export async function updateCustomType(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateCustomType');
-}
-
-export async function updateStructType(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateStructType');
-}
-
-export async function updateListType(
-  uri: string,
-  data: Omit<UpdateConceptRequest, 'uri'>
-): Promise<OntologyNode> {
-  void uri;
-  void data;
-  return throwReadOnlyMutationError('updateListType');
 }

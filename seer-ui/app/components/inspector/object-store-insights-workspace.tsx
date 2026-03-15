@@ -12,8 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table } from "../ui/table";
 import type { SharedWindowPreset } from "./inspector-scope-filters";
 import { OcdfgGraph as OcdfgGraphView } from "./ocdfg-graph";
+import {
+  buildRuntimeOutcomeOptions,
+  resolveRuntimeDepthScopedModels,
+} from "./ontology-runtime-semantics";
 
-import { buildReferenceEdges } from "@/app/components/ontology/graph-reference-edges";
 import { useOntologyGraphContext } from "@/app/components/providers/ontology-graph-provider";
 import { getOcdfgGraph } from "@/app/lib/api/process-mining";
 import { runRootCause } from "@/app/lib/api/root-cause";
@@ -27,8 +30,6 @@ import type {
   RootCauseRunResponseContract,
 } from "@/app/types/root-cause";
 
-const EVENT_NODE_LABELS = new Set(["Event", "Signal", "Transition"]);
-const ACTION_NODE_LABELS = new Set(["Action", "Process", "Workflow"]);
 const DEPTH_OPTIONS = ["1", "2", "3"];
 const OUTCOME_SENTINEL = "__select_outcome__";
 
@@ -84,75 +85,7 @@ function buildOutcomeOptions(
   anchorModelUri: string,
   displayEventType: (eventType: string) => string
 ): Array<{ value: string; label: string; source: string }> {
-  if (!graph || !anchorModelUri) {
-    return [];
-  }
-
-  const nodeByUri = new Map(graph.nodes.map((node) => [node.uri, node]));
-  const allEdges = [...graph.edges, ...buildReferenceEdges(graph.nodes, graph.edges)];
-  const candidateUris = new Set<string>();
-
-  const transitionUris = allEdges
-    .filter((edge) => edge.type === "transitionOf" && edge.toUri === anchorModelUri)
-    .map((edge) => edge.fromUri);
-
-  transitionUris.forEach((uri) => candidateUris.add(uri));
-
-  allEdges.forEach((edge) => {
-    if (edge.fromUri === anchorModelUri) {
-      const target = nodeByUri.get(edge.toUri);
-      if (target && EVENT_NODE_LABELS.has(target.label)) {
-        candidateUris.add(target.uri);
-      }
-    }
-    if (edge.toUri === anchorModelUri) {
-      const source = nodeByUri.get(edge.fromUri);
-      if (source && EVENT_NODE_LABELS.has(source.label)) {
-        candidateUris.add(source.uri);
-      }
-    }
-  });
-
-  allEdges.forEach((edge) => {
-    if (edge.type !== "referencesObjectModel" || edge.toUri !== anchorModelUri) {
-      return;
-    }
-    const source = nodeByUri.get(edge.fromUri);
-    if (source && EVENT_NODE_LABELS.has(source.label)) {
-      candidateUris.add(source.uri);
-    }
-  });
-
-  const transitionSet = new Set(transitionUris);
-  allEdges.forEach((edge) => {
-    if (transitionSet.has(edge.fromUri)) {
-      const target = nodeByUri.get(edge.toUri);
-      if (target && EVENT_NODE_LABELS.has(target.label)) {
-        candidateUris.add(target.uri);
-      }
-    }
-    if (transitionSet.has(edge.toUri)) {
-      const source = nodeByUri.get(edge.fromUri);
-      if (source && EVENT_NODE_LABELS.has(source.label)) {
-        candidateUris.add(source.uri);
-      }
-    }
-  });
-
-  const byValue = new Map<string, { value: string; label: string; source: string }>();
-  candidateUris.forEach((uri) => {
-    const node = nodeByUri.get(uri);
-    if (!node || byValue.has(uri)) {
-      return;
-    }
-    byValue.set(uri, {
-      value: uri,
-      label: displayEventType(uri),
-      source: node.label === "Transition" ? "Transition" : "Event",
-    });
-  });
-
-  return Array.from(byValue.values()).sort((a, b) => a.label.localeCompare(b.label));
+  return buildRuntimeOutcomeOptions({ graph, anchorModelUri, displayEventType });
 }
 
 function resolveDepthScopedModels(options: {
@@ -161,128 +94,7 @@ function resolveDepthScopedModels(options: {
   graph: OntologyGraph | null;
   knownModelUris: Set<string>;
 }): string[] {
-  const { anchorModelUri, depth, graph, knownModelUris } = options;
-  if (!anchorModelUri) {
-    return [];
-  }
-  if (!graph || depth <= 1) {
-    return [anchorModelUri];
-  }
-
-  const nodeByUri = new Map(graph.nodes.map((node) => [node.uri, node]));
-  const allEdges = [...graph.edges, ...buildReferenceEdges(graph.nodes, graph.edges)];
-  const eventToModels = new Map<string, Set<string>>();
-  const actionToModels = new Map<string, Set<string>>();
-  const actionToProducedEvents = new Map<string, Set<string>>();
-
-  const addEventModelLink = (eventUri: string, modelUri: string) => {
-    const eventNode = nodeByUri.get(eventUri);
-    if (!eventNode || !EVENT_NODE_LABELS.has(eventNode.label) || !knownModelUris.has(modelUri)) {
-      return;
-    }
-    const scoped = eventToModels.get(eventUri);
-    if (scoped) {
-      scoped.add(modelUri);
-      return;
-    }
-    eventToModels.set(eventUri, new Set([modelUri]));
-  };
-
-  allEdges.forEach((edge) => {
-    if (edge.type === "transitionOf") {
-      addEventModelLink(edge.fromUri, edge.toUri);
-      return;
-    }
-    if (edge.type === "referencesObjectModel") {
-      const sourceNode = nodeByUri.get(edge.fromUri);
-      if (!sourceNode) {
-        return;
-      }
-      if (EVENT_NODE_LABELS.has(sourceNode.label)) {
-        addEventModelLink(edge.fromUri, edge.toUri);
-      }
-      if (ACTION_NODE_LABELS.has(sourceNode.label) && knownModelUris.has(edge.toUri)) {
-        const models = actionToModels.get(edge.fromUri);
-        if (models) {
-          models.add(edge.toUri);
-        } else {
-          actionToModels.set(edge.fromUri, new Set([edge.toUri]));
-        }
-      }
-      return;
-    }
-    if (edge.type === "producesEvent") {
-      const sourceNode = nodeByUri.get(edge.fromUri);
-      const targetNode = nodeByUri.get(edge.toUri);
-      if (
-        !sourceNode ||
-        !targetNode ||
-        !ACTION_NODE_LABELS.has(sourceNode.label) ||
-        !EVENT_NODE_LABELS.has(targetNode.label)
-      ) {
-        return;
-      }
-      const produced = actionToProducedEvents.get(edge.fromUri);
-      if (produced) {
-        produced.add(edge.toUri);
-      } else {
-        actionToProducedEvents.set(edge.fromUri, new Set([edge.toUri]));
-      }
-    }
-  });
-
-  actionToModels.forEach((modelUris, actionUri) => {
-    const producedEvents = actionToProducedEvents.get(actionUri);
-    if (!producedEvents || producedEvents.size === 0) {
-      return;
-    }
-    producedEvents.forEach((eventUri) => {
-      modelUris.forEach((modelUri) => {
-        addEventModelLink(eventUri, modelUri);
-      });
-    });
-  });
-
-  const adjacency = new Map<string, Set<string>>();
-  eventToModels.forEach((models) => {
-    const scopedModels = [...models];
-    scopedModels.forEach((sourceModel) => {
-      const neighbors = adjacency.get(sourceModel);
-      const bucket = neighbors ?? new Set<string>();
-      scopedModels.forEach((targetModel) => {
-        if (targetModel !== sourceModel) {
-          bucket.add(targetModel);
-        }
-      });
-      if (!neighbors) {
-        adjacency.set(sourceModel, bucket);
-      }
-    });
-  });
-
-  const included = new Set<string>([anchorModelUri]);
-  let frontier = new Set<string>([anchorModelUri]);
-
-  for (let layer = 2; layer <= depth; layer += 1) {
-    const nextFrontier = new Set<string>();
-    frontier.forEach((model) => {
-      adjacency.get(model)?.forEach((neighbor) => {
-        if (!included.has(neighbor)) {
-          included.add(neighbor);
-          nextFrontier.add(neighbor);
-        }
-      });
-    });
-    if (nextFrontier.size === 0) {
-      break;
-    }
-    frontier = nextFrontier;
-  }
-
-  const extras = [...included]
-    .filter((uri) => uri !== anchorModelUri)
-    .sort((a, b) => a.localeCompare(b));
-  return [anchorModelUri, ...extras];
+  return resolveRuntimeDepthScopedModels(options);
 }
 
 function toPercent(value: number): string {

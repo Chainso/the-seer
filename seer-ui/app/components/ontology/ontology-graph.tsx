@@ -107,19 +107,19 @@ async function layoutNodes(
   const edgeColors = {
     default: 'var(--graph-edge-default)',
     reference: 'var(--graph-edge-reference)',
-    transition: 'var(--graph-edge-transition)',
+    automation: 'var(--graph-edge-transition)',
     labelDefault: 'var(--graph-edge-label-default)',
     labelReference: 'var(--graph-edge-label-reference)',
-    labelTransition: 'var(--graph-edge-label-transition)',
+    labelAutomation: 'var(--graph-edge-label-transition)',
     labelBg: 'var(--graph-edge-label-bg)',
     labelBorder: 'var(--graph-edge-label-border)',
   };
 
   const defaultAllowedLabels = [
     'ObjectModel',
-    'Action', 'Process', 'Workflow',
-    'Signal',
-    'Transition',
+    'Action',
+    'Event',
+    'EventTrigger',
   ];
   const allowedLabels = new Set(allowedLabelsOverride ?? defaultAllowedLabels);
 
@@ -151,18 +151,16 @@ async function layoutNodes(
 
   const edges: Edge<ElkEdgeData>[] = visibleEdges.map((edge, index) => {
     const isReference = edge.type === 'referencesObjectModel';
-    const isInitialEdge = edge.type === 'initialState';
-    const isTransitionEdge = ['hasPossibleState', 'fromState', 'toState', 'transitionOf', 'transition'].includes(edge.type);
-    const isTriggerEdge = edge.type === 'eventTrigger';
-    const strokeColor = isInitialEdge || isReference || isTriggerEdge
+    const isAutomationEdge = ['eventTrigger', 'listensTo', 'invokes', 'producesEvent'].includes(edge.type);
+    const strokeColor = isReference
       ? edgeColors.reference
-      : isTransitionEdge
-      ? edgeColors.transition
+      : isAutomationEdge
+      ? edgeColors.automation
       : edgeColors.default;
-    const labelColor = isInitialEdge || isReference
+    const labelColor = isReference
       ? edgeColors.labelReference
-      : isTransitionEdge
-      ? edgeColors.labelTransition
+      : isAutomationEdge
+      ? edgeColors.labelAutomation
       : edgeColors.labelDefault;
     return {
       id: `${edge.fromUri}-${edge.toUri}-${index}`,
@@ -175,13 +173,13 @@ async function layoutNodes(
       },
       style: {
         stroke: strokeColor,
-        strokeDasharray: isReference ? '6 4' : isTransitionEdge ? '2 3' : isTriggerEdge ? '1 4' : undefined,
-        strokeWidth: isInitialEdge || isReference ? 1.6 : isTransitionEdge ? 1.4 : isTriggerEdge ? 1.4 : 1.2,
+        strokeDasharray: isReference ? '6 4' : isAutomationEdge ? '1 4' : undefined,
+        strokeWidth: isReference ? 1.6 : isAutomationEdge ? 1.4 : 1.2,
       },
       labelStyle: {
         fontSize: 10,
         fill: labelColor,
-        fontWeight: isInitialEdge || isReference || isTransitionEdge ? 600 : 400,
+        fontWeight: isReference || isAutomationEdge ? 600 : 400,
       },
       labelBgStyle: {
         fill: edgeColors.labelBg,
