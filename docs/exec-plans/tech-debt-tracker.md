@@ -51,9 +51,9 @@ Track known debt explicitly and prioritize cleanup without losing product moment
 1. ID: `TD-2026-03-15-004`
 2. Date Added: `2026-03-15`
 3. Area: `Managed-agent transcript persistence`
-4. Description: The public/runtime contract now uses `action_uri`, but the internal ClickHouse transcript storage schema and repository adapter still use the historical column name `workflow_uri`.
-5. Impact: Product/API terminology is correct, but broad stale-concept grep still surfaces the storage column and repository mapping as an intentional residual.
+4. Description: The public/runtime contract now uses `action_uri`, and the internal ClickHouse transcript storage schema/repository were renamed from the historical `workflow_uri` column.
+5. Impact: Transcript persistence now matches the public/runtime terminology and no longer needs a storage-name exception in current-state docs.
 6. Owner: `AGENT-ACTION-MODEL-1`
-7. Proposed Fix: Run a focused persistence cleanup to rename the transcript column and repository SQL wiring to `action_uri`, including the required migration/backfill strategy for existing environments.
-8. Target Window: `Next managed-agent persistence hardening cycle`
-9. Status: `open`
+7. Proposed Fix: Completed on 2026-03-15 by updating the repository mapping, fresh-schema migration, and follow-on ClickHouse rename migration to `action_uri`.
+8. Target Window: `Completed 2026-03-15`
+9. Status: `closed (2026-03-15)`

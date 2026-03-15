@@ -3,7 +3,7 @@ ALTER TABLE event_history
 
 CREATE TABLE IF NOT EXISTS agentic_workflow_completion_messages (
     execution_id UUID,
-    workflow_uri String,
+    action_uri String,
     attempt_no UInt32,
     sequence_no UInt64,
     message_role String,

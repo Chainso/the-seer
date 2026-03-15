@@ -20,7 +20,7 @@ from seer_backend.clickhouse.errors import ClickHouseClientError
 _TRANSCRIPT_MESSAGES = table(
     "agentic_workflow_completion_messages",
     column("execution_id"),
-    column("workflow_uri"),
+    column("action_uri"),
     column("attempt_no"),
     column("sequence_no"),
     column("message_role"),
@@ -112,7 +112,7 @@ class ClickHouseAgentTranscriptRepository:
         payload_rows = [
             {
                 "execution_id": str(record.execution_id),
-                "workflow_uri": record.action_uri,
+                "action_uri": record.action_uri,
                 "attempt_no": int(record.attempt_no),
                 "sequence_no": int(record.sequence_no),
                 "message_role": record.message_role,
@@ -143,7 +143,7 @@ class ClickHouseAgentTranscriptRepository:
         stmt = (
             select(
                 transcript_messages.c.execution_id,
-                transcript_messages.c.workflow_uri,
+                transcript_messages.c.action_uri,
                 transcript_messages.c.attempt_no,
                 transcript_messages.c.sequence_no,
                 transcript_messages.c.message_role,
@@ -242,7 +242,7 @@ class InMemoryAgentTranscriptRepository:
 def _transcript_row_from_clickhouse(row: dict[str, Any]) -> AgentTranscriptMessageRecord:
     return AgentTranscriptMessageRecord(
         execution_id=UUID(str(row["execution_id"])),
-        action_uri=str(row["workflow_uri"]),
+        action_uri=str(row["action_uri"]),
         attempt_no=int(row["attempt_no"]),
         sequence_no=int(row["sequence_no"]),
         message_role=str(row["message_role"]),  # type: ignore[arg-type]
