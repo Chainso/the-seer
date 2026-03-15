@@ -317,7 +317,7 @@ def test_fake_data_sales_order_cancel_rca_has_actionable_insights(
     assert body["cohort_size"] >= 30
     assert body["positive_count"] >= 5
     assert len(body["insights"]) >= 3
-    assert "anchor.state=cancelled" in body["insights"][0]["title"]
+    assert "anchor.status=cancelled" in body["insights"][0]["title"]
     assert body["insights"][0]["score"]["wracc"] >= 0.1
 
 
@@ -346,5 +346,5 @@ def test_fake_data_invoice_overdue_rca_surfaces_high_lift_signal(
     assert body["cohort_size"] >= 30
     assert body["positive_count"] >= 5
     assert len(body["insights"]) >= 3
-    assert "anchor.state=overdue" in body["insights"][0]["title"]
+    assert "anchor.status=overdue" in body["insights"][0]["title"]
     assert body["insights"][0]["score"]["lift"] >= 4.0

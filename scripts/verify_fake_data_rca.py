@@ -33,18 +33,18 @@ _EVENT_LOCAL_NAME_BY_KEY: dict[str, str] = {
     "adjust_inventory_result": "aout_adjust_inventory",
     "create_purchase_order_result": "aout_create_purchase_order",
     "create_sales_order_result": "aout_create_sales_order",
-    "invoice_mark_overdue_transition": "trans_invoice_mark_overdue",
-    "invoice_mark_paid_transition": "trans_invoice_mark_paid",
+    "invoice_mark_overdue_transition": "evt_invoice_marked_overdue",
+    "invoice_mark_paid_transition": "evt_invoice_marked_paid",
     "invoice_payment_recorded": "sig_invoice_payment_recorded",
     "low_stock_detected": "sig_low_stock_detected",
-    "purchase_order_close_transition": "trans_purchase_order_close",
-    "purchase_order_receive_transition": "trans_purchase_order_receive",
-    "purchase_order_submit_transition": "trans_purchase_order_submit",
+    "purchase_order_close_transition": "evt_purchase_order_closed",
+    "purchase_order_receive_transition": "evt_purchase_order_received",
+    "purchase_order_submit_transition": "evt_purchase_order_submitted",
     "register_customer_result": "aout_register_customer",
     "restock_inventory_result": "aout_restock_inventory",
-    "sales_order_cancel_transition": "trans_sales_order_cancel",
-    "sales_order_fulfill_transition": "trans_sales_order_fulfill",
-    "sales_order_mark_paid_transition": "trans_sales_order_mark_paid",
+    "sales_order_cancel_transition": "evt_sales_order_cancelled",
+    "sales_order_fulfill_transition": "evt_sales_order_fulfilled",
+    "sales_order_mark_paid_transition": "evt_sales_order_marked_paid",
     "supplier_lead_time_updated": "sig_supplier_lead_time_updated",
 }
 _OBJECT_LOCAL_NAME_BY_KEY: dict[str, str] = {
@@ -96,14 +96,14 @@ _SCENARIO_BLUEPRINTS: tuple[dict[str, object], ...] = (
         "name": "sales-order-cancel",
         "anchor_object_type_key": "sales_order",
         "outcome_event_type_key": "sales_order_cancel_transition",
-        "expected_title_contains": "anchor.state=cancelled",
+        "expected_title_contains": "anchor.status=cancelled",
         "min_wracc": 0.10,
     },
     {
         "name": "invoice-overdue",
         "anchor_object_type_key": "invoice",
         "outcome_event_type_key": "invoice_mark_overdue_transition",
-        "expected_title_contains": "anchor.state=overdue",
+        "expected_title_contains": "anchor.status=overdue",
         "min_wracc": 0.08,
     },
 )
@@ -119,7 +119,9 @@ def _load_small_business_uri_maps() -> tuple[dict[str, str], dict[str, str]]:
     for alias, local_name, concept_kind in _CONCEPT_PATTERN.findall(turtle):
         concept_kinds_by_alias.setdefault(alias, {})[local_name] = concept_kind
 
-    required_local_names = set(_EVENT_LOCAL_NAME_BY_KEY.values()) | set(_OBJECT_LOCAL_NAME_BY_KEY.values())
+    required_local_names = set(_EVENT_LOCAL_NAME_BY_KEY.values()) | set(
+        _OBJECT_LOCAL_NAME_BY_KEY.values()
+    )
     candidate_aliases = [
         alias
         for alias, local_names in concept_kinds_by_alias.items()
@@ -154,7 +156,7 @@ def _load_small_business_uri_maps() -> tuple[dict[str, str], dict[str, str]]:
         return f"{local_base_uri}{local_name}"
 
     event_type_uri_by_key = {
-        key: _resolve_uri(local_name, {"Signal", "Transition"})
+        key: _resolve_uri(local_name, {"Event"})
         for key, local_name in _EVENT_LOCAL_NAME_BY_KEY.items()
     }
     object_type_uri_by_key = {
@@ -265,7 +267,11 @@ def _parse_utc(value: str) -> datetime:
 
 
 def _window_for_events(events: list[dict[str, Any]]) -> tuple[str, str]:
-    occurred = [event.get("occurred_at") for event in events if isinstance(event.get("occurred_at"), str)]
+    occurred = [
+        event.get("occurred_at")
+        for event in events
+        if isinstance(event.get("occurred_at"), str)
+    ]
     if not occurred:
         raise ValueError("no occurred_at timestamps found in input events")
 
@@ -369,12 +375,14 @@ def _run_scenario(
     if scenario.expected_title_contains not in title:
         return (
             False,
-            f"{scenario.name}: top insight title missing '{scenario.expected_title_contains}' title={title}",
+            f"{scenario.name}: top insight title missing "
+            f"'{scenario.expected_title_contains}' title={title}",
         )
     if wracc < scenario.min_wracc:
         return (
             False,
-            f"{scenario.name}: top insight WRAcc too low wracc={wracc:.6f} threshold={scenario.min_wracc:.6f}",
+            f"{scenario.name}: top insight WRAcc too low "
+            f"wracc={wracc:.6f} threshold={scenario.min_wracc:.6f}",
         )
 
     cohort_size = body.get("cohort_size")

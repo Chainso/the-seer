@@ -11,7 +11,6 @@ from functools import lru_cache
 from pathlib import Path
 from uuid import uuid4
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SMALL_BUSINESS_ONTOLOGY_PATH = (
     REPO_ROOT
@@ -54,18 +53,18 @@ EVENT_LOCAL_NAME_BY_KEY: dict[str, str] = {
     "adjust_inventory_result": "aout_adjust_inventory",
     "create_purchase_order_result": "aout_create_purchase_order",
     "create_sales_order_result": "aout_create_sales_order",
-    "invoice_mark_overdue_transition": "trans_invoice_mark_overdue",
-    "invoice_mark_paid_transition": "trans_invoice_mark_paid",
+    "invoice_mark_overdue_transition": "evt_invoice_marked_overdue",
+    "invoice_mark_paid_transition": "evt_invoice_marked_paid",
     "invoice_payment_recorded": "sig_invoice_payment_recorded",
     "low_stock_detected": "sig_low_stock_detected",
-    "purchase_order_close_transition": "trans_purchase_order_close",
-    "purchase_order_receive_transition": "trans_purchase_order_receive",
-    "purchase_order_submit_transition": "trans_purchase_order_submit",
+    "purchase_order_close_transition": "evt_purchase_order_closed",
+    "purchase_order_receive_transition": "evt_purchase_order_received",
+    "purchase_order_submit_transition": "evt_purchase_order_submitted",
     "register_customer_result": "aout_register_customer",
     "restock_inventory_result": "aout_restock_inventory",
-    "sales_order_cancel_transition": "trans_sales_order_cancel",
-    "sales_order_fulfill_transition": "trans_sales_order_fulfill",
-    "sales_order_mark_paid_transition": "trans_sales_order_mark_paid",
+    "sales_order_cancel_transition": "evt_sales_order_cancelled",
+    "sales_order_fulfill_transition": "evt_sales_order_fulfilled",
+    "sales_order_mark_paid_transition": "evt_sales_order_marked_paid",
     "supplier_lead_time_updated": "sig_supplier_lead_time_updated",
 }
 OBJECT_LOCAL_NAME_BY_KEY: dict[str, str] = {
@@ -118,7 +117,9 @@ def _load_small_business_identifier_catalog() -> OntologyIdentifierCatalog:
     for alias, local_name, concept_kind in _CONCEPT_PATTERN.findall(turtle):
         concept_kinds_by_alias.setdefault(alias, {})[local_name] = concept_kind
 
-    required_local_names = set(EVENT_LOCAL_NAME_BY_KEY.values()) | set(OBJECT_LOCAL_NAME_BY_KEY.values())
+    required_local_names = set(EVENT_LOCAL_NAME_BY_KEY.values()) | set(
+        OBJECT_LOCAL_NAME_BY_KEY.values()
+    )
     candidate_aliases = [
         alias
         for alias, local_names in concept_kinds_by_alias.items()
@@ -126,11 +127,13 @@ def _load_small_business_identifier_catalog() -> OntologyIdentifierCatalog:
     ]
     if not candidate_aliases:
         raise ValueError(
-            "small-business ontology does not contain required local identifiers for fake-data generation"
+            "small-business ontology does not contain required local identifiers "
+            "for fake-data generation"
         )
     if len(candidate_aliases) > 1:
         raise ValueError(
-            f"ambiguous ontology alias resolution for fake-data generation: {sorted(candidate_aliases)!r}"
+            "ambiguous ontology alias resolution for fake-data generation: "
+            f"{sorted(candidate_aliases)!r}"
         )
 
     local_alias = candidate_aliases[0]
@@ -155,7 +158,7 @@ def _load_small_business_identifier_catalog() -> OntologyIdentifierCatalog:
         return f"{local_base_uri}{local_name}"
 
     event_type_uri_by_key = {
-        key: _resolve_uri(local_name, {"Signal", "Transition"})
+        key: _resolve_uri(local_name, {"Event"})
         for key, local_name in EVENT_LOCAL_NAME_BY_KEY.items()
     }
     object_type_uri_by_key = {
@@ -600,7 +603,7 @@ class SmallBusinessGenerator:
             "total_amount": total_amount,
             "invoice": {"invoice_id": invoice_id},
             "notes": "synthetic order",
-            "state": "pending_payment",
+            "status": "pending_payment",
         }
         invoice = {
             "object_type": self._object_type("invoice"),
@@ -613,7 +616,7 @@ class SmallBusinessGenerator:
             "total_due": total_amount,
             "balance_due": total_amount,
             "currency": "USD",
-            "state": "issued",
+            "status": "issued",
         }
 
         events: list[EventDraft] = [
@@ -652,15 +655,13 @@ class SmallBusinessGenerator:
         now_iso = _to_zulu(datetime.now(tz=UTC))
 
         if outcome == "cancelled":
-            sales_order_cancelled = {**sales_order, "state": "cancelled"}
+            sales_order_cancelled = {**sales_order, "status": "cancelled"}
             events.append(
                 EventDraft(
                     event_type=self._event_type("sales_order_cancel_transition"),
                     source="prophet.small_business.sales",
                     payload={
-                        "sales_order_id": sales_order_id,
-                        "fromState": "pending_payment",
-                        "toState": "cancelled",
+                        "salesOrder": {"sales_order_id": sales_order_id},
                         "cancelledAt": now_iso,
                         "reason": self.rng.choice(
                             (
@@ -685,15 +686,13 @@ class SmallBusinessGenerator:
             return events
 
         if outcome == "overdue":
-            invoice_overdue = {**invoice, "state": "overdue"}
+            invoice_overdue = {**invoice, "status": "overdue"}
             events.append(
                 EventDraft(
                     event_type=self._event_type("invoice_mark_overdue_transition"),
                     source="prophet.small_business.billing",
                     payload={
-                        "invoice_id": invoice_id,
-                        "fromState": "issued",
-                        "toState": "overdue",
+                        "invoice": {"invoice_id": invoice_id},
                         "markedAt": now_iso,
                     },
                     updated_objects=[
@@ -736,15 +735,13 @@ class SmallBusinessGenerator:
             )
         )
 
-        invoice_paid = {**invoice, "state": "paid", "balance_due": 0.0}
+        invoice_paid = {**invoice, "status": "paid", "balance_due": 0.0}
         events.append(
             EventDraft(
                 event_type=self._event_type("invoice_mark_paid_transition"),
                 source="prophet.small_business.billing",
                 payload={
-                    "invoice_id": invoice_id,
-                    "fromState": "issued",
-                    "toState": "paid",
+                    "invoice": {"invoice_id": invoice_id},
                     "paidAt": now_iso,
                     "paymentReference": f"PAY-{uuid4().hex[:10]}",
                 },
@@ -761,16 +758,14 @@ class SmallBusinessGenerator:
             )
         )
 
-        sales_order_paid = {**sales_order, "state": "paid"}
+        sales_order_paid = {**sales_order, "status": "paid"}
         events.append(
             EventDraft(
                 event_type=self._event_type("sales_order_mark_paid_transition"),
                 source="prophet.small_business.sales",
                 payload={
-                    "sales_order_id": sales_order_id,
-                    "fromState": "pending_payment",
-                    "toState": "paid",
-                    "paymentAmount": total_amount,
+                    "salesOrder": {"sales_order_id": sales_order_id},
+                    "amount": total_amount,
                     "paidAt": now_iso,
                 },
                 updated_objects=[
@@ -799,15 +794,13 @@ class SmallBusinessGenerator:
             "scheduled_for": _to_zulu(datetime.now(tz=UTC) + timedelta(hours=6)),
             "status_text": "out_for_delivery",
         }
-        sales_order_fulfilled = {**sales_order_paid, "state": "fulfilled"}
+        sales_order_fulfilled = {**sales_order_paid, "status": "fulfilled"}
         events.append(
             EventDraft(
                 event_type=self._event_type("sales_order_fulfill_transition"),
                 source="prophet.small_business.fulfillment",
                 payload={
-                    "sales_order_id": sales_order_id,
-                    "fromState": "paid",
-                    "toState": "fulfilled",
+                    "salesOrder": {"sales_order_id": sales_order_id},
                     "fulfilledAt": now_iso,
                     "shipmentTracking": shipment_tracking,
                 },
@@ -836,7 +829,11 @@ class SmallBusinessGenerator:
         product_id = item["product"]["product_id"]
         product = next(product for product in self.products if product["product_id"] == product_id)
         supplier_id = product["supplier"]["supplier_id"]
-        supplier = next(supplier for supplier in self.suppliers if supplier["supplier_id"] == supplier_id)
+        supplier = next(
+            supplier
+            for supplier in self.suppliers
+            if supplier["supplier_id"] == supplier_id
+        )
         employee = self._pick(self.employees)
         purchase_order_id = _id("PO", self.purchase_order_seq, self.id_prefix)
         self.purchase_order_seq += 1
@@ -857,7 +854,7 @@ class SmallBusinessGenerator:
             "lines": lines,
             "notes": "auto-generated restock",
             "total_cost": estimated_total,
-            "state": "draft",
+            "status": "draft",
         }
 
         events: list[EventDraft] = [
@@ -902,9 +899,7 @@ class SmallBusinessGenerator:
                 event_type=self._event_type("purchase_order_submit_transition"),
                 source="prophet.small_business.procurement",
                 payload={
-                    "purchase_order_id": purchase_order_id,
-                    "fromState": "draft",
-                    "toState": "submitted",
+                    "purchaseOrder": {"purchase_order_id": purchase_order_id},
                     "submittedAt": now_iso,
                     "buyerNote": "auto submit from low stock trigger",
                 },
@@ -914,7 +909,7 @@ class SmallBusinessGenerator:
                         {"purchase_order_id": purchase_order_id},
                         {
                             **purchase_order,
-                            "state": "submitted",
+                            "status": "submitted",
                             "submitted_at": now_iso,
                         },
                         "primary",
@@ -927,9 +922,7 @@ class SmallBusinessGenerator:
                 event_type=self._event_type("purchase_order_receive_transition"),
                 source="prophet.small_business.procurement",
                 payload={
-                    "purchase_order_id": purchase_order_id,
-                    "fromState": "submitted",
-                    "toState": "received",
+                    "purchaseOrder": {"purchase_order_id": purchase_order_id},
                     "receivedAt": now_iso,
                     "invoiceNumber": _id("BILL", self.purchase_order_seq, self.id_prefix),
                 },
@@ -939,7 +932,7 @@ class SmallBusinessGenerator:
                         {"purchase_order_id": purchase_order_id},
                         {
                             **purchase_order,
-                            "state": "received",
+                            "status": "received",
                             "submitted_at": now_iso,
                             "received_at": now_iso,
                         },
@@ -980,9 +973,7 @@ class SmallBusinessGenerator:
                 event_type=self._event_type("purchase_order_close_transition"),
                 source="prophet.small_business.procurement",
                 payload={
-                    "purchase_order_id": purchase_order_id,
-                    "fromState": "received",
-                    "toState": "closed",
+                    "purchaseOrder": {"purchase_order_id": purchase_order_id},
                     "closedAt": now_iso,
                 },
                 updated_objects=[
@@ -991,7 +982,7 @@ class SmallBusinessGenerator:
                         {"purchase_order_id": purchase_order_id},
                         {
                             **purchase_order,
-                            "state": "closed",
+                            "status": "closed",
                             "submitted_at": now_iso,
                             "received_at": now_iso,
                         },
@@ -1087,7 +1078,11 @@ def main() -> int:
 
     try:
         now_utc = datetime.now(tz=UTC)
-        start_at = _parse_iso_datetime(args.start_at) if args.start_at else now_utc - timedelta(hours=24)
+        start_at = (
+            _parse_iso_datetime(args.start_at)
+            if args.start_at
+            else now_utc - timedelta(hours=24)
+        )
     except ValueError as exc:
         print(f"ERROR: invalid --start-at value: {exc}")
         return 1

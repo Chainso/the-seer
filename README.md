@@ -105,6 +105,10 @@ python3 scripts/ingest_complex_turtle.py
 python3 scripts/generate_fake_event_data.py --output /tmp/seer-fake-events.json --count 500
 ```
 
+The generated history uses the current Prophet small-business ontology model:
+event URIs resolve to `prophet:Event`, and lifecycle snapshots use enum-backed
+state-carrier fields such as `status` instead of legacy transition/state payloads.
+
 3. Ingest one generated JSON file into history event ingestion:
 
 ```bash
