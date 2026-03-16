@@ -25,6 +25,7 @@ from seer_backend.api.ontology import build_ontology_services
 from seer_backend.config.settings import Settings
 from seer_backend.main import create_app
 from seer_backend.ontology.errors import OntologyDependencyUnavailableError, OntologyError
+from seer_backend.ontology.managed_agents import ManagedAgentUpsertRequest
 from seer_backend.ontology.models import CopilotStructuredOutput, CopilotToolCall
 from seer_backend.ontology.repository import InMemoryOntologyRepository
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
@@ -790,6 +791,67 @@ def test_copilot_builds_system_and_conversation_messages() -> None:
     assert latest[5] == {"role": "user", "content": "First question"}
     assert latest[6] == {"role": "assistant", "content": "First answer"}
     assert latest[7] == {"role": "user", "content": "What is Ticket?"}
+
+
+def test_copilot_system_prompt_includes_seer_data_managed_agent_definition() -> None:
+    runtime = FakeModelRuntime(
+        CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="ok",
+            evidence=[],
+            tool_call=None,
+        )
+    )
+    settings = Settings(prophet_metamodel_path=str(PROPHET_METAMODEL))
+    app = create_app(settings=settings)
+
+    repository = InMemoryOntologyRepository()
+    validator = ShaclValidator(str(PROPHET_METAMODEL))
+    ontology_service = OntologyService(repository=repository, validator=validator)
+    app.state.ontology_service = ontology_service
+    app.state.ontology_copilot_service = OntologyCopilotService(
+        ontology_service=ontology_service,
+        model_runtime=runtime,
+        query_row_limit=5,
+        base_ontology_turtle=PROPHET_METAMODEL.read_text(encoding="utf-8"),
+    )
+    client = TestClient(app)
+
+    ingest = client.post(
+        "/api/v1/ontology/ingest",
+        json={"release_id": "phase1-seer-data-prompt", "turtle": _valid_turtle()},
+    )
+    assert ingest.status_code == 200, ingest.text
+
+    detail = asyncio.run(
+        ontology_service.upsert_managed_agent(
+            ManagedAgentUpsertRequest(
+                managed_agent_key="ticket_triage_assistant",
+                name="Ticket Triage Assistant",
+                description="Triage inbound support tickets.",
+                instruction="Review the incoming ticket and choose the next action.",
+                enabled=True,
+                input_name="Ticket Triage Input",
+                input_description="Payload for managed-agent triage.",
+                output_name="Ticket Triage Output",
+                output_description="Managed-agent triage result.",
+                input_fields=[],
+                output_fields=[],
+            )
+        )
+    )
+
+    response = client.post(
+        "/api/v1/ontology/copilot",
+        json={"question": "What managed agents exist?", "conversation": []},
+    )
+
+    assert response.status_code == 200, response.text
+    assert runtime.messages
+    system_prompt = runtime.messages[-1][0]["content"]
+    assert "Authoritative Seer data ontology additions" in system_prompt
+    assert detail.action_uri in system_prompt
+    assert detail.name in system_prompt
 
 
 def test_valid_ingest_sets_current_release_pointer(client: TestClient) -> None:

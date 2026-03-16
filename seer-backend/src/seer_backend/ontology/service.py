@@ -540,6 +540,9 @@ LIMIT 50
             graphs=graphs,
         )
 
+    async def copilot_seer_data_turtle(self) -> str:
+        return await self._repository.get_graph_turtle_or_empty(self._data_graph_iri)
+
     async def _select_scoped(self, query: str) -> list[dict[str, str]]:
         graphs = await self._scoped_graphs()
         return await self._repository.select(query, default_graph_uris=graphs)
@@ -668,6 +671,9 @@ class UnavailableOntologyService:
 
     async def run_read_only_query(self, query: str) -> OntologySparqlQueryResponse:
         del query
+        raise OntologyDependencyUnavailableError(self.reason)
+
+    async def copilot_seer_data_turtle(self) -> str:
         raise OntologyDependencyUnavailableError(self.reason)
 
     async def health_diagnostic(self) -> ValidationDiagnostic:
