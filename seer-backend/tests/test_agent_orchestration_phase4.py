@@ -179,8 +179,7 @@ def test_execution_list_filters_to_agentic_workflows_and_exposes_transcript_coun
         submitted_at=base + timedelta(minutes=3),
     )
 
-    repository.claim_actions(
-        user_id="user-phase4",
+    repository.claim_managed_agent_actions(
         instance_id="instance-phase4",
         capacity=3,
         max_actions=3,
@@ -294,6 +293,13 @@ def test_execution_detail_includes_child_actions_produced_events_and_parent_cont
         parent_execution_id=execution_id,
     )
 
+    repository.claim_managed_agent_actions(
+        instance_id="instance-detail",
+        capacity=3,
+        max_actions=3,
+        lease_seconds=60,
+        now=base + timedelta(minutes=3),
+    )
     repository.claim_actions(
         user_id="user-phase4-detail",
         instance_id="instance-detail",
@@ -420,8 +426,7 @@ def test_message_stream_emits_snapshot_then_persisted_message_then_terminal() ->
         action_kind=ActionKind.AGENTIC_WORKFLOW,
         submitted_at=base,
     )
-    repository.claim_actions(
-        user_id="user-phase4-stream",
+    repository.claim_managed_agent_actions(
         instance_id="instance-stream",
         capacity=1,
         max_actions=1,

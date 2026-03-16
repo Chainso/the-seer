@@ -2,7 +2,7 @@
 
 **Status:** completed  
 **Owner phase:** `docs/exec-plans/completed/action-orchestration-backend-service.md`  
-**Last updated:** 2026-03-08
+**Last updated:** 2026-03-16
 
 ---
 
@@ -12,28 +12,31 @@ Define user-visible and operator-visible behavior for Seer action orchestration.
 
 This spec covers:
 1. action submit-time validation and enqueue semantics,
-2. pull-based claiming by user instances,
-3. completion/failure lifecycle behavior with retries/dead-letter transitions,
-4. status visibility for UI/operator surfaces.
+2. pull-based claiming by user instances for ordinary actions,
+3. Seer-owned managed-agent claiming and execution,
+4. completion/failure lifecycle behavior with retries/dead-letter transitions,
+5. status visibility for UI/operator surfaces.
 
 ## Who Interacts With This
 
 1. Submitter client: any API client that creates actions for a user queue.
-2. Executor instance: a user-owned worker process that polls (`claim`) and executes actions.
-3. Operator/UI: reads action state via status/list/SSE endpoints.
+2. Executor instance: a user-owned worker process that polls (`claim`) and executes ordinary actions.
+3. Seer managed-agent runner: a Seer-owned process that claims and executes `agentic_workflow` rows internally.
+4. Operator/UI: reads action state via status/list/SSE endpoints.
 
 ## End-To-End Interaction Model
 
 1. Submitter calls `POST /api/v1/actions/submit`.
-2. User-owned instance polls `POST /api/v1/actions/claim`.
-3. Backend leases eligible actions to the polling instance for a bounded lease window.
-4. Instance executes action payload and reports terminal attempt outcome via:
+2. If the submitted action is an ordinary action, a user-owned instance polls `POST /api/v1/actions/claim`.
+3. If the submitted action is a managed agent, the Seer-owned managed-agent runner claims it internally.
+4. Backend leases eligible actions to the appropriate claimer for a bounded lease window.
+5. The lease owner executes the payload and reports terminal attempt outcome via:
    - `POST /api/v1/actions/{action_id}/complete`, or
    - `POST /api/v1/actions/{action_id}/fail`.
-5. If lease expires without callback, dedicated sweeper runtime reconciles:
+6. If lease expires without callback, dedicated sweeper runtime reconciles:
    - to `retry_wait` (attempt budget remaining), or
    - to `dead_letter` (attempt budget exhausted).
-6. UI/operator clients track state through:
+7. UI/operator clients track state through:
    - `GET /api/v1/actions/{action_id}`,
    - `GET /api/v1/actions`,
    - `GET /api/v1/actions/{action_id}/stream` (SSE).
@@ -61,14 +64,22 @@ Notes:
 4. On success, backend enqueues action with backend-generated UUID `action_id`, status `queued`, ontology-derived `action_kind`, pinned `ontology_release_id`, and deterministic `validation_contract_hash`.
 5. If `(user_id, idempotency_key)` already exists, backend returns the existing action with `dedupe_hit=true`.
 
-## Claim Flow
+## Public Claim Flow (Ordinary Actions Only)
 
 1. Instance calls `POST /api/v1/actions/claim` with `user_id`, `instance_id`, `capacity`, and optional `max_actions`.
 2. Backend heartbeats/upserts the instance before claiming.
-3. Backend returns up to `min(capacity, max_actions)` eligible actions.
+3. Backend returns up to `min(capacity, max_actions)` eligible ordinary actions only.
 4. Claim ordering is deterministic: `priority DESC`, then FIFO by `submitted_at`, then `action_id`.
 5. Claimed actions transition to `running`, are leased to the caller instance with `lease_expires_at`, and increment `attempt_count`.
 6. Draining instances (`status=draining`) receive zero new claims.
+
+## Managed-Agent Claim And Execution Flow
+
+1. Seer-owned managed-agent runner claims `action_kind=agentic_workflow` rows through an internal service/repository path rather than the public HTTP claim API.
+2. Managed-agent claiming is global across submitter `user_id` values.
+3. Submitter `user_id` remains on the action row for audit, list/detail filtering, and provenance.
+4. The runner executes the managed agent, persists canonical transcript messages, emits the produced output event, and then completes or fails the leased action through the existing lifecycle callbacks.
+5. External callers to `POST /api/v1/actions/claim` must never receive managed-agent rows.
 
 ## Instance Heartbeat Flow
 
@@ -112,7 +123,7 @@ curl -sS -X POST http://localhost:8000/api/v1/actions/submit \
   }'
 ```
 
-2. Poll for work from an instance
+2. Poll for ordinary work from an instance
 
 ```bash
 curl -sS -X POST http://localhost:8000/api/v1/actions/claim \
@@ -161,6 +172,13 @@ curl -N "http://localhost:8000/api/v1/actions/<action_id>/stream"
 4. Handle duplicate deliveries safely (at-least-once contract).
 5. Respect `status=draining` operationally before shutdown.
 
+## Managed-Agent Runner Responsibilities
+
+1. Claim `agentic_workflow` rows only through the internal Seer-owned claim path.
+2. Never rely on submitter `user_id` as the ownership partition for managed-agent claiming.
+3. Persist canonical transcript messages and output-event provenance for managed-agent runs.
+4. Use the same complete/fail lifecycle callbacks and retry semantics as the shared action control plane.
+
 ## Failure Taxonomy (Accepted `error_code`)
 
 Retryable:
@@ -191,10 +209,12 @@ Terminal:
 2. Unknown/non-executable action URIs are rejected at submit with actionable `422` response.
 3. Invalid payload fields/cardinality/type are rejected at submit with actionable `422` response.
 4. Competing claimers cannot hold the same active lease simultaneously.
-5. Expired leases are proactively reconciled by sweeper and reclaimable through retry eligibility, preserving at-least-once delivery behavior.
-6. Complete/fail callbacks are accepted only from current lease owner while lease is active.
-7. Retry progression is deterministic and reaches `dead_letter` when retryable failures exhaust max attempts.
-8. Status list/detail/stream contracts expose consistent lifecycle state transitions.
+5. Public `POST /api/v1/actions/claim` never leases `agentic_workflow` rows.
+6. Managed-agent runs are claimable by the Seer-owned runner across submitter `user_id` values.
+7. Expired leases are proactively reconciled by sweeper and reclaimable through retry eligibility, preserving at-least-once delivery behavior.
+8. Complete/fail callbacks are accepted only from current lease owner while lease is active.
+9. Retry progression is deterministic and reaches `dead_letter` when retryable failures exhaust max attempts.
+10. Status list/detail/stream contracts expose consistent lifecycle state transitions.
 
 ## Out of Scope
 

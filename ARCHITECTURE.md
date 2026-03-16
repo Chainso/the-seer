@@ -115,13 +115,14 @@ Expected internal service areas:
    - tool-driven artifact and canvas contracts for assistant-presented visuals
 5. `actions` domain:
    - ontology-backed submit validation and enqueue semantics
-   - pull-based claim + lease assignment
+   - public pull-based claim + lease assignment for ordinary actions
+   - internal Seer-owned claim path for managed-agent runs
    - completion/failure lifecycle callbacks
    - status query/list/SSE contracts
 6. `agent_orchestration` domain:
-   - LLM-backed execution for ontology-defined `seer:AgenticWorkflow` runs
-   - canonical agent transcript persistence and resume from saved `completion_messages`
-   - runtime tool policy (`load_skill` limited to deep ontology, object store, and object history, plus `load_action`)
+   - Seer-owned runner for ontology-defined `seer:AgenticWorkflow` runs
+   - LLM-backed managed-agent execution, canonical transcript persistence, and produced-event emission
+   - resume and inspection from saved `completion_messages`
    - dedicated managed-agent execution list/detail/message/SSE APIs
    - audit-oriented run detail composed from generic actions plus produced-event history
 7. `api` / `transport` domain:
@@ -289,7 +290,7 @@ The following invariants are deliberate and must hold unless explicitly changed 
 16. Generic action control-plane state is persisted in PostgreSQL; canonical agent transcript `completion_messages` are persisted in ClickHouse.
 17. Every submitted action produces a backend-generated UUID `action_id`.
 18. Submit-time ontology validation is mandatory for execution.
-19. Action delivery remains pull-based claim with lease ownership and at-least-once semantics.
+19. Ordinary action delivery remains public pull-based claim with lease ownership and at-least-once semantics; managed-agent delivery uses an internal Seer-owned claim path over the same lifecycle model.
 20. Duplicate action delivery is acceptable; side-effect dedupe is executor-owned and keyed by `action_id`.
 21. Every managed-agent execution is also a generic action execution, and child executions are linked through `parent_execution_id`.
 22. Produced events may carry optional `produced_by_execution_id` provenance when runtime execution emitted them.

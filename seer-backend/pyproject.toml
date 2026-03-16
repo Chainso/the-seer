@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 seer-actions-maintenance = "seer_backend.actions.maintenance:run"
+seer-managed-agent-runner = "seer_backend.agent_orchestration.runner:run"
 
 [project.optional-dependencies]
 dev = [

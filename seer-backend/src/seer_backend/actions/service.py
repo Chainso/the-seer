@@ -332,6 +332,23 @@ class ActionsService:
             lease_seconds=lease_seconds,
         )
 
+    async def claim_managed_agent_actions(
+        self,
+        *,
+        instance_id: str,
+        capacity: int,
+        max_actions: int,
+        lease_seconds: int,
+    ) -> list[ActionRecord]:
+        await self.ensure_schema()
+        return await asyncio.to_thread(
+            self._repository.claim_managed_agent_actions,
+            instance_id=instance_id,
+            capacity=capacity,
+            max_actions=max_actions,
+            lease_seconds=lease_seconds,
+        )
+
     async def heartbeat_instance(
         self,
         *,
@@ -562,6 +579,17 @@ class UnavailableActionsService:
         lease_seconds: int,
     ) -> list[ActionRecord]:
         del user_id, instance_id, capacity, max_actions, lease_seconds
+        raise ActionDependencyUnavailableError(self.reason)
+
+    async def claim_managed_agent_actions(
+        self,
+        *,
+        instance_id: str,
+        capacity: int,
+        max_actions: int,
+        lease_seconds: int,
+    ) -> list[ActionRecord]:
+        del instance_id, capacity, max_actions, lease_seconds
         raise ActionDependencyUnavailableError(self.reason)
 
     async def heartbeat_instance(

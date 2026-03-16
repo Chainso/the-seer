@@ -88,8 +88,9 @@ Current phase assumptions:
 
 1. Seer runs in a trusted/internal environment.
 2. Managed agents operate with runtime guardrails rather than finalized role-based authorization.
-3. Execution list reads do not require `user_id`, but generic action submit/claim/heartbeat semantics still do.
-4. Final authz and approval semantics are intentionally deferred.
+3. Execution list reads do not require `user_id`.
+4. Generic action submit and instance-heartbeat semantics still use `user_id`, but managed-agent claim is internal to Seer and not exposed through the public claim API.
+5. Final authz and approval semantics are intentionally deferred.
 
 ## Audit UX Requirements
 
@@ -111,9 +112,9 @@ The current trusted-mode runtime assumes conservative runtime tooling and explic
 
 Examples:
 
-1. managed-agent runtime should not silently expand beyond its restricted `load_skill` catalog,
-2. ontology-defined execution should be exposed through explicit `load_action`,
-3. canonical transcript history should be reconstructable from persisted `completion_messages`,
+1. managed-agent runtime should be Seer-owned rather than externally claimable,
+2. canonical transcript history should be reconstructable from persisted `completion_messages`,
+3. produced output events should carry execution provenance,
 4. and operator visibility should come from persisted execution state rather than ephemeral debug streams.
 
 ## Relationship To Investigation UX
@@ -131,7 +132,7 @@ That means:
 1. Users can inspect recent agent decisions without reading raw logs.
 2. Users can list/filter agent executions from the parent managed-agent page and drill into one nested execution's transcript, child actions, and produced events.
 3. Users can watch a running execution through persisted-message live tailing rather than a token-only debug stream.
-4. The execution list read surface works without `user_id`, while generic action control-plane write/claim semantics remain user-scoped.
+4. The execution list read surface works without `user_id`, while managed-agent claim stays internal to Seer and ordinary public claim remains user-scoped.
 5. Managed-agent action, child action, and event identity are shown with ontology-resolved labels as the primary presentation.
 6. Audit history is sufficient to explain what happened to a non-author of the agent.
 7. Raw action/event identifiers remain available for audit/debug work, but do not dominate the primary hierarchy.

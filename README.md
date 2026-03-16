@@ -81,6 +81,14 @@ The backend compose service now mounts `./prophet` to `/prophet` and uses
 without manual container patching.
 Compose also provisions Fuseki dataset `/ds` and wires backend Fuseki credentials
 automatically.
+The default compose stack now also starts:
+
+1. `seer-actions-sweeper` for lease-expiry reconciliation
+2. `seer-managed-agent-runner` for Seer-owned managed-agent execution
+
+That means Seer-authored managed agents are picked up automatically in the
+default local stack; external callers to `/api/v1/actions/claim` are now for
+ordinary actions only.
 
 Helper scripts:
 
@@ -231,8 +239,8 @@ cd seer-ui && npm ci && npm run dev
 
 Defaults:
 
-1. `SEER_OPENAI_BASE_URL=https://opencode.ai/zen/v1/chat/completions`
-2. `SEER_OPENAI_MODEL=big-pickle`
+1. `SEER_OPENAI_BASE_URL=http://localhost:10531/v1`
+2. `SEER_OPENAI_MODEL=gpt-5.1-codex-mini`
 3. `SEER_OPENAI_API_KEY=` (empty is acceptable for local endpoints that ignore API keys)
 
 If your endpoint differs, override these values in `.env`.

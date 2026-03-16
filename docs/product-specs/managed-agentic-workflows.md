@@ -15,9 +15,10 @@ The delivered model is:
 1. the ontology remains the executable capability catalog,
 2. `seer:AgenticWorkflow` remains a subtype of `prophet:Action`,
 3. Seer can now author managed-agent RDF definitions into a dedicated `seer_data` named graph,
-4. every managed-agent run is still a generic action execution,
-5. `agent_orchestration` still owns LLM-backed execution and transcript semantics,
-6. and the inspector is now agent-first instead of execution-first.
+4. every managed-agent run is still a generic action execution in the shared control plane,
+5. Seer now automatically claims and runs managed agents through a Seer-owned runner service,
+6. `agent_orchestration` owns transcript persistence plus produced-event provenance for those runs,
+7. and the inspector is now agent-first instead of execution-first.
 
 This is still not a general ontology editor, a low-code workflow compiler, or a separate action registry.
 
@@ -31,10 +32,11 @@ The delivered surface lets users:
 2. create or edit a managed agent without writing Turtle,
 3. inspect the managed agent definition before drilling into runs,
 4. and then inspect canonical run history nested under that agent.
+5. and rely on Seer to pick up those runs automatically in the default stack.
 
 ## Product Model
 
-Managed-agent operations now have five product-visible layers:
+Managed-agent operations now have six product-visible layers:
 
 1. `Canonical RDF definition`
    - one `seer:AgenticWorkflow`
@@ -50,7 +52,11 @@ Managed-agent operations now have five product-visible layers:
 4. `Managed-agent execution records`
    - generic action lifecycle state, attempts, lineage, and lease metadata
    - persisted in PostgreSQL through the `actions` control plane
-5. `Canonical transcript state`
+5. `Seer-owned execution runner`
+   - internal claim path for `agentic_workflow` rows across users
+   - default local stack service that executes Seer-authored managed agents
+   - public `/api/v1/actions/claim` exclusion for managed-agent rows
+6. `Canonical transcript state`
    - ordered append-only `completion_messages`
    - persisted in ClickHouse for inspection and resume
 
@@ -96,6 +102,13 @@ The Seer authoring boundary is intentionally constrained:
 5. User opens one nested run under `/inspector/managed-agents/[managedAgentKey]/runs/[executionId]`.
 6. Seer shows transcript, related actions, and produced events with ontology-aware labeling.
 
+### Execute A Managed Agent
+
+1. User submits the managed-agent action through the shared action submit surface.
+2. Seer stores the run in the shared `actions` control plane as `action_kind=agentic_workflow`.
+3. The Seer-owned managed-agent runner claims that run internally; external workers do not lease it through `POST /api/v1/actions/claim`.
+4. Seer executes the managed agent, persists transcript messages, emits the output event, and updates the shared action lifecycle state.
+
 ## Relationship To The Ontology
 
 The ontology remains the capability catalog.
@@ -128,6 +141,7 @@ The delivered surface must make the following clear:
 6. Users can switch to a `Runs` tab that is scoped to that agent.
 7. Users can open one nested run and inspect transcript, related actions, and produced events.
 8. The UI presents ontology-resolved names and supporting identifiers together, rather than raw URI-first controls.
+9. Default-stack managed-agent submissions leave `queued` automatically because Seer picks them up without an external worker.
 
 ## Out Of Scope For This Spec
 
@@ -141,3 +155,4 @@ The delivered surface must make the following clear:
 1. Final authz and approval workflows remain intentionally out of scope for the trusted-mode runtime.
 2. Pause/resume/revoke semantics remain deferred beyond the current execution and authoring surface.
 3. Broader runtime guardrail editing beyond `enabled` and instruction/schema definition still needs its own product pass.
+4. Broader tool/action-invocation policy for managed-agent runtime still needs a dedicated product and implementation pass beyond the current Seer-owned execution loop.

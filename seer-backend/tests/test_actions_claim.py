@@ -94,6 +94,46 @@ def test_claim_excludes_other_instances_during_active_lease() -> None:
     assert second_body["actions"] == []
 
 
+def test_public_claim_api_excludes_managed_agent_actions() -> None:
+    client, repository = _build_claim_client()
+    now = datetime(2026, 3, 1, 12, 5, tzinfo=UTC)
+    _enqueue_action(
+        repository,
+        user_id="user-claim-agent",
+        action_uri="urn:seer:test:claim.ordinary",
+        submitted_at=now,
+    )
+    _run_async(
+        ActionsService(repository=repository).create_action(
+            ActionCreate(
+                user_id="user-claim-agent",
+                action_uri="urn:seer:managed-agent:ticket_triage_assistant",
+                action_kind=ActionKind.AGENTIC_WORKFLOW,
+                input_payload={"ticket": {"ticketId": "T-100"}},
+                ontology_release_id="rel-2026-03-01",
+                validation_contract_hash="contract-hash-managed-claim-test",
+                submitted_at=now,
+                next_visible_at=now,
+            )
+        )
+    )
+
+    response = client.post(
+        "/api/v1/actions/claim",
+        json={
+            "user_id": "user-claim-agent",
+            "instance_id": "instance-managed-filter",
+            "capacity": 10,
+            "max_actions": 10,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["claimed_count"] == 1
+    assert [item["action_kind"] for item in body["actions"]] == [ActionKind.ACTION.value]
+
+
 def test_claim_reclaims_after_lease_expiry_once_sweeper_reconciles() -> None:
     repository = InMemoryActionsRepository()
     now = datetime(2026, 3, 1, 12, 30, tzinfo=UTC)

@@ -25,8 +25,8 @@ services:
       SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS: ${SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS:-20}
       SEER_ACTIONS_SCHEMA_BOOTSTRAP_ON_STARTUP: "true"
       SEER_PROPHET_METAMODEL_PATH: /prophet/prophet.ttl
-      SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-https://opencode.ai/zen/v1/chat/completions}
-      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-big-pickle}
+      SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-http://localhost:10531/v1}
+      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gpt-5.1-codex-mini}
       SEER_OPENAI_API_KEY: ${SEER_OPENAI_API_KEY:-}
     volumes:
       - ./prophet:/prophet:ro
@@ -57,6 +57,44 @@ services:
       SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS: ${SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS:-2}
     depends_on:
       - postgres
+
+  seer-managed-agent-runner:
+    build:
+      context: ./seer-backend
+      dockerfile: Dockerfile
+    container_name: seer-managed-agent-runner
+    command: ["seer-managed-agent-runner"]
+    environment:
+      SEER_APP_ENV: local
+      SEER_LOG_LEVEL: INFO
+      SEER_FUSEKI_HOST: fuseki
+      SEER_FUSEKI_PORT: 3030
+      SEER_FUSEKI_USERNAME: admin
+      SEER_FUSEKI_PASSWORD: ${FUSEKI_ADMIN_PASSWORD:-admin}
+      SEER_CLICKHOUSE_HOST: clickhouse
+      SEER_CLICKHOUSE_PORT: 8123
+      SEER_ACTIONS_DB_DSN: ${SEER_ACTIONS_DB_DSN:-postgresql+psycopg://seer:seer@postgres:5432/seer_actions}
+      SEER_ACTIONS_DB_POOL_SIZE: ${SEER_ACTIONS_DB_POOL_SIZE:-5}
+      SEER_ACTIONS_DB_MAX_OVERFLOW: ${SEER_ACTIONS_DB_MAX_OVERFLOW:-10}
+      SEER_ACTIONS_DB_MIGRATIONS_DIR: ${SEER_ACTIONS_DB_MIGRATIONS_DIR:-migrations/postgres}
+      SEER_ACTIONS_LEASE_SECONDS: ${SEER_ACTIONS_LEASE_SECONDS:-60}
+      SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS: ${SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS:-2}
+      SEER_MANAGED_AGENT_RUNNER_ENABLED: ${SEER_MANAGED_AGENT_RUNNER_ENABLED:-true}
+      SEER_MANAGED_AGENT_RUNNER_INTERVAL_SECONDS: ${SEER_MANAGED_AGENT_RUNNER_INTERVAL_SECONDS:-5}
+      SEER_MANAGED_AGENT_RUNNER_BATCH_SIZE: ${SEER_MANAGED_AGENT_RUNNER_BATCH_SIZE:-5}
+      SEER_MANAGED_AGENT_RUNNER_INSTANCE_ID: ${SEER_MANAGED_AGENT_RUNNER_INSTANCE_ID:-seer-managed-agent-runner}
+      SEER_PROPHET_METAMODEL_PATH: /prophet/prophet.ttl
+      SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-http://localhost:10531/v1}
+      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gpt-5.1-codex-mini}
+      SEER_OPENAI_API_KEY: ${SEER_OPENAI_API_KEY:-}
+    volumes:
+      - ./prophet:/prophet:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - postgres
+      - fuseki
+      - clickhouse
 
   seer-ui:
     build:

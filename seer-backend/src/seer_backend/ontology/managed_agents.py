@@ -175,8 +175,18 @@ def managed_agent_action_iri(managed_agent_key: str) -> str:
     return f"{MANAGED_AGENT_IRI_PREFIX}{managed_agent_key}"
 
 
+def managed_agent_output_event_iri(managed_agent_key: str) -> str:
+    return f"{managed_agent_action_iri(managed_agent_key)}:output"
+
+
 def managed_agent_subject_prefix(managed_agent_key: str) -> str:
     return f"{managed_agent_action_iri(managed_agent_key)}:"
+
+
+def managed_agent_key_from_action_uri(action_uri: str) -> str | None:
+    if not action_uri.startswith(MANAGED_AGENT_IRI_PREFIX):
+        return None
+    return action_uri.removeprefix(MANAGED_AGENT_IRI_PREFIX)
 
 
 def build_managed_agent_cluster(
@@ -474,9 +484,7 @@ def _validate_field_key_uniqueness(
 
 
 def _managed_agent_key_from_action_uri(action_uri: str) -> str | None:
-    if not action_uri.startswith(MANAGED_AGENT_IRI_PREFIX):
-        return None
-    return action_uri.removeprefix(MANAGED_AGENT_IRI_PREFIX)
+    return managed_agent_key_from_action_uri(action_uri)
 
 
 def _literal_string(value: object | None) -> str | None:

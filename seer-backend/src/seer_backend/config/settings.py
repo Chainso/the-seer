@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     actions_sweeper_batch_size: int = Field(default=100, ge=1, le=5000)
     actions_sweeper_advisory_lock_id: int = Field(default=104_729, ge=1, le=2_147_483_647)
     actions_sweeper_retry_delay_seconds: int = Field(default=2, ge=0, le=3600)
+    managed_agent_runner_enabled: bool = True
+    managed_agent_runner_interval_seconds: int = Field(default=5, ge=1, le=3600)
+    managed_agent_runner_batch_size: int = Field(default=5, ge=1, le=500)
+    managed_agent_runner_instance_id: str = "seer-managed-agent-runner"
     actions_schema_bootstrap_on_startup: bool = False
     process_mining_max_events: int = Field(default=100_000, ge=100, le=200_000)
     process_mining_max_relations: int = Field(default=40_000, ge=100, le=500_000)
@@ -72,8 +76,8 @@ class Settings(BaseSettings):
 
     dependency_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     prophet_metamodel_path: str = "../prophet/prophet.ttl"
-    openai_base_url: str = "https://opencode.ai/zen/v1/chat/completions"
-    openai_model: str = "big-pickle"
+    openai_base_url: str = "http://localhost:10531/v1"
+    openai_model: str = "gpt-5.1-codex-mini"
     openai_api_key: str | None = None
     openai_timeout_seconds: float = Field(default=45.0, ge=1.0, le=300.0)
     copilot_query_row_limit: int = Field(default=100, ge=1, le=1000)

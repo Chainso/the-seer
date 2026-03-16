@@ -364,7 +364,7 @@ They are not the product's primary entry point.
 
 ## 10.1 Managed Agent Definition
 
-A managed agent is a Seer-run executable action that is defined in the ontology and operates over business evidence inside Seer's runtime.
+A managed agent is a Seer-run executable action that is defined in the ontology, automatically picked up by Seer, and operates over business evidence inside Seer's runtime.
 
 The agent should be able to:
 

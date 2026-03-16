@@ -48,6 +48,7 @@ from seer_backend.actions.models import (
 )
 
 metadata = MetaData()
+MANAGED_AGENT_RUNNER_INTERNAL_USER_ID = "__seer_managed_agent_runner__"
 
 actions_table = Table(
     "actions",
@@ -172,6 +173,16 @@ class ActionsRepository(Protocol):
         self,
         *,
         user_id: str,
+        instance_id: str,
+        capacity: int,
+        max_actions: int,
+        lease_seconds: int,
+        now: datetime | None = None,
+    ) -> list[ActionRecord]: ...
+
+    def claim_managed_agent_actions(
+        self,
+        *,
         instance_id: str,
         capacity: int,
         max_actions: int,
@@ -429,6 +440,49 @@ class PostgresActionsRepository:
         lease_seconds: int,
         now: datetime | None = None,
     ) -> list[ActionRecord]:
+        return self._claim_actions(
+            user_id=user_id,
+            instance_id=instance_id,
+            capacity=capacity,
+            max_actions=max_actions,
+            lease_seconds=lease_seconds,
+            now=now,
+            action_kind=ActionKind.ACTION,
+            global_scope=False,
+        )
+
+    def claim_managed_agent_actions(
+        self,
+        *,
+        instance_id: str,
+        capacity: int,
+        max_actions: int,
+        lease_seconds: int,
+        now: datetime | None = None,
+    ) -> list[ActionRecord]:
+        return self._claim_actions(
+            user_id=MANAGED_AGENT_RUNNER_INTERNAL_USER_ID,
+            instance_id=instance_id,
+            capacity=capacity,
+            max_actions=max_actions,
+            lease_seconds=lease_seconds,
+            now=now,
+            action_kind=ActionKind.AGENTIC_WORKFLOW,
+            global_scope=True,
+        )
+
+    def _claim_actions(
+        self,
+        *,
+        user_id: str,
+        instance_id: str,
+        capacity: int,
+        max_actions: int,
+        lease_seconds: int,
+        now: datetime | None = None,
+        action_kind: ActionKind,
+        global_scope: bool,
+    ) -> list[ActionRecord]:
         if max_actions < 1 or capacity < 1:
             return []
 
@@ -474,9 +528,14 @@ class PostgresActionsRepository:
                         select(actions_table.c.action_id, actions_table.c.attempt_count)
                         .where(
                             and_(
-                                actions_table.c.user_id == user_id,
+                                actions_table.c.action_kind == action_kind.value,
                                 actions_table.c.status.in_(queued_statuses),
                                 actions_table.c.next_visible_at <= now_utc,
+                                *(
+                                    ()
+                                    if global_scope
+                                    else (actions_table.c.user_id == user_id,)
+                                ),
                             )
                         )
                         .order_by(
@@ -1176,6 +1235,49 @@ class InMemoryActionsRepository:
         lease_seconds: int,
         now: datetime | None = None,
     ) -> list[ActionRecord]:
+        return self._claim_actions(
+            user_id=user_id,
+            instance_id=instance_id,
+            capacity=capacity,
+            max_actions=max_actions,
+            lease_seconds=lease_seconds,
+            now=now,
+            action_kind=ActionKind.ACTION,
+            global_scope=False,
+        )
+
+    def claim_managed_agent_actions(
+        self,
+        *,
+        instance_id: str,
+        capacity: int,
+        max_actions: int,
+        lease_seconds: int,
+        now: datetime | None = None,
+    ) -> list[ActionRecord]:
+        return self._claim_actions(
+            user_id=MANAGED_AGENT_RUNNER_INTERNAL_USER_ID,
+            instance_id=instance_id,
+            capacity=capacity,
+            max_actions=max_actions,
+            lease_seconds=lease_seconds,
+            now=now,
+            action_kind=ActionKind.AGENTIC_WORKFLOW,
+            global_scope=True,
+        )
+
+    def _claim_actions(
+        self,
+        *,
+        user_id: str,
+        instance_id: str,
+        capacity: int,
+        max_actions: int,
+        lease_seconds: int,
+        now: datetime | None = None,
+        action_kind: ActionKind,
+        global_scope: bool,
+    ) -> list[ActionRecord]:
         if max_actions < 1 or capacity < 1:
             return []
 
@@ -1196,7 +1298,9 @@ class InMemoryActionsRepository:
             eligible = [
                 action
                 for action in self._actions.values()
-                if action.user_id == user_id and _is_claim_eligible(action, now_utc)
+                if action.action_kind == action_kind
+                and (global_scope or action.user_id == user_id)
+                and _is_claim_eligible(action, now_utc)
             ]
             eligible.sort(key=lambda row: (-row.priority, row.submitted_at, str(row.action_id)))
             selected = eligible[:max_actions]
