@@ -246,6 +246,9 @@ class _SkillAwareOntologyService:
             updated_at=datetime.now(tz=UTC),
         )
 
+    async def copilot_seer_data_turtle(self) -> str:
+        return ""
+
     async def run_read_only_query(self, query: str) -> OntologySparqlQueryResponse:
         del query
         return OntologySparqlQueryResponse(
@@ -385,6 +388,25 @@ class _UsePersistedProcessTraceRuntime(CopilotModelRuntime):
         return CopilotStructuredOutput(
             mode="direct_answer",
             answer="Fetched example traces from the persisted process mining result.",
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _CaptureMessagesRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.last_messages: list[dict[str, object]] | None = None
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        del tools
+        self.last_messages = messages
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="Captured messages.",
             evidence=[],
             tool_call=None,
         )
@@ -803,6 +825,106 @@ def test_ai_assistant_chat_returns_generic_envelope_and_thread_id() -> None:
     assert len(final["completion_messages"]) >= 2
     assert final["completion_messages"][-1]["role"] == "assistant"
     assert "error" not in event_types
+
+
+def test_ontology_copilot_service_defaults_to_assistant_workflow_prompt() -> None:
+    runtime = _CaptureMessagesRuntime()
+    copilot = OntologyCopilotService(
+        _SkillAwareOntologyService(),
+        model_runtime=runtime,
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+
+    response = asyncio.run(
+        copilot.answer(
+            "How is the ontology organized?",
+            conversation=[],
+        )
+    )
+
+    assert response.answer == "Captured messages."
+    assert runtime.last_messages is not None
+    system_messages = [
+        str(message["content"])
+        for message in runtime.last_messages
+        if message.get("role") == "system"
+    ]
+    assert any(
+        "You are Seer's conversational assistant." in message
+        for message in system_messages
+    )
+    assert not any(
+        "You are Seer's managed-agent execution copilot." in message
+        for message in system_messages
+    )
+
+
+def test_ontology_copilot_service_supports_managed_agent_workflow_prompt_mode() -> None:
+    runtime = _CaptureMessagesRuntime()
+    copilot = OntologyCopilotService(
+        _SkillAwareOntologyService(),
+        model_runtime=runtime,
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+
+    response = asyncio.run(
+        copilot.answer(
+            "Complete the managed task accurately.",
+            conversation=[],
+            runtime_mode="managed_agent",
+        )
+    )
+
+    assert response.answer == "Captured messages."
+    assert runtime.last_messages is not None
+    system_messages = [
+        str(message["content"])
+        for message in runtime.last_messages
+        if message.get("role") == "system"
+    ]
+    assert any(
+        "You are Seer's managed-agent execution copilot." in message
+        for message in system_messages
+    )
+    assert not any(
+        "You are Seer's conversational assistant." in message
+        for message in system_messages
+    )
+
+
+def test_ontology_copilot_service_allows_workflow_prompt_override() -> None:
+    runtime = _CaptureMessagesRuntime()
+    copilot = OntologyCopilotService(
+        _SkillAwareOntologyService(),
+        model_runtime=runtime,
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+
+    response = asyncio.run(
+        copilot.answer(
+            "Use the runtime override.",
+            conversation=[],
+            runtime_mode="managed_agent",
+            workflow_system_prompt_override="Managed-agent override prompt.",
+        )
+    )
+
+    assert response.answer == "Captured messages."
+    assert runtime.last_messages is not None
+    system_messages = [
+        str(message["content"])
+        for message in runtime.last_messages
+        if message.get("role") == "system"
+    ]
+    assert "Managed-agent override prompt." in system_messages
+    assert not any(
+        "You are Seer's conversational assistant." in message
+        for message in system_messages
+    )
+    assert not any(
+        "You are Seer's managed-agent execution copilot." in message
+        for message in system_messages
+    )
 
 
 def test_ai_workbench_chat_streams_investigation_answer_and_linked_surfaces() -> None:

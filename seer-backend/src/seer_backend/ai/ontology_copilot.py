@@ -76,7 +76,10 @@ Treat this as immutable metamodel context.
 {seer_data_turtle_section}
 """.strip()
 
-_COPILOT_WORKFLOW_SYSTEM_PROMPT = """
+CopilotRuntimeMode = Literal["assistant", "managed_agent"]
+
+
+_ASSISTANT_WORKFLOW_SYSTEM_PROMPT = """
 You are Seer's conversational assistant.
 
 Your job:
@@ -183,6 +186,41 @@ WHERE {
 }
 ORDER BY ?fieldKey
 LIMIT 100
+""".strip()
+
+_MANAGED_AGENT_WORKFLOW_SYSTEM_PROMPT = """
+You are Seer's managed-agent execution copilot.
+
+Your job:
+- Execute the managed-agent objective accurately and completely using the provided
+  operating context, tool evidence, and runtime contract.
+- Optimize for correctness, precision, and faithful completion of the user's
+  operational instruction.
+- Stay focused on the current managed-agent task instead of acting like a general
+  chat assistant.
+- Use `load_skill` only when the managed-agent runtime exposes a skill that is
+  directly relevant to completing the current task.
+
+Workflow for each turn:
+1. Read the current execution context, operating instruction, and prior transcript.
+2. Identify the smallest next step that moves the managed-agent task toward
+   accurate completion.
+3. Use existing context first; use tools only when they materially reduce
+   uncertainty or are needed to act safely.
+4. If using a tool, make one bounded, high-quality call at a time.
+5. Return the most precise possible answer for the current step and avoid
+   conversational filler.
+
+Tool planning and budget:
+- Prefer bounded tool usage over exploration.
+- Avoid speculative tool calls that do not directly help complete the task.
+- If evidence is insufficient, say exactly what is missing instead of guessing.
+
+Answer style:
+- Be concise, direct, and operational.
+- Distinguish facts from inference.
+- Prioritize task completion accuracy over conversational tone.
+- Return markdown only unless a downstream runtime contract requires another format.
 """.strip()
 
 _PREFIX_DECLARATION_PATTERN = re.compile(
@@ -549,12 +587,16 @@ class OntologyCopilotService:
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, Any]] | None = None,
         assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+        runtime_mode: CopilotRuntimeMode = "assistant",
+        workflow_system_prompt_override: str | None = None,
     ) -> CopilotChatResponse:
         async for event in self.answer_stream(
             question,
             conversation=conversation,
             completion_conversation=completion_conversation,
             assistant_tool_adapter=assistant_tool_adapter,
+            runtime_mode=runtime_mode,
+            workflow_system_prompt_override=workflow_system_prompt_override,
         ):
             if isinstance(event, CopilotAnswerFinalEvent):
                 return event.response
@@ -566,6 +608,8 @@ class OntologyCopilotService:
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, Any]] | None = None,
         assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+        runtime_mode: CopilotRuntimeMode = "assistant",
+        workflow_system_prompt_override: str | None = None,
     ) -> AsyncIterator[CopilotAnswerStreamEvent]:
         current = await self._ontology_service.current()
         base_ontology_system_prompt = _build_base_ontology_system_prompt(
@@ -589,6 +633,8 @@ class OntologyCopilotService:
             base_ontology_system_prompt=base_ontology_system_prompt,
             ontology_index_markdown=ontology_index_markdown,
             available_skills=available_skills,
+            runtime_mode=runtime_mode,
+            workflow_system_prompt_override=workflow_system_prompt_override,
         )
 
         tool_result: CopilotToolResult | None = None
@@ -1123,11 +1169,19 @@ def _build_messages(
     base_ontology_system_prompt: str,
     ontology_index_markdown: str,
     available_skills: dict[str, AssistantSkill],
+    runtime_mode: CopilotRuntimeMode,
+    workflow_system_prompt_override: str | None = None,
 ) -> list[dict[str, Any]]:
     release_text = current_release_id or "none"
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": base_ontology_system_prompt},
-        {"role": "system", "content": _COPILOT_WORKFLOW_SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": _workflow_system_prompt(
+                runtime_mode=runtime_mode,
+                workflow_system_prompt_override=workflow_system_prompt_override,
+            ),
+        },
         {
             "role": "system",
             "content": f"Current ontology release: {release_text}",
@@ -1139,6 +1193,20 @@ def _build_messages(
         messages.append(message)
     messages.append({"role": "user", "content": question})
     return messages
+
+
+def _workflow_system_prompt(
+    *,
+    runtime_mode: CopilotRuntimeMode,
+    workflow_system_prompt_override: str | None = None,
+) -> str:
+    if workflow_system_prompt_override is not None:
+        overridden = workflow_system_prompt_override.strip()
+        if overridden:
+            return overridden
+    if runtime_mode == "managed_agent":
+        return _MANAGED_AGENT_WORKFLOW_SYSTEM_PROMPT
+    return _ASSISTANT_WORKFLOW_SYSTEM_PROMPT
 
 
 def _to_tool_result(
