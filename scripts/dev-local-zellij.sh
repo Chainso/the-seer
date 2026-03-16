@@ -69,6 +69,10 @@ export SEER_ACTIONS_SWEEPER_INTERVAL_SECONDS="${SEER_ACTIONS_SWEEPER_INTERVAL_SE
 export SEER_ACTIONS_SWEEPER_BATCH_SIZE="${SEER_ACTIONS_SWEEPER_BATCH_SIZE:-100}"
 export SEER_ACTIONS_SWEEPER_ADVISORY_LOCK_ID="${SEER_ACTIONS_SWEEPER_ADVISORY_LOCK_ID:-104729}"
 export SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS="${SEER_ACTIONS_SWEEPER_RETRY_DELAY_SECONDS:-2}"
+export SEER_MANAGED_AGENT_RUNNER_ENABLED="${SEER_MANAGED_AGENT_RUNNER_ENABLED:-true}"
+export SEER_MANAGED_AGENT_RUNNER_INTERVAL_SECONDS="${SEER_MANAGED_AGENT_RUNNER_INTERVAL_SECONDS:-5}"
+export SEER_MANAGED_AGENT_RUNNER_BATCH_SIZE="${SEER_MANAGED_AGENT_RUNNER_BATCH_SIZE:-5}"
+export SEER_MANAGED_AGENT_RUNNER_INSTANCE_ID="${SEER_MANAGED_AGENT_RUNNER_INSTANCE_ID:-seer-managed-agent-runner}"
 export SEER_ASSISTANT_TURN_LOG_PATH="${SEER_ASSISTANT_TURN_LOG_PATH:-${ROOT_DIR}/.local/logs/assistant-turns.jsonl}"
 export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}"
 
@@ -120,7 +124,11 @@ layout {
         pane split_direction="Vertical" {
           pane name="ui" command="${ROOT_DIR}/scripts/dev-ui.sh" cwd="${ROOT_DIR}" {
           }
-          pane name="actions-sweeper" command="${ROOT_DIR}/scripts/dev-actions-sweeper.sh" cwd="${ROOT_DIR}" {
+          pane split_direction="Horizontal" {
+            pane name="actions-sweeper" command="${ROOT_DIR}/scripts/dev-actions-sweeper.sh" cwd="${ROOT_DIR}" {
+            }
+            pane name="managed-agent-runner" command="${ROOT_DIR}/scripts/dev-managed-agent-runner.sh" cwd="${ROOT_DIR}" {
+            }
           }
         }
       }
