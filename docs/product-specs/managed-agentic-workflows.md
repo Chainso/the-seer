@@ -16,7 +16,7 @@ The delivered model is:
 2. `seer:AgenticWorkflow` remains a subtype of `prophet:Action`,
 3. Seer can now author managed-agent RDF definitions into a dedicated `seer_data` named graph,
 4. every managed-agent run is still a generic action execution in the shared control plane,
-5. Seer now automatically claims and runs managed agents through a Seer-owned runner service,
+5. Seer now automatically claims and runs managed agents through a Seer-owned runner service backed by the shared copilot runtime,
 6. `agent_orchestration` owns transcript persistence plus produced-event provenance for those runs,
 7. and the inspector is now agent-first instead of execution-first.
 
@@ -54,7 +54,9 @@ Managed-agent operations now have six product-visible layers:
    - persisted in PostgreSQL through the `actions` control plane
 5. `Seer-owned execution runner`
    - internal claim path for `agentic_workflow` rows across users
-   - default local stack service that executes Seer-authored managed agents
+   - default local stack service that executes Seer-authored managed agents through the shared copilot runtime
+   - managed-agent-specific prompt optimized for accurate, precise task completion
+   - restricted runtime tool policy: managed-agent `load_skill` plus `load_action`
    - public `/api/v1/actions/claim` exclusion for managed-agent rows
 6. `Canonical transcript state`
    - ordered append-only `completion_messages`
@@ -100,14 +102,14 @@ The Seer authoring boundary is intentionally constrained:
 3. User switches to `Runs`.
 4. Seer shows only the runs for that managed agent.
 5. User opens one nested run under `/inspector/managed-agents/[managedAgentKey]/runs/[executionId]`.
-6. Seer shows transcript, related actions, and produced events with ontology-aware labeling.
+6. Seer shows transcript, related actions, and produced events with ontology-aware labeling, including persisted managed-agent tool activity when the run loaded skills or actions.
 
 ### Execute A Managed Agent
 
 1. User submits the managed-agent action through the shared action submit surface.
 2. Seer stores the run in the shared `actions` control plane as `action_kind=agentic_workflow`.
 3. The Seer-owned managed-agent runner claims that run internally; external workers do not lease it through `POST /api/v1/actions/claim`.
-4. Seer executes the managed agent, persists transcript messages, emits the output event, and updates the shared action lifecycle state.
+4. Seer executes the managed agent through the shared copilot runtime using the managed-agent prompt plus restricted `load_skill` / `load_action`, persists transcript messages, emits the output event, and updates the shared action lifecycle state.
 
 ## Relationship To The Ontology
 
@@ -155,4 +157,3 @@ The delivered surface must make the following clear:
 1. Final authz and approval workflows remain intentionally out of scope for the trusted-mode runtime.
 2. Pause/resume/revoke semantics remain deferred beyond the current execution and authoring surface.
 3. Broader runtime guardrail editing beyond `enabled` and instruction/schema definition still needs its own product pass.
-4. Broader tool/action-invocation policy for managed-agent runtime still needs a dedicated product and implementation pass beyond the current Seer-owned execution loop.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,10 @@ from seer_backend.actions.service import ActionsService
 from seer_backend.agent_orchestration.repository import InMemoryAgentTranscriptRepository
 from seer_backend.agent_orchestration.runner import ManagedAgentExecutionService
 from seer_backend.agent_orchestration.service import AgentTranscriptService
+from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
+from seer_backend.ai.ontology_copilot import CopilotActionExecutionContext
+from seer_backend.analytics.rca_service import UnavailableRootCauseService
+from seer_backend.analytics.service import UnavailableProcessMiningService
 from seer_backend.history.repository import InMemoryHistoryRepository
 from seer_backend.history.service import HistoryService
 from seer_backend.ontology.managed_agents import ManagedAgentUpsertRequest
@@ -39,19 +44,45 @@ SUPPORT_OBJECT_MODEL_IRI = "http://prophet.platform/local/support_local#obj_tick
 STRING_TYPE_IRI = "http://prophet.platform/standard-types#String"
 
 
-class _FakeCompletionRuntime:
-    def __init__(self, response_text: str) -> None:
-        self._response_text = response_text
-        self.calls: list[dict[str, Any]] = []
-
-    async def complete(
+class _FakeCopilotResponse:
+    def __init__(
         self,
         *,
-        messages: list[dict[str, Any]],
-        expects_json: bool,
-    ) -> str:
-        self.calls.append({"messages": messages, "expects_json": expects_json})
-        return self._response_text
+        answer: str,
+        completion_messages_delta: list[dict[str, Any]],
+    ) -> None:
+        self.answer = answer
+        self.completion_messages_delta = completion_messages_delta
+
+
+class _FakeCopilotService:
+    def __init__(self, response: _FakeCopilotResponse) -> None:
+        self._response = response
+        self.calls: list[dict[str, Any]] = []
+
+    async def answer(
+        self,
+        question: str,
+        *,
+        completion_conversation: list[dict[str, Any]] | None = None,
+        assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+        action_runtime: ActionsService | None = None,
+        action_execution_context: CopilotActionExecutionContext | None = None,
+        runtime_mode: str = "assistant",
+        workflow_system_prompt_override: str | None = None,
+    ) -> _FakeCopilotResponse:
+        self.calls.append(
+            {
+                "question": question,
+                "completion_conversation": completion_conversation,
+                "assistant_tool_adapter": assistant_tool_adapter,
+                "action_runtime": action_runtime,
+                "action_execution_context": action_execution_context,
+                "runtime_mode": runtime_mode,
+                "workflow_system_prompt_override": workflow_system_prompt_override,
+            }
+        )
+        return self._response
 
 
 def _run_async(coro: object) -> object:
@@ -190,15 +221,57 @@ def test_managed_agent_runner_executes_claimed_run_and_emits_output_event() -> N
     actions_service = ActionsService(repository=InMemoryActionsRepository())
     history_service = HistoryService(repository=InMemoryHistoryRepository())
     transcript_service = AgentTranscriptService(repository=InMemoryAgentTranscriptRepository())
-    runtime = _FakeCompletionRuntime(
-        '{"newState":"closed","ticket":{"ticketId":"T-100"}}'
+    copilot_service = _FakeCopilotService(
+        _FakeCopilotResponse(
+            answer='{"newState":"closed","ticket":{"ticketId":"T-100"}}',
+            completion_messages_delta=[
+                {
+                    "role": "assistant",
+                    "content": "Loading ticket history.",
+                    "tool_calls": [
+                        {
+                            "id": "call_history_1",
+                            "type": "function",
+                            "function": {
+                                "name": "load_skill",
+                                "arguments": '{"skill_name":"object-history"}',
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_history_1",
+                    "content": json.dumps(
+                        {
+                            "tool": "load_skill",
+                            "skill_name": "object-history",
+                            "allowed_tools": [
+                                "history.object_events",
+                                "history.relations",
+                                "history.object_timeline",
+                            ],
+                        }
+                    ),
+                },
+                {
+                    "role": "assistant",
+                    "content": '{"newState":"closed","ticket":{"ticketId":"T-100"}}',
+                },
+            ],
+        )
     )
     execution_service = ManagedAgentExecutionService(
         actions_service=actions_service,
         ontology_service=ontology_service,
         history_service=history_service,
         transcript_service=transcript_service,
-        completion_runtime=runtime,
+        copilot_service=copilot_service,
+        assistant_tool_adapter=AssistantDomainToolAdapter(
+            process_service=UnavailableProcessMiningService("not used in test"),
+            root_cause_service=UnavailableRootCauseService("not used in test"),
+            history_service=history_service,
+        ),
     )
 
     submit_result = _run_async(
@@ -236,10 +309,23 @@ def test_managed_agent_runner_executes_claimed_run_and_emits_output_event() -> N
     assert stats.failed_count == 0
     assert action is not None
     assert action.status == ActionStatus.COMPLETED
-    assert len(runtime.calls) == 1
-    assert runtime.calls[0]["expects_json"] is True
+    assert len(copilot_service.calls) == 1
+    assert copilot_service.calls[0]["runtime_mode"] == "managed_agent"
+    assert copilot_service.calls[0]["workflow_system_prompt_override"]
+    execution_context = copilot_service.calls[0]["action_execution_context"]
+    assert isinstance(execution_context, CopilotActionExecutionContext)
+    assert execution_context.user_id == "managed-agent-user"
+    assert execution_context.parent_execution_id == submit_result.action.action_id
     assert len(events.items) == 1
     assert events.items[0].event_type == "urn:seer:managed-agent:ticket_triage_assistant:output"
     assert events.items[0].payload["newState"] == "closed"
     assert events.items[0].produced_by_execution_id == submit_result.action.action_id
-    assert [message.message_role for message in messages] == ["system", "user", "assistant"]
+    assert [message.message_role for message in messages] == [
+        "system",
+        "user",
+        "assistant",
+        "tool",
+        "assistant",
+    ]
+    persisted_tool_payload = json.loads(str(messages[3].message_json["content"]))
+    assert persisted_tool_payload["tool"] == "load_skill"

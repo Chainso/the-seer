@@ -27,7 +27,7 @@ The observable outcome should be:
 - [x] 2026-03-16 Create this active execution plan and register it in `docs/exec-plans/active/index.md` before any implementation work.
 - [x] 2026-03-16 Phase 1: refactor the shared copilot runtime so `/assistant` and managed-agent execution can share the tool loop while using different prompt/workflow policies.
 - [x] 2026-03-16 Phase 2: implement managed-agent runtime tool policy, including restricted visible skills and a production `load_action` tool.
-- [ ] Phase 3: wire the managed-agent runner onto the shared copilot path, extend regression coverage, ratify docs/specs, and archive the plan.
+- [x] 2026-03-16 Phase 3: wire the managed-agent runner onto the shared copilot path, extend regression coverage, ratify docs/specs, and archive the plan.
 
 ## Surprises & Discoveries
 
@@ -38,6 +38,7 @@ The observable outcome should be:
 - 2026-03-16: There is already a dirty worktree in `seer-backend/src/seer_backend/ai/ontology_copilot.py` and `seer-backend/src/seer_backend/ontology/service.py`. This plan must avoid assuming those changes belong to this track and must not revert them.
 - 2026-03-16: `OntologyCopilotService.answer_stream(...)` now assumes the ontology service exposes `copilot_seer_data_turtle()`. The `_SkillAwareOntologyService` test double in `seer-backend/tests/test_ai_phase5.py` did not implement it, which initially broke both the new prompt tests and existing assistant-tool-flow tests until the stub was updated.
 - 2026-03-16: The shared action-validation path requires `ontology_service.current()` to return `OntologyCurrentResponse`, not just `CurrentReleasePointer`. The managed-agent `load_action` test stub initially returned the narrower pointer shape, which caused `load_action` to fail resolution until the stub was updated.
+- 2026-03-16: Persisted managed-agent tool transcript entries still store their structured tool payload inside the transcript message's serialized `content` field rather than flattening tool metadata onto the outer transcript record. The Phase 3 runner test had to assert against `json.loads(message_json["content"])` instead of assuming a top-level `tool` key.
 
 ## Decision Log
 
@@ -47,6 +48,7 @@ The observable outcome should be:
 - 2026-03-16, Codex: `load_action` should be implemented as a production runtime tool on the shared copilot path rather than as bespoke runner logic. Rationale: ontology-defined executable actions belong in the shared tool loop so transcript history and runtime policy remain coherent.
 - 2026-03-16, Codex: Phase 1 should extend `OntologyCopilotService` with an explicit runtime mode plus optional workflow-prompt override instead of introducing a second copilot class. Rationale: this keeps the shared tool loop intact, avoids duplicating orchestration code, and creates a narrow seam for the managed-agent runner to adopt in Phase 3.
 - 2026-03-16, Codex: `load_action` should load only ordinary executable actions, not managed-agent actions. Rationale: Phase 2 is about enabling ontology action invocation from managed-agent runs while preserving a clear boundary between ordinary child actions and Seer-owned managed-agent executions.
+- 2026-03-16, Codex: Phase 3 should inject `OntologyCopilotService` directly into the managed-agent runner instead of wrapping a second runtime adapter around OpenAI. Rationale: the shared copilot service already owns prompt policy, tool gating, loaded-action reconstruction, and transcript-friendly message deltas, so reusing it directly removes duplicated execution logic.
 
 ## Outcomes & Retrospective
 
@@ -73,6 +75,16 @@ The observable outcome should be:
 5. Phase 2 validation passed:
    - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ai_phase5.py tests/test_agent_orchestration_phase3.py` (`35 passed`)
    - `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src/seer_backend/actions/service.py src/seer_backend/ai/ontology_copilot.py src/seer_backend/ontology/models.py tests/test_ai_phase5.py` (`All checks passed!`)
+
+2026-03-16 Phase 3 delivered state:
+
+1. `seer-backend/src/seer_backend/agent_orchestration/runner.py` now executes managed-agent runs through `OntologyCopilotService` in `runtime_mode="managed_agent"` with the managed-agent workflow prompt override instead of using the old one-shot direct OpenAI call path.
+2. Managed-agent runner execution now persists shared copilot transcript activity, including managed-agent tool history, while preserving the same output-event ingestion and shared action lifecycle completion/failure behavior.
+3. Canonical docs/specs now say the managed-agent runner uses the shared copilot runtime with a separate managed-agent prompt plus restricted `load_skill` / `load_action` policy instead of a prompt-only loop.
+4. The active plan is ready to archive after the final validation and index cleanup in this phase.
+5. Phase 3 validation passed:
+   - `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src/seer_backend/ai src/seer_backend/agent_orchestration tests/test_ai_phase5.py tests/test_agent_orchestration_phase3.py tests/test_managed_agent_runner.py` (`All checks passed!`)
+   - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ai_phase5.py tests/test_agent_orchestration_phase3.py tests/test_managed_agent_runner.py tests/test_agent_orchestration_phase4.py` (`43 passed`)
 
 ## Context and Orientation
 
@@ -257,7 +269,7 @@ Only shared runtime/prompt architecture plus targeted tests proving prompt separ
 
 1. `AGENTS.md`
 2. `PLANS.md`
-3. `docs/exec-plans/active/managed-agent-copilot-runtime-and-prompt-split.md`
+3. `docs/exec-plans/completed/managed-agent-copilot-runtime-and-prompt-split.md`
 4. `seer-backend/src/seer_backend/ai/ontology_copilot.py`
 5. `seer-backend/src/seer_backend/api/ontology.py`
 6. `seer-backend/src/seer_backend/ai/gateway.py`
@@ -328,7 +340,7 @@ Stay inside shared tooling/runtime/model contracts and targeted tests. Do not mi
 
 1. `AGENTS.md`
 2. `PLANS.md`
-3. `docs/exec-plans/active/managed-agent-copilot-runtime-and-prompt-split.md`
+3. `docs/exec-plans/completed/managed-agent-copilot-runtime-and-prompt-split.md`
 4. `seer-backend/src/seer_backend/ai/assistant_tools.py`
 5. `seer-backend/src/seer_backend/ai/skills.py`
 6. `seer-backend/src/seer_backend/ai/ontology_copilot.py`
@@ -401,7 +413,7 @@ Runner integration, regression coverage, canonical doc/spec updates, final valid
 
 1. `AGENTS.md`
 2. `PLANS.md`
-3. `docs/exec-plans/active/managed-agent-copilot-runtime-and-prompt-split.md`
+3. `docs/exec-plans/completed/managed-agent-copilot-runtime-and-prompt-split.md`
 4. `seer-backend/src/seer_backend/agent_orchestration/runner.py`
 5. `seer-backend/tests/test_managed_agent_runner.py`
 6. `docs/product-specs/managed-agentic-workflows.md`
@@ -451,4 +463,12 @@ Runner integration, regression coverage, canonical doc/spec updates, final valid
 
 **Status**
 
-Pending.
+Completed on 2026-03-16.
+
+**Completion Notes**
+
+Phase 3 removed the direct managed-agent OpenAI completion path from `seer-backend/src/seer_backend/agent_orchestration/runner.py` and replaced it with shared `OntologyCopilotService` execution in managed-agent mode. The runner now persists tool-bearing transcript deltas from the shared copilot path, still submits produced output events, and still completes/fails runs through the shared action lifecycle. Canonical docs/specs were updated to describe the delivered shared-copilot runner model.
+
+**Next Starter Context**
+
+No immediate follow-on phase is open from this plan. Any later managed-agent runtime expansion should start from the archived plan in `docs/exec-plans/completed/managed-agent-copilot-runtime-and-prompt-split.md`, preserve the current `load_action` boundary to ordinary actions, and record any broader guardrail/tool-policy changes as a new active execution plan rather than reopening this one.

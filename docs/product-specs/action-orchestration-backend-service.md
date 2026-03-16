@@ -78,7 +78,7 @@ Notes:
 1. Seer-owned managed-agent runner claims `action_kind=agentic_workflow` rows through an internal service/repository path rather than the public HTTP claim API.
 2. Managed-agent claiming is global across submitter `user_id` values.
 3. Submitter `user_id` remains on the action row for audit, list/detail filtering, and provenance.
-4. The runner executes the managed agent, persists canonical transcript messages, emits the produced output event, and then completes or fails the leased action through the existing lifecycle callbacks.
+4. The runner executes the managed agent through the shared copilot runtime using the managed-agent prompt plus restricted `load_skill` / `load_action`, persists canonical transcript messages, emits the produced output event, and then completes or fails the leased action through the existing lifecycle callbacks.
 5. External callers to `POST /api/v1/actions/claim` must never receive managed-agent rows.
 
 ## Instance Heartbeat Flow
@@ -176,8 +176,9 @@ curl -N "http://localhost:8000/api/v1/actions/<action_id>/stream"
 
 1. Claim `agentic_workflow` rows only through the internal Seer-owned claim path.
 2. Never rely on submitter `user_id` as the ownership partition for managed-agent claiming.
-3. Persist canonical transcript messages and output-event provenance for managed-agent runs.
-4. Use the same complete/fail lifecycle callbacks and retry semantics as the shared action control plane.
+3. Execute managed-agent runs through the shared copilot runtime with the managed-agent prompt and restricted tool policy.
+4. Persist canonical transcript messages and output-event provenance for managed-agent runs.
+5. Use the same complete/fail lifecycle callbacks and retry semantics as the shared action control plane.
 
 ## Failure Taxonomy (Accepted `error_code`)
 
@@ -214,7 +215,8 @@ Terminal:
 7. Expired leases are proactively reconciled by sweeper and reclaimable through retry eligibility, preserving at-least-once delivery behavior.
 8. Complete/fail callbacks are accepted only from current lease owner while lease is active.
 9. Retry progression is deterministic and reaches `dead_letter` when retryable failures exhaust max attempts.
-10. Status list/detail/stream contracts expose consistent lifecycle state transitions.
+10. Managed-agent transcript persistence includes the shared copilot/tool history for that run.
+11. Status list/detail/stream contracts expose consistent lifecycle state transitions.
 
 ## Out of Scope
 

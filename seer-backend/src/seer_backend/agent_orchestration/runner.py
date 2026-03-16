@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import signal
-from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -14,8 +13,6 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, Protocol
 from uuid import uuid4
-
-from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
 
 from seer_backend.actions.models import ActionKind, ActionRecord
 from seer_backend.actions.service import (
@@ -25,6 +22,12 @@ from seer_backend.actions.service import (
 )
 from seer_backend.agent_orchestration.repository import ClickHouseAgentTranscriptRepository
 from seer_backend.agent_orchestration.service import AgentTranscriptService
+from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
+from seer_backend.ai.ontology_copilot import (
+    CopilotActionExecutionContext,
+)
+from seer_backend.analytics.rca_service import UnavailableRootCauseService
+from seer_backend.analytics.service import UnavailableProcessMiningService
 from seer_backend.api.history import build_history_service
 from seer_backend.api.ontology import build_ontology_services
 from seer_backend.config.settings import Settings
@@ -40,72 +43,18 @@ from seer_backend.ontology.managed_agents import (
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
 _RUNNER_SOURCE = "seer.managed_agent_runner"
-_OPENAI_TRANSIENT_MAX_RETRIES = 1
-_OPENAI_RETRY_BACKOFF_SECONDS = 0.2
-
-
-class ManagedAgentCompletionRuntime(Protocol):
-    async def complete(
+class ManagedAgentCopilotRuntime(Protocol):
+    async def answer(
         self,
+        question: str,
         *,
-        messages: list[dict[str, Any]],
-        expects_json: bool,
-    ) -> str: ...
-
-
-class OpenAiManagedAgentRuntime:
-    """Minimal direct model runtime for managed-agent turns."""
-
-    def __init__(
-        self,
-        *,
-        base_url: str,
-        model: str,
-        api_key: str | None,
-        timeout_seconds: float,
-        client: Any | None = None,
-    ) -> None:
-        self._model = model
-        self._timeout_seconds = timeout_seconds
-        self._client = client or AsyncOpenAI(
-            base_url=_normalize_openai_base_url(base_url),
-            api_key=api_key or "not-needed",
-            timeout=timeout_seconds,
-        )
-
-    async def complete(
-        self,
-        *,
-        messages: list[dict[str, Any]],
-        expects_json: bool,
-    ) -> str:
-        for attempt in range(_OPENAI_TRANSIENT_MAX_RETRIES + 1):
-            try:
-                response = await self._client.chat.completions.create(
-                    model=self._model,
-                    messages=messages,
-                    stream=False,
-                    temperature=0,
-                    response_format={"type": "json_object"} if expects_json else None,
-                )
-                break
-            except APIConnectionError as exc:
-                raise RuntimeError(f"OpenAI endpoint is unavailable: {exc}") from exc
-            except APITimeoutError as exc:
-                raise TimeoutError(
-                    f"OpenAI request timed out after {self._timeout_seconds:.1f}s"
-                ) from exc
-            except APIError as exc:
-                if attempt < _OPENAI_TRANSIENT_MAX_RETRIES and _is_retryable_openai_api_error(exc):
-                    await asyncio.sleep(_OPENAI_RETRY_BACKOFF_SECONDS * (attempt + 1))
-                    continue
-                raise RuntimeError(f"OpenAI chat completion failed: {exc}") from exc
-
-        message = response.choices[0].message if response.choices else None
-        content = _message_content_text(getattr(message, "content", None))
-        if not content.strip():
-            raise RuntimeError("managed-agent model returned an empty response")
-        return content
+        completion_conversation: list[dict[str, Any]] | None = None,
+        assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+        action_runtime: ActionsService | None = None,
+        action_execution_context: CopilotActionExecutionContext | None = None,
+        runtime_mode: str = "assistant",
+        workflow_system_prompt_override: str | None = None,
+    ) -> Any: ...
 
 
 @dataclass(slots=True, frozen=True)
@@ -125,13 +74,15 @@ class ManagedAgentExecutionService:
         ontology_service: OntologyService | UnavailableOntologyService,
         history_service: HistoryService | UnavailableHistoryService,
         transcript_service: AgentTranscriptService,
-        completion_runtime: ManagedAgentCompletionRuntime,
+        copilot_service: ManagedAgentCopilotRuntime,
+        assistant_tool_adapter: AssistantDomainToolAdapter,
     ) -> None:
         self._actions_service = actions_service
         self._ontology_service = ontology_service
         self._history_service = history_service
         self._transcript_service = transcript_service
-        self._completion_runtime = completion_runtime
+        self._copilot_service = copilot_service
+        self._assistant_tool_adapter = assistant_tool_adapter
 
     async def claim_and_execute_batch(
         self,
@@ -233,21 +184,27 @@ class ManagedAgentExecutionService:
                     {"role": "user", "content": user_prompt},
                 ],
             )
-            assistant_text = await self._completion_runtime.complete(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                expects_json=bool(detail.output_fields),
+            response = await self._copilot_service.answer(
+                user_prompt,
+                assistant_tool_adapter=self._assistant_tool_adapter,
+                action_runtime=self._actions_service,
+                action_execution_context=CopilotActionExecutionContext(
+                    user_id=action.user_id,
+                    parent_execution_id=action.action_id,
+                    priority=action.priority,
+                ),
+                runtime_mode="managed_agent",
+                workflow_system_prompt_override=system_prompt,
             )
-            await self._transcript_service.append_completion_messages(
-                execution_id=action.action_id,
-                action_uri=action.action_uri,
-                attempt_no=attempt_no,
-                completion_messages=[{"role": "assistant", "content": assistant_text}],
-            )
+            if response.completion_messages_delta:
+                await self._transcript_service.append_completion_messages(
+                    execution_id=action.action_id,
+                    action_uri=action.action_uri,
+                    attempt_no=attempt_no,
+                    completion_messages=response.completion_messages_delta,
+                )
             output_payload = _coerce_output_payload(
-                assistant_text,
+                response.answer,
                 expects_json=bool(detail.output_fields),
             )
             await self._history_service.ingest_event(
@@ -333,11 +290,15 @@ async def run_managed_agent_runner_loop(settings: Settings) -> int:
         ontology_service=ontology_service,
         history_service=history_service,
         transcript_service=transcript_service,
-        completion_runtime=OpenAiManagedAgentRuntime(
-            base_url=settings.openai_base_url,
-            model=settings.openai_model,
-            api_key=settings.openai_api_key,
-            timeout_seconds=settings.openai_timeout_seconds,
+        copilot_service=_copilot_service,
+        assistant_tool_adapter=AssistantDomainToolAdapter(
+            process_service=UnavailableProcessMiningService(
+                "Managed-agent runtime does not expose process mining tools"
+            ),
+            root_cause_service=UnavailableRootCauseService(
+                "Managed-agent runtime does not expose root-cause tools"
+            ),
+            history_service=history_service,
         ),
     )
 
@@ -509,32 +470,3 @@ def _strip_markdown_code_fence(value: str) -> str:
     if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].startswith("```"):
         return "\n".join(lines[1:-1]).strip()
     return stripped
-
-
-def _message_content_text(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, Mapping):
-                text = item.get("text")
-                if isinstance(text, str):
-                    parts.append(text)
-        return "".join(parts)
-    return str(content or "")
-
-
-def _normalize_openai_base_url(base_url: str) -> str:
-    normalized = base_url.strip().rstrip("/")
-    if normalized.endswith("/chat/completions"):
-        return normalized[: -len("/chat/completions")]
-    return normalized
-
-
-def _is_retryable_openai_api_error(exc: APIError) -> bool:
-    status_code = getattr(exc, "status_code", None)
-    if isinstance(status_code, int) and status_code in {408, 409, 429, 500, 502, 503, 504}:
-        return True
-    error_type = str(getattr(exc, "type", "") or "").lower()
-    return error_type in {"server_error", "rate_limit_error", "timeout"}

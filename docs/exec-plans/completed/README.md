@@ -58,3 +58,4 @@ Each completed plan should preserve:
 46. `ontology-graph-reference-linkage-fix.md` - completed (2026-03-15)
 47. `managed-agent-authoring-and-seer-data.md` - completed (2026-03-16)
 48. `seer-owned-managed-agent-runner.md` - completed (2026-03-16)
+49. `managed-agent-copilot-runtime-and-prompt-split.md` - completed (2026-03-16)

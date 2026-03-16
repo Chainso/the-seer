@@ -108,6 +108,7 @@ Expected internal service areas:
 4. `ai` domain:
    - unified AI gateway for ontology, investigation, process, RCA, and managed-agent reasoning tools
    - canonical `completion_messages` assistant runtime for `/assistant`
+   - shared copilot runtime with explicit assistant-vs-managed-agent prompt/tool-policy modes
    - tool access and runtime-guardrail enforcement
    - evidence and caveat packaging
    - SSE-first assistant/investigation streaming orchestration
@@ -121,7 +122,7 @@ Expected internal service areas:
    - status query/list/SSE contracts
 6. `agent_orchestration` domain:
    - Seer-owned runner for ontology-defined `seer:AgenticWorkflow` runs
-   - LLM-backed managed-agent execution, canonical transcript persistence, and produced-event emission
+   - shared-copilot-backed managed-agent execution with a dedicated managed-agent prompt, canonical transcript persistence, and produced-event emission
    - resume and inspection from saved `completion_messages`
    - dedicated managed-agent execution list/detail/message/SSE APIs
    - audit-oriented run detail composed from generic actions plus produced-event history
@@ -265,7 +266,7 @@ Design intent:
    - ontology-defined `seer:AgenticWorkflow` identity extending `prophet:Action`
    - generic action execution rows with `action_kind=agentic_workflow`
    - canonical append-only transcript `completion_messages` stored in ClickHouse
-   - runtime tool policy based on restricted `load_skill` plus `load_action`
+   - shared copilot runtime with a managed-agent-specific workflow prompt, restricted `load_skill`, and `load_action`
    - dedicated execution list/detail/messages/stream APIs for inspection
 
 ## Architectural Invariants

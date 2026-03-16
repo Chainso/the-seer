@@ -99,12 +99,13 @@ Users should be able to reconstruct the agent's behavior over time.
 Audit records should show:
 
 1. investigation steps that materially informed a decision,
-2. executed actions,
-3. produced events,
-4. canonical persisted transcript messages in execution order,
-5. failures and retries,
-6. returned results,
-7. and ontology-resolved labels for managed-agent action / child action / event identity.
+2. skill loads, ontology-action loads, and other persisted managed-agent tool activity,
+3. executed actions,
+4. produced events,
+5. canonical persisted transcript messages in execution order,
+6. failures and retries,
+7. returned results,
+8. and ontology-resolved labels for managed-agent action / child action / event identity.
 
 ## Default Safety Posture
 
@@ -113,9 +114,10 @@ The current trusted-mode runtime assumes conservative runtime tooling and explic
 Examples:
 
 1. managed-agent runtime should be Seer-owned rather than externally claimable,
-2. canonical transcript history should be reconstructable from persisted `completion_messages`,
-3. produced output events should carry execution provenance,
-4. and operator visibility should come from persisted execution state rather than ephemeral debug streams.
+2. managed-agent execution should use the shared copilot runtime with a separate managed-agent prompt rather than the assistant prompt,
+3. canonical transcript history should be reconstructable from persisted `completion_messages`,
+4. produced output events should carry execution provenance,
+5. and operator visibility should come from persisted execution state rather than ephemeral debug streams.
 
 ## Relationship To Investigation UX
 
@@ -137,6 +139,7 @@ That means:
 6. Audit history is sufficient to explain what happened to a non-author of the agent.
 7. Raw action/event identifiers remain available for audit/debug work, but do not dominate the primary hierarchy.
 8. The control model is understandable to someone who does not already know Seer's internal architecture.
+9. Persisted transcript history includes managed-agent tool activity from the shared copilot runtime rather than only raw assistant text.
 
 ## Out Of Scope For This Spec
 
