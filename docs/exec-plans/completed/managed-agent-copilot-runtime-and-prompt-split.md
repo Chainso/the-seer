@@ -1,6 +1,6 @@
 # Managed-Agent Shared Copilot Runtime And Prompt Split
 
-**Status:** active  
+**Status:** completed  
 **Target order:** post-MVP follow-on  
 **Agent slot:** AGENT-MANAGED-COPILOT-1  
 **Predecessor:** `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`, `docs/exec-plans/completed/seer-owned-managed-agent-runner.md`  
@@ -81,7 +81,7 @@ The observable outcome should be:
 1. `seer-backend/src/seer_backend/agent_orchestration/runner.py` now executes managed-agent runs through `OntologyCopilotService` in `runtime_mode="managed_agent"` with the managed-agent workflow prompt override instead of using the old one-shot direct OpenAI call path.
 2. Managed-agent runner execution now persists shared copilot transcript activity, including managed-agent tool history, while preserving the same output-event ingestion and shared action lifecycle completion/failure behavior.
 3. Canonical docs/specs now say the managed-agent runner uses the shared copilot runtime with a separate managed-agent prompt plus restricted `load_skill` / `load_action` policy instead of a prompt-only loop.
-4. The active plan is ready to archive after the final validation and index cleanup in this phase.
+4. The plan was archived to `docs/exec-plans/completed/managed-agent-copilot-runtime-and-prompt-split.md` after the final validation and index cleanup in this phase.
 5. Phase 3 validation passed:
    - `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src/seer_backend/ai src/seer_backend/agent_orchestration tests/test_ai_phase5.py tests/test_agent_orchestration_phase3.py tests/test_managed_agent_runner.py` (`All checks passed!`)
    - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ai_phase5.py tests/test_agent_orchestration_phase3.py tests/test_managed_agent_runner.py tests/test_agent_orchestration_phase4.py` (`43 passed`)
