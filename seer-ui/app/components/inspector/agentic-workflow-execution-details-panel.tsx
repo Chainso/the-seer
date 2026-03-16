@@ -10,6 +10,10 @@ import {
   listAgenticWorkflowMessages,
   streamAgenticWorkflowMessages,
 } from "@/app/lib/api/agentic-workflows";
+import {
+  buildManagedAgentRunHref,
+  managedAgentKeyFromActionUri,
+} from "@/app/lib/managed-agent-routes";
 import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import type {
   AgenticWorkflowActionSummary,
@@ -251,12 +255,12 @@ export function AgenticWorkflowExecutionDetailsPanel({
   executionId,
   backHref: backHrefOverride,
   backLabel = "Back to Runs",
-  buildExecutionHref,
+  useNestedManagedAgentRunRoutes = false,
 }: {
   executionId: string;
   backHref?: string;
   backLabel?: string;
-  buildExecutionHref?: (action: AgenticWorkflowActionSummary) => string | undefined;
+  useNestedManagedAgentRunRoutes?: boolean;
 }) {
   const searchParams = useSearchParams();
   const ontologyDisplay = useOntologyDisplay();
@@ -372,8 +376,15 @@ export function AgenticWorkflowExecutionDetailsPanel({
       : `/inspector/managed-agents/${targetExecutionId}`;
   const backHref = backHrefOverride || fallbackBackHref;
   const buildExecutionHrefForAction = (action: AgenticWorkflowActionSummary) => {
-    if (buildExecutionHref) {
-      return buildExecutionHref(action);
+    if (useNestedManagedAgentRunRoutes) {
+      if (action.action_kind !== "agentic_workflow") {
+        return undefined;
+      }
+      const relatedManagedAgentKey = managedAgentKeyFromActionUri(action.action_uri);
+      if (!relatedManagedAgentKey) {
+        return undefined;
+      }
+      return buildManagedAgentRunHref(relatedManagedAgentKey, action.action_id);
     }
     return action.action_kind === "agentic_workflow"
       ? legacyBuildExecutionHref(action.action_id)

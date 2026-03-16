@@ -42,7 +42,7 @@ test("managed-agent inspector surfaces expose agent-first list, detail, editor, 
   assert.match(runsTable, /Showing runs for/);
   assert.match(runsTable, /Open/);
   assert.match(detailsPanel, /backLabel = "Back to Runs"/);
-  assert.match(detailsPanel, /buildExecutionHref/);
+  assert.match(detailsPanel, /useNestedManagedAgentRunRoutes/);
   assert.match(nav, /name:\s*'Managed Agents'/);
   assert.match(nav, /href:\s*'\/inspector\/managed-agents'/);
 });
