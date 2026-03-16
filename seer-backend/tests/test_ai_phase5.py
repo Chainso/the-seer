@@ -8,13 +8,17 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
 import seer_backend.ai.gateway as ai_gateway
+from seer_backend.actions.repository import InMemoryActionsRepository
+from seer_backend.actions.service import ActionsService
 from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
 from seer_backend.ai.gateway import GuidedInvestigationRequest
 from seer_backend.ai.ontology_copilot import (
+    CopilotActionExecutionContext,
     CopilotAnswerFinalEvent,
     CopilotAnswerStreamEvent,
     CopilotAssistantDeltaEvent,
@@ -45,6 +49,7 @@ from seer_backend.ontology.models import (
     CopilotToolCall,
     CopilotToolResult,
     CurrentReleasePointer,
+    OntologyCurrentResponse,
     OntologySparqlQueryResponse,
 )
 
@@ -57,6 +62,7 @@ ASSISTANT_SKILLS_ROOT = (
     / "assistant_skills"
 )
 _ORDER_URI = "urn:seer:test:order"
+_CHILD_ACTION_URI = "urn:seer:test:action.email_customer"
 
 
 def _to_uri_identifier(value: str) -> str:
@@ -258,6 +264,38 @@ class _SkillAwareOntologyService:
         )
 
 
+class _ManagedAgentActionOntologyService(_SkillAwareOntologyService):
+    async def current(self) -> OntologyCurrentResponse:
+        return OntologyCurrentResponse(
+            release_id="phase5-test-release",
+            current_graph_iri="urn:seer:test:graph",
+            meta_graph_iri="urn:seer:test:meta",
+            updated_at=datetime.now(tz=UTC),
+        )
+
+    async def run_read_only_query(self, query: str) -> OntologySparqlQueryResponse:
+        if _CHILD_ACTION_URI in query and "prophet:acceptsInput" in query:
+            return OntologySparqlQueryResponse(
+                query_type="SELECT",
+                bindings=[
+                    {
+                        "actionType": "urn:seer:test:Action",
+                        "actionKind": "action",
+                        "actionLabel": "Email customer",
+                        "input": "urn:seer:test:action.email_customer:input",
+                        "property": "urn:seer:test:action.email_customer:input#customer_id",
+                        "fieldKey": "customer_id",
+                        "minCardinality": "1",
+                        "maxCardinality": "1",
+                        "valueType": "http://prophet.platform/standard-types#string",
+                        "valueTypeKind": "http://prophet.platform/ontology#BaseType",
+                    }
+                ],
+                graphs=["urn:seer:test:graph"],
+            )
+        return await super().run_read_only_query(query)
+
+
 class _LoadSkillThenAnswerRuntime(CopilotModelRuntime):
     def __init__(self) -> None:
         self.calls = 0
@@ -407,6 +445,88 @@ class _CaptureMessagesRuntime(CopilotModelRuntime):
         return CopilotStructuredOutput(
             mode="direct_answer",
             answer="Captured messages.",
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _LoadDisallowedSkillRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        del messages
+        self.calls += 1
+        assert tools is not None
+        if self.calls == 1:
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Trying to load process mining.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="load_skill",
+                    skill_name="process-mining",
+                    call_id="call_disallowed_skill_1",
+                ),
+            )
+        assert self.calls == 2
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="The disallowed skill stayed blocked.",
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _ManagedAgentLoadActionRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        self.calls += 1
+        assert tools is not None
+        tool_names = {tool["function"]["name"] for tool in tools}
+
+        if self.calls == 1:
+            assert "load_action" in tool_names
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Loading the email action.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="load_action",
+                    action_uri=_CHILD_ACTION_URI,
+                    call_id="call_load_action_1",
+                ),
+            )
+
+        loaded_tool_name = next(
+            name for name in tool_names if name.startswith("invoke_action__")
+        )
+        if self.calls == 2:
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Submitting the child action.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool=loaded_tool_name,
+                    arguments={"customer_id": "C-100"},
+                    call_id="call_loaded_action_1",
+                ),
+            )
+
+        assert self.calls == 3
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="Loaded and submitted the child action.",
             evidence=[],
             tool_call=None,
         )
@@ -925,6 +1045,107 @@ def test_ontology_copilot_service_allows_workflow_prompt_override() -> None:
         "You are Seer's managed-agent execution copilot." in message
         for message in system_messages
     )
+
+
+def test_managed_agent_mode_limits_visible_skill_catalog() -> None:
+    runtime = _CaptureMessagesRuntime()
+    copilot = OntologyCopilotService(
+        _SkillAwareOntologyService(),
+        model_runtime=runtime,
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+
+    response = asyncio.run(
+        copilot.answer(
+            "Inspect the managed-agent skill catalog.",
+            conversation=[],
+            runtime_mode="managed_agent",
+        )
+    )
+
+    assert response.answer == "Captured messages."
+    assert runtime.last_messages is not None
+    skill_catalog_message = next(
+        str(message["content"])
+        for message in runtime.last_messages
+        if message.get("role") == "system"
+        and "Available managed-agent skills:" in str(message.get("content"))
+    )
+    assert "deep-ontology" in skill_catalog_message
+    assert "object-store" in skill_catalog_message
+    assert "object-history" in skill_catalog_message
+    assert "process-mining" not in skill_catalog_message
+    assert "root-cause" not in skill_catalog_message
+
+
+def test_managed_agent_mode_rejects_disallowed_skill_loads() -> None:
+    copilot = OntologyCopilotService(
+        _SkillAwareOntologyService(),
+        model_runtime=_LoadDisallowedSkillRuntime(),
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+
+    response = asyncio.run(
+        copilot.answer(
+            "Try to load process mining.",
+            conversation=[],
+            runtime_mode="managed_agent",
+        )
+    )
+
+    assert response.answer == "The disallowed skill stayed blocked."
+    assert response.tool_result is not None
+    assert response.tool_result.tool == "load_skill"
+    assert "not available in this runtime" in (response.tool_result.error or "")
+
+
+def test_managed_agent_mode_load_action_registers_callable_tool_and_submits_child_action() -> None:
+    repository = InMemoryActionsRepository()
+    actions_service = ActionsService(repository=repository)
+    parent_execution_id = uuid4()
+    copilot = OntologyCopilotService(
+        _ManagedAgentActionOntologyService(),
+        model_runtime=_ManagedAgentLoadActionRuntime(),
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+
+    response = asyncio.run(
+        copilot.answer(
+            "Load and invoke the customer email action.",
+            conversation=[],
+            runtime_mode="managed_agent",
+            action_runtime=actions_service,
+            action_execution_context=CopilotActionExecutionContext(
+                user_id="managed-agent-user",
+                parent_execution_id=parent_execution_id,
+            ),
+        )
+    )
+
+    assert response.answer == "Loaded and submitted the child action."
+    assert response.tool_result is not None
+    assert response.tool_result.tool.startswith("invoke_action__")
+    submitted = response.tool_result.result
+    assert isinstance(submitted, dict)
+    assert submitted["action_uri"] == _CHILD_ACTION_URI
+    assert submitted["parent_execution_id"] == str(parent_execution_id)
+    assert submitted["status"] == "queued"
+    child_actions = asyncio.run(
+        actions_service.list_child_actions(parent_execution_id=parent_execution_id)
+    )
+    assert len(child_actions) == 1
+    assert child_actions[0].action_uri == _CHILD_ACTION_URI
+    assert child_actions[0].input_payload == {"customer_id": "C-100"}
+    tool_messages = [
+        message
+        for message in response.completion_messages_delta
+        if message.get("role") == "tool"
+    ]
+    assert len(tool_messages) == 2
+    load_action_result = json.loads(tool_messages[0]["content"])
+    assert load_action_result["tool"] == "load_action"
+    assert load_action_result["action_uri"] == _CHILD_ACTION_URI
+    assert load_action_result["loaded_action_tool_name"].startswith("invoke_action__")
 
 
 def test_ai_workbench_chat_streams_investigation_answer_and_linked_surfaces() -> None:

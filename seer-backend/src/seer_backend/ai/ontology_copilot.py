@@ -9,14 +9,23 @@ import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
+from uuid import UUID
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
 
+from seer_backend.actions.errors import (
+    ActionDependencyUnavailableError,
+    ActionValidationError,
+)
+from seer_backend.actions.models import ActionKind
+from seer_backend.actions.service import (
+    ResolvedActionContract,
+    action_contract_parameters_schema,
+)
 from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
 from seer_backend.ai.skills import (
     AssistantSkill,
     AssistantSkillError,
-    AssistantSkillNotFoundError,
     AssistantSkillRegistry,
 )
 from seer_backend.ontology.errors import (
@@ -43,6 +52,9 @@ _ONTOLOGY_INDEX_CACHE_KEY_EMPTY_RELEASE = "__none__"
 _OPENAI_TRANSIENT_MAX_RETRIES = 1
 _OPENAI_RETRY_BACKOFF_SECONDS = 0.2
 _TOOL_CALL_ID_MAX_LENGTH = 120
+_MANAGED_AGENT_VISIBLE_SKILLS = frozenset(
+    {"deep-ontology", "object-store", "object-history"}
+)
 
 _PROPHET_PREFIX = "prophet"
 _STD_PREFIX = "std"
@@ -331,6 +343,28 @@ _LOAD_SKILL_TOOL_SCHEMA = {
     },
 }
 
+_LOAD_ACTION_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "load_action",
+        "description": (
+            "Load one ontology-defined executable action by action URI so it becomes "
+            "available as a callable tool in the current managed-agent execution."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "action_uri": {
+                    "type": "string",
+                    "description": "Exact ontology action URI to load as a callable tool.",
+                }
+            },
+            "required": ["action_uri"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 _CREATE_ONTOLOGY_GRAPH_ARTIFACT_TOOL_SCHEMA = {
     "type": "function",
     "function": {
@@ -485,6 +519,14 @@ CopilotAnswerStreamEvent = (
 )
 
 
+@dataclass(slots=True, frozen=True)
+class LoadedActionTool:
+    tool_name: str
+    action_uri: str
+    action_label: str
+    parameters_schema: dict[str, Any]
+
+
 class CopilotModelRuntime(Protocol):
     """Abstract runtime for model completion in tests and production."""
 
@@ -493,6 +535,34 @@ class CopilotModelRuntime(Protocol):
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> CopilotStructuredOutput: ...
+
+
+class CopilotActionRuntime(Protocol):
+    async def resolve_action_contract(
+        self,
+        *,
+        ontology_service: Any,
+        action_uri: str,
+    ) -> ResolvedActionContract: ...
+
+    async def submit_action(
+        self,
+        *,
+        ontology_service: Any,
+        user_id: str,
+        action_uri: str,
+        payload: dict[str, Any],
+        idempotency_key: str | None = None,
+        priority: int | None = None,
+        parent_execution_id: UUID | None = None,
+    ) -> Any: ...
+
+
+@dataclass(slots=True, frozen=True)
+class CopilotActionExecutionContext:
+    user_id: str
+    parent_execution_id: UUID | None = None
+    priority: int | None = None
 
 
 class OpenAiChatCompletionsRuntime:
@@ -587,6 +657,8 @@ class OntologyCopilotService:
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, Any]] | None = None,
         assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+        action_runtime: CopilotActionRuntime | None = None,
+        action_execution_context: CopilotActionExecutionContext | None = None,
         runtime_mode: CopilotRuntimeMode = "assistant",
         workflow_system_prompt_override: str | None = None,
     ) -> CopilotChatResponse:
@@ -595,6 +667,8 @@ class OntologyCopilotService:
             conversation=conversation,
             completion_conversation=completion_conversation,
             assistant_tool_adapter=assistant_tool_adapter,
+            action_runtime=action_runtime,
+            action_execution_context=action_execution_context,
             runtime_mode=runtime_mode,
             workflow_system_prompt_override=workflow_system_prompt_override,
         ):
@@ -608,6 +682,8 @@ class OntologyCopilotService:
         conversation: list[CopilotConversationMessage] | None = None,
         completion_conversation: list[dict[str, Any]] | None = None,
         assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+        action_runtime: CopilotActionRuntime | None = None,
+        action_execution_context: CopilotActionExecutionContext | None = None,
         runtime_mode: CopilotRuntimeMode = "assistant",
         workflow_system_prompt_override: str | None = None,
     ) -> AsyncIterator[CopilotAnswerStreamEvent]:
@@ -619,7 +695,7 @@ class OntologyCopilotService:
         ontology_index_markdown = await self._build_ontology_index_markdown(
             current_release_id=current.release_id
         )
-        available_skills = self._discover_available_skills()
+        available_skills = self._discover_available_skills(runtime_mode=runtime_mode)
         conversation_messages = _normalize_completion_conversation(completion_conversation)
         if conversation_messages is None:
             conversation_messages = [
@@ -649,6 +725,9 @@ class OntologyCopilotService:
                 tools=_tool_schemas(
                     conversation_messages=messages,
                     assistant_tool_adapter=assistant_tool_adapter,
+                    action_runtime=action_runtime,
+                    available_skills=available_skills,
+                    runtime_mode=runtime_mode,
                 ),
             )
             answer_text = model_output.answer
@@ -695,7 +774,11 @@ class OntologyCopilotService:
                     self._execute_tool_call(
                         resolved_call,
                         assistant_tool_adapter=assistant_tool_adapter,
+                        action_runtime=action_runtime,
+                        action_execution_context=action_execution_context,
                         conversation_messages=messages,
+                        available_skills=available_skills,
+                        runtime_mode=runtime_mode,
                     )
                     for resolved_call in resolved_calls
                 )
@@ -809,21 +892,44 @@ class OntologyCopilotService:
         self._ontology_index_cache[cache_key] = markdown
         return markdown
 
-    def _discover_available_skills(self) -> dict[str, AssistantSkill]:
+    def _discover_available_skills(
+        self,
+        *,
+        runtime_mode: CopilotRuntimeMode,
+    ) -> dict[str, AssistantSkill]:
         try:
-            return self._skill_registry.discover()
+            discovered = self._skill_registry.discover()
         except AssistantSkillError:
             return {}
+        if runtime_mode != "managed_agent":
+            return discovered
+        return {
+            name: skill
+            for name, skill in discovered.items()
+            if name in _MANAGED_AGENT_VISIBLE_SKILLS
+        }
 
     async def _execute_tool_call(
         self,
         tool_call: CopilotToolCall,
         *,
         assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+        action_runtime: CopilotActionRuntime | None = None,
+        action_execution_context: CopilotActionExecutionContext | None = None,
         conversation_messages: list[dict[str, Any]] | None = None,
+        available_skills: dict[str, AssistantSkill] | None = None,
+        runtime_mode: CopilotRuntimeMode = "assistant",
     ) -> CopilotToolResult:
         if tool_call.tool == "load_skill":
-            return self._execute_load_skill_call(tool_call)
+            return self._execute_load_skill_call(
+                tool_call,
+                available_skills=available_skills or {},
+            )
+        if tool_call.tool == "load_action":
+            return await self._execute_load_action_call(
+                tool_call,
+                action_runtime=action_runtime,
+            )
         if tool_call.tool == "create_ontology_graph_artifact":
             return _execute_create_ontology_graph_artifact_call(tool_call)
         if tool_call.tool in {
@@ -834,6 +940,15 @@ class OntologyCopilotService:
             return _execute_canvas_tool_call(
                 tool_call,
                 conversation_messages=conversation_messages or [],
+            )
+        loaded_action_tools = _loaded_action_tools(conversation_messages or [])
+        loaded_action_tool = loaded_action_tools.get(tool_call.tool)
+        if loaded_action_tool is not None:
+            return await self._execute_loaded_action_tool_call(
+                tool_call,
+                action_runtime=action_runtime,
+                action_execution_context=action_execution_context,
+                loaded_action_tool=loaded_action_tool,
             )
         if tool_call.tool != "sparql_read_only_query":
             if assistant_tool_adapter is None:
@@ -879,7 +994,12 @@ class OntologyCopilotService:
             row_limit=self._query_row_limit,
         )
 
-    def _execute_load_skill_call(self, tool_call: CopilotToolCall) -> CopilotToolResult:
+    def _execute_load_skill_call(
+        self,
+        tool_call: CopilotToolCall,
+        *,
+        available_skills: dict[str, AssistantSkill],
+    ) -> CopilotToolResult:
         skill_name = (tool_call.skill_name or "").strip()
         if not skill_name:
             return CopilotToolResult(
@@ -888,19 +1008,15 @@ class OntologyCopilotService:
                 error="tool execution failed: missing skill_name",
             )
 
-        try:
-            skill = self._skill_registry.get(skill_name)
-        except AssistantSkillNotFoundError as exc:
+        skill = available_skills.get(skill_name)
+        if skill is None:
             return CopilotToolResult(
                 tool="load_skill",
                 skill_name=skill_name,
-                error=f"tool execution failed: {exc}",
-            )
-        except AssistantSkillError as exc:
-            return CopilotToolResult(
-                tool="load_skill",
-                skill_name=skill_name,
-                error=f"tool execution failed: {exc}",
+                error=(
+                    f"tool execution failed: skill {skill_name!r} is not available "
+                    "in this runtime"
+                ),
             )
 
         return CopilotToolResult(
@@ -910,6 +1026,135 @@ class OntologyCopilotService:
             instructions_markdown=skill.instructions_markdown,
             allowed_tools=list(skill.allowed_tools),
             loaded_skill_names=[skill.name],
+            row_count=1,
+            truncated=False,
+        )
+
+    async def _execute_load_action_call(
+        self,
+        tool_call: CopilotToolCall,
+        *,
+        action_runtime: CopilotActionRuntime | None,
+    ) -> CopilotToolResult:
+        if action_runtime is None:
+            return CopilotToolResult(
+                tool="load_action",
+                action_uri=tool_call.action_uri,
+                error="tool execution failed: action runtime is unavailable for this request",
+            )
+
+        action_uri = (tool_call.action_uri or "").strip()
+        if not action_uri:
+            return CopilotToolResult(
+                tool="load_action",
+                action_uri=None,
+                error="tool execution failed: missing action_uri",
+            )
+
+        try:
+            contract = await action_runtime.resolve_action_contract(
+                ontology_service=self._ontology_service,
+                action_uri=action_uri,
+            )
+        except (ActionValidationError, ActionDependencyUnavailableError) as exc:
+            return CopilotToolResult(
+                tool="load_action",
+                action_uri=action_uri,
+                error=f"tool execution failed: {exc}",
+            )
+
+        if contract.action_kind is not ActionKind.ACTION:
+            return CopilotToolResult(
+                tool="load_action",
+                action_uri=action_uri,
+                error=(
+                    "tool execution failed: load_action only supports ordinary executable "
+                    "actions and does not load managed-agent actions"
+                ),
+            )
+
+        tool_name = _loaded_action_tool_name(
+            action_uri=contract.action_uri,
+            action_label=contract.action_label,
+        )
+        parameters_schema = action_contract_parameters_schema(contract)
+        return CopilotToolResult(
+            tool="load_action",
+            action_uri=contract.action_uri,
+            action_label=contract.action_label,
+            action_kind=contract.action_kind.value,
+            loaded_action_tool_name=tool_name,
+            loaded_action_parameters_schema=parameters_schema,
+            result={
+                "action_uri": contract.action_uri,
+                "action_label": contract.action_label,
+                "action_kind": contract.action_kind.value,
+                "tool_name": tool_name,
+                "parameters_schema": parameters_schema,
+                "ontology_release_id": contract.ontology_release_id,
+            },
+            summary=f"Loaded action {contract.action_label} as tool {tool_name}.",
+            row_count=1,
+            truncated=False,
+        )
+
+    async def _execute_loaded_action_tool_call(
+        self,
+        tool_call: CopilotToolCall,
+        *,
+        action_runtime: CopilotActionRuntime | None,
+        action_execution_context: CopilotActionExecutionContext | None,
+        loaded_action_tool: LoadedActionTool,
+    ) -> CopilotToolResult:
+        if action_runtime is None or action_execution_context is None:
+            return CopilotToolResult(
+                tool=tool_call.tool,
+                action_uri=loaded_action_tool.action_uri,
+                error=(
+                    "tool execution failed: action submission context is unavailable "
+                    "for this request"
+                ),
+            )
+
+        try:
+            submit_result = await action_runtime.submit_action(
+                ontology_service=self._ontology_service,
+                user_id=action_execution_context.user_id,
+                action_uri=loaded_action_tool.action_uri,
+                payload=dict(tool_call.arguments),
+                priority=action_execution_context.priority,
+                parent_execution_id=action_execution_context.parent_execution_id,
+            )
+        except (ActionValidationError, ActionDependencyUnavailableError) as exc:
+            return CopilotToolResult(
+                tool=tool_call.tool,
+                action_uri=loaded_action_tool.action_uri,
+                error=f"tool execution failed: {exc}",
+            )
+
+        action = submit_result.action
+        return CopilotToolResult(
+            tool=tool_call.tool,
+            tool_permission="actions.submit",
+            action_uri=loaded_action_tool.action_uri,
+            action_label=loaded_action_tool.action_label,
+            action_kind=ActionKind(action.action_kind).value,
+            result={
+                "action_id": str(action.action_id),
+                "action_uri": action.action_uri,
+                "action_kind": action.action_kind.value,
+                "status": action.status.value,
+                "parent_execution_id": (
+                    str(action.parent_execution_id)
+                    if action.parent_execution_id is not None
+                    else None
+                ),
+                "dedupe_hit": submit_result.dedupe_hit,
+            },
+            summary=(
+                f"Submitted child action {loaded_action_tool.action_label} as "
+                f"{action.action_id}."
+            ),
             row_count=1,
             truncated=False,
         )
@@ -1014,6 +1259,7 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
         parsed_arguments = _parse_tool_arguments(arguments)
         query: str | None = None
         skill_name: str | None = None
+        action_uri: str | None = None
         if function_name == "sparql_read_only_query":
             query = _extract_tool_query_from_arguments(arguments)
             if query is None:
@@ -1021,6 +1267,10 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
         elif function_name == "load_skill":
             skill_name = _extract_tool_skill_name_from_arguments(arguments)
             if skill_name is None:
+                continue
+        elif function_name == "load_action":
+            action_uri = _extract_tool_action_uri_from_arguments(arguments)
+            if action_uri is None:
                 continue
 
         call_id = getattr(tool, "id", None)
@@ -1041,6 +1291,7 @@ def _extract_tool_calls_from_message(message: Any) -> list[CopilotToolCall]:
                 arguments=parsed_arguments,
                 query=query,
                 skill_name=skill_name,
+                action_uri=action_uri,
                 call_id=call_id,
                 raw_tool_call=raw_tool_call,
             )
@@ -1090,6 +1341,14 @@ def _extract_tool_skill_name_from_arguments(arguments: Any) -> str | None:
     skill_name = parsed.get("skill_name")
     if isinstance(skill_name, str) and skill_name.strip():
         return skill_name.strip()
+    return None
+
+
+def _extract_tool_action_uri_from_arguments(arguments: Any) -> str | None:
+    parsed = _parse_tool_arguments(arguments)
+    action_uri = parsed.get("action_uri")
+    if isinstance(action_uri, str) and action_uri.strip():
+        return action_uri.strip()
     return None
 
 
@@ -1187,7 +1446,13 @@ def _build_messages(
             "content": f"Current ontology release: {release_text}",
         },
         {"role": "system", "content": ontology_index_markdown},
-        {"role": "system", "content": _build_skill_catalog_markdown(available_skills)},
+        {
+            "role": "system",
+            "content": _build_skill_catalog_markdown(
+                available_skills,
+                runtime_mode=runtime_mode,
+            ),
+        },
     ]
     for message in conversation_messages:
         messages.append(message)
@@ -1246,26 +1511,51 @@ def _tool_schemas(
     *,
     conversation_messages: list[dict[str, Any]],
     assistant_tool_adapter: AssistantDomainToolAdapter | None = None,
+    action_runtime: CopilotActionRuntime | None = None,
+    available_skills: dict[str, AssistantSkill],
+    runtime_mode: CopilotRuntimeMode,
 ) -> list[dict[str, Any]]:
     schemas = [
         _SPARQL_READ_ONLY_TOOL_SCHEMA,
         _LOAD_SKILL_TOOL_SCHEMA,
-        _CREATE_ONTOLOGY_GRAPH_ARTIFACT_TOOL_SCHEMA,
-        _PRESENT_CANVAS_ARTIFACT_TOOL_SCHEMA,
-        _UPDATE_CANVAS_ARTIFACT_TOOL_SCHEMA,
-        _CLOSE_CANVAS_TOOL_SCHEMA,
     ]
+    if runtime_mode == "managed_agent":
+        if action_runtime is not None:
+            schemas.append(_LOAD_ACTION_TOOL_SCHEMA)
+    else:
+        schemas.extend(
+            [
+                _CREATE_ONTOLOGY_GRAPH_ARTIFACT_TOOL_SCHEMA,
+                _PRESENT_CANVAS_ARTIFACT_TOOL_SCHEMA,
+                _UPDATE_CANVAS_ARTIFACT_TOOL_SCHEMA,
+                _CLOSE_CANVAS_TOOL_SCHEMA,
+            ]
+        )
     if assistant_tool_adapter is None:
-        return schemas
+        enabled_permissions: set[str] = set()
+    else:
+        enabled_permissions = _loaded_skill_tool_permissions(conversation_messages)
+        enabled_permissions &= _runtime_allowed_tool_permissions(
+            available_skills=available_skills
+        )
+        schemas.extend(assistant_tool_adapter.tool_schemas(enabled_permissions))
 
-    enabled_permissions = _loaded_skill_tool_permissions(conversation_messages)
-    schemas.extend(assistant_tool_adapter.tool_schemas(enabled_permissions))
+    if runtime_mode == "managed_agent":
+        schemas.extend(_loaded_action_tool_schemas(conversation_messages))
     return schemas
 
 
-def _build_skill_catalog_markdown(available_skills: dict[str, AssistantSkill]) -> str:
+def _build_skill_catalog_markdown(
+    available_skills: dict[str, AssistantSkill],
+    *,
+    runtime_mode: CopilotRuntimeMode,
+) -> str:
     lines = [
-        "Available assistant skills:",
+        (
+            "Available managed-agent skills:"
+            if runtime_mode == "managed_agent"
+            else "Available assistant skills:"
+        ),
         (
             "Use `load_skill` with the exact skill name when the user's request "
             "clearly matches one skill."
@@ -1279,6 +1569,85 @@ def _build_skill_catalog_markdown(available_skills: dict[str, AssistantSkill]) -
         description = skill.description or "No description provided."
         lines.append(f"- {skill.name}: {description}")
     return "\n".join(lines)
+
+
+def _runtime_allowed_tool_permissions(
+    *,
+    available_skills: dict[str, AssistantSkill],
+) -> set[str]:
+    allowed: set[str] = set()
+    for skill in available_skills.values():
+        allowed.update(skill.allowed_tools)
+    return allowed
+
+
+def _loaded_action_tool_schemas(
+    conversation_messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool.tool_name,
+                "description": (
+                    f"Invoke ontology action {tool.action_label} "
+                    f"({tool.action_uri}) through Seer's shared action control plane."
+                ),
+                "parameters": tool.parameters_schema,
+            },
+        }
+        for tool in _loaded_action_tools(conversation_messages).values()
+    ]
+
+
+def _loaded_action_tools(
+    conversation_messages: list[dict[str, Any]],
+) -> dict[str, LoadedActionTool]:
+    loaded: dict[str, LoadedActionTool] = {}
+    for message in conversation_messages:
+        if not isinstance(message, dict) or message.get("role") != "tool":
+            continue
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(parsed, dict):
+            continue
+        if parsed.get("tool") != "load_action" or parsed.get("error"):
+            continue
+        tool_name = parsed.get("loaded_action_tool_name")
+        action_uri = parsed.get("action_uri")
+        action_label = parsed.get("action_label")
+        parameters_schema = parsed.get("loaded_action_parameters_schema")
+        if not (
+            isinstance(tool_name, str)
+            and tool_name
+            and isinstance(action_uri, str)
+            and action_uri
+            and isinstance(action_label, str)
+            and action_label
+            and isinstance(parameters_schema, dict)
+        ):
+            continue
+        loaded[tool_name] = LoadedActionTool(
+            tool_name=tool_name,
+            action_uri=action_uri,
+            action_label=action_label,
+            parameters_schema=parameters_schema,
+        )
+    return loaded
+
+
+def _loaded_action_tool_name(*, action_uri: str, action_label: str) -> str:
+    label_token = re.sub(r"[^a-zA-Z0-9]+", "_", action_label).strip("_").lower()
+    if not label_token:
+        label_token = "action"
+    digest = hashlib.sha256(action_uri.encode("utf-8")).hexdigest()[:10]
+    token = f"invoke_action__{label_token}__{digest}"
+    return token[:64]
 
 
 def _loaded_skill_tool_permissions(
@@ -1799,6 +2168,8 @@ def _build_tool_result_messages(
 def _tool_call_arguments(tool_call: CopilotToolCall) -> dict[str, Any]:
     if tool_call.tool == "load_skill":
         return {"skill_name": tool_call.skill_name}
+    if tool_call.tool == "load_action":
+        return {"action_uri": tool_call.action_uri}
     if tool_call.tool == "sparql_read_only_query":
         return {"query": tool_call.query}
     return dict(tool_call.arguments)
@@ -1812,6 +2183,14 @@ def _tool_status_started_event(tool_call: CopilotToolCall) -> CopilotToolStatusE
             tool=tool_call.tool,
             call_id=tool_call.call_id or "call_unknown",
             summary=f"Loading assistant skill {skill_name}.",
+        )
+    if tool_call.tool == "load_action":
+        action_uri = tool_call.action_uri or "unknown"
+        return CopilotToolStatusEvent(
+            status="started",
+            tool=tool_call.tool,
+            call_id=tool_call.call_id or "call_unknown",
+            summary=f"Loading ontology action {action_uri}.",
         )
     if tool_call.tool == "sparql_read_only_query":
         return CopilotToolStatusEvent(
@@ -1873,6 +2252,12 @@ def _tool_status_summary(tool_result: CopilotToolResult) -> str:
             else "no additional tools"
         )
         return f"Loaded assistant skill {skill_name}. Enabled {enabled}."
+    if tool_result.tool == "load_action":
+        if tool_result.error:
+            return f"Ontology action load failed: {tool_result.error}"
+        action_label = tool_result.action_label or tool_result.action_uri or "unknown"
+        tool_name = tool_result.loaded_action_tool_name or "unknown"
+        return f"Loaded ontology action {action_label} as tool {tool_name}."
     if tool_result.tool == "sparql_read_only_query" and tool_result.error:
         return f"Read-only SPARQL query failed: {tool_result.error}"
     if tool_result.tool == "sparql_read_only_query" and tool_result.query_type == "ASK":

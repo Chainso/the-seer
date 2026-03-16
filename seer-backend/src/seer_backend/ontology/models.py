@@ -135,6 +135,7 @@ class CopilotToolCall(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     query: str | None = Field(default=None, max_length=20000)
     skill_name: str | None = Field(default=None, max_length=160)
+    action_uri: str | None = Field(default=None, max_length=2000)
     call_id: str | None = None
     raw_tool_call: dict[str, Any] | None = Field(default=None, exclude=True)
 
@@ -146,6 +147,9 @@ class CopilotToolCall(BaseModel):
         elif self.tool == "load_skill":
             if not self.skill_name or not self.skill_name.strip():
                 raise ValueError("skill_name is required for load_skill")
+        elif self.tool == "load_action":
+            if not self.action_uri or not self.action_uri.strip():
+                raise ValueError("action_uri is required for load_action")
         return self
 
 
@@ -157,9 +161,14 @@ class CopilotToolResult(BaseModel):
     query: str | None = None
     skill_name: str | None = None
     skill_description: str | None = None
+    action_uri: str | None = None
+    action_label: str | None = None
+    action_kind: str | None = None
     instructions_markdown: str | None = None
     allowed_tools: list[str] = Field(default_factory=list)
     loaded_skill_names: list[str] = Field(default_factory=list)
+    loaded_action_tool_name: str | None = None
+    loaded_action_parameters_schema: dict[str, Any] | None = None
     query_type: Literal["SELECT", "ASK"] | None = None
     variables: list[str] = Field(default_factory=list)
     rows: list[dict[str, str]] = Field(default_factory=list)

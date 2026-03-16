@@ -43,6 +43,7 @@ PREFIX seer: <http://seer.platform/ontology#>
 SELECT DISTINCT
   ?actionType
   ?actionKind
+  ?actionLabel
   ?input
   ?property
   ?fieldKey
@@ -56,6 +57,9 @@ WHERE {{
           prophet:acceptsInput ?input ;
           prophet:producesEvent ?producedEvent .
   ?actionType rdfs:subClassOf* prophet:Action .
+  OPTIONAL {{ ?action prophet:name ?prophetName . }}
+  OPTIONAL {{ ?action rdfs:label ?rdfsLabel . }}
+  BIND(COALESCE(STR(?prophetName), STR(?rdfsLabel), STR(?action)) AS ?actionLabel)
 
   OPTIONAL {{
     VALUES (?actionKind ?kindType) {{
@@ -99,7 +103,7 @@ _FAILURE_CODES = _RETRYABLE_FAILURE_CODES | _TERMINAL_FAILURE_CODES
 
 
 @dataclass(slots=True, frozen=True)
-class _ActionInputFieldContract:
+class ActionInputFieldContract:
     field_key: str
     property_iri: str
     min_cardinality: int | None
@@ -109,13 +113,14 @@ class _ActionInputFieldContract:
 
 
 @dataclass(slots=True, frozen=True)
-class _ResolvedActionContract:
+class ResolvedActionContract:
     ontology_release_id: str
     action_uri: str
+    action_label: str
     input_iri: str
     action_kind: ActionKind
     action_type_iris: tuple[str, ...]
-    fields: tuple[_ActionInputFieldContract, ...]
+    fields: tuple[ActionInputFieldContract, ...]
 
 
 class _OntologyValidationAdapter:
@@ -124,7 +129,7 @@ class _OntologyValidationAdapter:
         *,
         ontology_service: Any,
         action_uri: str,
-    ) -> _ResolvedActionContract:
+    ) -> ResolvedActionContract:
         current = await ontology_service.current()
         if not isinstance(current, OntologyCurrentResponse):
             raise ActionValidationError(
@@ -181,7 +186,8 @@ class _OntologyValidationAdapter:
         input_iri = ""
         action_types: set[str] = set()
         action_kind_tokens: set[str] = set()
-        fields_by_key: dict[str, _ActionInputFieldContract] = {}
+        fields_by_key: dict[str, ActionInputFieldContract] = {}
+        action_label = action_uri
 
         for row in rows:
             row_input = row.get("input", "").strip()
@@ -196,6 +202,10 @@ class _OntologyValidationAdapter:
             if action_kind:
                 action_kind_tokens.add(action_kind)
 
+            row_action_label = row.get("actionLabel", "").strip()
+            if row_action_label and action_label == action_uri:
+                action_label = row_action_label
+
             field_key = row.get("fieldKey", "").strip()
             if not field_key:
                 continue
@@ -205,7 +215,7 @@ class _OntologyValidationAdapter:
             max_cardinality = _parse_optional_int(row.get("maxCardinality"))
             value_type_iri = _normalize_optional_iri(row.get("valueType"))
             value_type_kind = _normalize_optional_iri(row.get("valueTypeKind"))
-            fields_by_key[field_key] = _ActionInputFieldContract(
+            fields_by_key[field_key] = ActionInputFieldContract(
                 field_key=field_key,
                 property_iri=property_iri or f"{input_iri}#{field_key}",
                 min_cardinality=min_cardinality,
@@ -218,9 +228,10 @@ class _OntologyValidationAdapter:
             fields_by_key[key]
             for key in sorted(fields_by_key, key=lambda item: (item.lower(), item))
         )
-        return _ResolvedActionContract(
+        return ResolvedActionContract(
             ontology_release_id=current.release_id,
             action_uri=action_uri,
+            action_label=action_label,
             input_iri=input_iri or action_uri,
             action_kind=_resolve_action_kind(
                 action_kind_tokens=action_kind_tokens,
@@ -456,6 +467,7 @@ class ActionsService:
         payload: Mapping[str, Any],
         idempotency_key: str | None = None,
         priority: int | None = None,
+        parent_execution_id: UUID | None = None,
     ) -> ActionSubmitResult:
         await self.ensure_schema()
         normalized_idempotency_key = _normalize_optional_idempotency_key(idempotency_key)
@@ -479,7 +491,7 @@ class ActionsService:
                 ],
             )
 
-        contract = await self._ontology_validation_adapter.resolve_action_contract(
+        contract = await self.resolve_action_contract(
             ontology_service=ontology_service,
             action_uri=action_uri,
         )
@@ -500,9 +512,22 @@ class ActionsService:
                 validation_contract_hash=_hash_contract(contract),
                 idempotency_key=normalized_idempotency_key,
                 priority=int(priority or 0),
+                parent_execution_id=parent_execution_id,
             )
         )
         return ActionSubmitResult(action=created, dedupe_hit=dedupe_hit)
+
+    async def resolve_action_contract(
+        self,
+        *,
+        ontology_service: Any,
+        action_uri: str,
+    ) -> ResolvedActionContract:
+        await self.ensure_schema()
+        return await self._ontology_validation_adapter.resolve_action_contract(
+            ontology_service=ontology_service,
+            action_uri=action_uri,
+        )
 
 
 class UnavailableActionsService:
@@ -613,8 +638,26 @@ class UnavailableActionsService:
         payload: Mapping[str, Any],
         idempotency_key: str | None = None,
         priority: int | None = None,
+        parent_execution_id: UUID | None = None,
     ) -> ActionSubmitResult:
-        del ontology_service, user_id, action_uri, payload, idempotency_key, priority
+        del (
+            ontology_service,
+            user_id,
+            action_uri,
+            payload,
+            idempotency_key,
+            priority,
+            parent_execution_id,
+        )
+        raise ActionDependencyUnavailableError(self.reason)
+
+    async def resolve_action_contract(
+        self,
+        *,
+        ontology_service: Any,
+        action_uri: str,
+    ) -> ResolvedActionContract:
+        del ontology_service, action_uri
         raise ActionDependencyUnavailableError(self.reason)
 
     async def complete_action(
@@ -707,7 +750,7 @@ def _parse_optional_int(value: str | None) -> int | None:
 def _validate_submit_payload(
     *,
     payload: Mapping[str, Any],
-    contract: _ResolvedActionContract,
+    contract: ResolvedActionContract,
 ) -> list[ActionValidationIssue]:
     issues: list[ActionValidationIssue] = []
     if not contract.fields:
@@ -748,7 +791,7 @@ def _validate_submit_payload(
 
 def _validate_field_value(
     *,
-    field: _ActionInputFieldContract,
+    field: ActionInputFieldContract,
     value: Any,
 ) -> list[ActionValidationIssue]:
     issues: list[ActionValidationIssue] = []
@@ -800,7 +843,7 @@ def _validate_field_value(
     return issues
 
 
-def _expected_field_type(field: _ActionInputFieldContract) -> str | None:
+def _expected_field_type(field: ActionInputFieldContract) -> str | None:
     kind_local_name = _local_name(field.value_type_kind).lower()
     if kind_local_name == "objectreference":
         return "object"
@@ -868,7 +911,7 @@ def _resolve_action_kind(
     )
 
 
-def _hash_contract(contract: _ResolvedActionContract) -> str:
+def _hash_contract(contract: ResolvedActionContract) -> str:
     contract_representation = {
         "action_uri": contract.action_uri,
         "input_iri": contract.input_iri,
@@ -888,3 +931,51 @@ def _hash_contract(contract: _ResolvedActionContract) -> str:
     }
     canonical = dumps(contract_representation, sort_keys=True, separators=(",", ":"))
     return sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def action_contract_parameters_schema(
+    contract: ResolvedActionContract,
+) -> dict[str, Any]:
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for field in contract.fields:
+        properties[field.field_key] = _field_parameters_schema(field)
+        if (field.min_cardinality or 0) >= 1:
+            required.append(field.field_key)
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+        "additionalProperties": False,
+    }
+
+
+def _field_parameters_schema(field: ActionInputFieldContract) -> dict[str, Any]:
+    value_schema = _scalar_parameters_schema(field)
+    if field.max_cardinality is not None and field.max_cardinality > 1:
+        array_schema: dict[str, Any] = {
+            "type": "array",
+            "items": value_schema,
+        }
+        if field.min_cardinality is not None:
+            array_schema["minItems"] = max(field.min_cardinality, 0)
+        array_schema["maxItems"] = field.max_cardinality
+        return array_schema
+    return value_schema
+
+
+def _scalar_parameters_schema(field: ActionInputFieldContract) -> dict[str, Any]:
+    expected_type = _expected_field_type(field)
+    description = f"Ontology value type: {field.value_type_iri or 'unspecified'}."
+    if expected_type is None:
+        return {"description": description}
+    if expected_type == "object":
+        return {
+            "type": "object",
+            "description": description,
+            "additionalProperties": True,
+        }
+    return {
+        "type": expected_type,
+        "description": description,
+    }

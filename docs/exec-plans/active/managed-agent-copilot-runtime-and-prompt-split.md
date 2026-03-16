@@ -26,7 +26,7 @@ The observable outcome should be:
 - [x] 2026-03-16 Re-read canonical docs, managed-agent specs, prior execution plans, and the current runner/copilot implementation to rebuild full context before opening this plan.
 - [x] 2026-03-16 Create this active execution plan and register it in `docs/exec-plans/active/index.md` before any implementation work.
 - [x] 2026-03-16 Phase 1: refactor the shared copilot runtime so `/assistant` and managed-agent execution can share the tool loop while using different prompt/workflow policies.
-- [ ] Phase 2: implement managed-agent runtime tool policy, including restricted visible skills and a production `load_action` tool.
+- [x] 2026-03-16 Phase 2: implement managed-agent runtime tool policy, including restricted visible skills and a production `load_action` tool.
 - [ ] Phase 3: wire the managed-agent runner onto the shared copilot path, extend regression coverage, ratify docs/specs, and archive the plan.
 
 ## Surprises & Discoveries
@@ -37,6 +37,7 @@ The observable outcome should be:
 - 2026-03-16: `load_action` is still documentation/test intent rather than a production runtime tool in `seer-backend/src`. The earlier plan described it in detail, but the current codebase does not implement it yet.
 - 2026-03-16: There is already a dirty worktree in `seer-backend/src/seer_backend/ai/ontology_copilot.py` and `seer-backend/src/seer_backend/ontology/service.py`. This plan must avoid assuming those changes belong to this track and must not revert them.
 - 2026-03-16: `OntologyCopilotService.answer_stream(...)` now assumes the ontology service exposes `copilot_seer_data_turtle()`. The `_SkillAwareOntologyService` test double in `seer-backend/tests/test_ai_phase5.py` did not implement it, which initially broke both the new prompt tests and existing assistant-tool-flow tests until the stub was updated.
+- 2026-03-16: The shared action-validation path requires `ontology_service.current()` to return `OntologyCurrentResponse`, not just `CurrentReleasePointer`. The managed-agent `load_action` test stub initially returned the narrower pointer shape, which caused `load_action` to fail resolution until the stub was updated.
 
 ## Decision Log
 
@@ -45,6 +46,7 @@ The observable outcome should be:
 - 2026-03-16, Codex: Managed-agent runtime must expose only `deep-ontology`, `object-store`, and `object-history` through `load_skill`, and must not expose `process-mining` or `root-cause`. Rationale: this matches the original runtime plan and keeps managed-agent runtime narrower than the general assistant.
 - 2026-03-16, Codex: `load_action` should be implemented as a production runtime tool on the shared copilot path rather than as bespoke runner logic. Rationale: ontology-defined executable actions belong in the shared tool loop so transcript history and runtime policy remain coherent.
 - 2026-03-16, Codex: Phase 1 should extend `OntologyCopilotService` with an explicit runtime mode plus optional workflow-prompt override instead of introducing a second copilot class. Rationale: this keeps the shared tool loop intact, avoids duplicating orchestration code, and creates a narrow seam for the managed-agent runner to adopt in Phase 3.
+- 2026-03-16, Codex: `load_action` should load only ordinary executable actions, not managed-agent actions. Rationale: Phase 2 is about enabling ontology action invocation from managed-agent runs while preserving a clear boundary between ordinary child actions and Seer-owned managed-agent executions.
 
 ## Outcomes & Retrospective
 
@@ -61,6 +63,16 @@ The observable outcome should be:
 3. `seer-backend/tests/test_ai_phase5.py` now covers assistant default mode, managed-agent mode, and workflow-prompt override behavior.
 4. Phase 1 validation passed:
    - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ai_phase5.py` (`29 passed`)
+
+2026-03-16 Phase 2 delivered state:
+
+1. Managed-agent mode now filters the visible skill catalog down to `deep-ontology`, `object-store`, and `object-history`, and blocks `process-mining` / `root-cause` even if a model attempts to load them explicitly.
+2. The shared copilot path now exposes a production `load_action` built-in for managed-agent mode, persists loaded-action metadata in tool messages, reconstructs dynamic loaded-action tool schemas from transcript history, and submits child actions through `ActionsService` with `parent_execution_id` preserved.
+3. `ActionsService` now exposes reusable action-contract resolution and JSON-schema generation for dynamic action tools, and `submit_action(...)` accepts optional `parent_execution_id` so loaded action tools can preserve execution lineage.
+4. `seer-backend/tests/test_ai_phase5.py` now covers managed-agent skill-catalog filtering, blocked disallowed skill loads, and `load_action` registering a callable tool that enqueues a child action.
+5. Phase 2 validation passed:
+   - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_ai_phase5.py tests/test_agent_orchestration_phase3.py` (`35 passed`)
+   - `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src/seer_backend/actions/service.py src/seer_backend/ai/ontology_copilot.py src/seer_backend/ontology/models.py tests/test_ai_phase5.py` (`All checks passed!`)
 
 ## Context and Orientation
 
@@ -363,7 +375,15 @@ Stay inside shared tooling/runtime/model contracts and targeted tests. Do not mi
 
 **Status**
 
-Pending.
+Completed on 2026-03-16.
+
+**Completion Notes**
+
+Phase 2 kept the shared copilot loop intact and added the managed-agent runtime policy on top of it: runtime-specific skill filtering, disallowed-skill blocking, production `load_action`, transcript-reconstructable loaded action tools, and child action submission with preserved `parent_execution_id`. The Seer-owned runner itself still has not been migrated onto this path.
+
+**Next Starter Context**
+
+Phase 3 should wire `seer-backend/src/seer_backend/agent_orchestration/runner.py` onto the new managed-agent copilot path by passing `runtime_mode="managed_agent"`, the managed-agent workflow prompt override, an `ActionsService` runtime for `load_action`, and an execution context carrying the parent run's `user_id` / `action_id`. The plan-opening edit in `docs/exec-plans/active/index.md` is still controller-owned worktree state and should be handled alongside archive/index cleanup at the end of Phase 3 rather than absorbed into a phase-scoped backend commit.
 
 ## Phase 3
 
