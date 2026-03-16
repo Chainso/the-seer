@@ -10,6 +10,11 @@ import type {
   AgenticWorkflowTranscriptErrorEvent,
   AgenticWorkflowTranscriptMessage,
   AgenticWorkflowTranscriptSnapshotEvent,
+  ManagedAgentApiErrorDetail,
+  ManagedAgentDetail,
+  ManagedAgentEditorCatalog,
+  ManagedAgentListResponse,
+  ManagedAgentUpsertRequest,
 } from '@/app/types/agentic-workflows';
 
 const REGISTERED_AGENTIC_ACTION_QUERY = `
@@ -79,6 +84,95 @@ export async function listRegisteredAgenticActions(): Promise<
     });
   });
   return Array.from(options.values()).sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export interface ManagedAgentRequestError extends Error {
+  status: number;
+  statusText: string;
+  detail: ManagedAgentApiErrorDetail | string | null;
+}
+
+async function fetchManagedAgentApi<T>(
+  endpoint: string,
+  options?: RequestInit
+): Promise<T> {
+  const response = await fetch(getApiUrl(endpoint), {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  });
+
+  if (!response.ok) {
+    let detail: ManagedAgentApiErrorDetail | string | null = null;
+
+    try {
+      const body = await response.json();
+      if (body && typeof body === 'object' && 'detail' in body) {
+        const candidate = body.detail;
+        if (typeof candidate === 'string') {
+          detail = candidate;
+        } else if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+          detail = candidate as ManagedAgentApiErrorDetail;
+        }
+      }
+    } catch {
+      detail = null;
+    }
+
+    const detailMessage =
+      typeof detail === 'string'
+        ? detail
+        : typeof detail?.message === 'string'
+          ? detail.message
+          : '';
+
+    const suffix = detailMessage ? `: ${detailMessage}` : '';
+    const error = new Error(
+      `API error: ${response.status} ${response.statusText}${suffix}`
+    ) as ManagedAgentRequestError;
+    error.status = response.status;
+    error.statusText = response.statusText;
+    error.detail = detail;
+    throw error;
+  }
+
+  return response.json();
+}
+
+export async function listManagedAgents(): Promise<ManagedAgentListResponse> {
+  return fetchApi<ManagedAgentListResponse>('/agentic-workflows/managed-agents');
+}
+
+export async function getManagedAgent(managedAgentKey: string): Promise<ManagedAgentDetail> {
+  return fetchApi<ManagedAgentDetail>(`/agentic-workflows/managed-agents/${managedAgentKey}`);
+}
+
+export async function getManagedAgentEditorCatalog(): Promise<ManagedAgentEditorCatalog> {
+  return fetchApi<ManagedAgentEditorCatalog>('/agentic-workflows/managed-agents/editor-catalog');
+}
+
+export async function createManagedAgent(
+  payload: ManagedAgentUpsertRequest
+): Promise<ManagedAgentDetail> {
+  return fetchManagedAgentApi<ManagedAgentDetail>('/agentic-workflows/managed-agents', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateManagedAgent(
+  managedAgentKey: string,
+  payload: ManagedAgentUpsertRequest
+): Promise<ManagedAgentDetail> {
+  return fetchManagedAgentApi<ManagedAgentDetail>(
+    `/agentic-workflows/managed-agents/${managedAgentKey}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    }
+  );
 }
 
 export async function getAgenticWorkflowExecution(

@@ -38,7 +38,7 @@ The product goal is to give businesses an AI-native operating layer that can und
 
 ## 2.2 What Seer Is Not
 
-1. Not an ontology authoring product.
+1. Not a general ontology authoring product.
 2. Not a generic low-code workflow compiler.
 3. Not primarily a process-mining diagram tool.
 4. Not a separate action-registry platform detached from the ontology.
@@ -165,16 +165,17 @@ They are important product modules, but they are no longer the primary product i
 2. Ontology ingestion from Prophet local ontology output and Seer ontology extensions.
 3. SHACL validation against the Prophet base metamodel and Seer extension contracts.
 4. Upsert of ontology definitions into Fuseki.
-5. Event, object, and relationship history persistence in ClickHouse.
-6. Managed action orchestration and agent runtime control-plane state in PostgreSQL.
-7. AI-first investigation workflows.
-8. Ontology-defined executable actions and managed-agent action execution.
-9. Evidence-backed analytical tooling such as process mining and RCA.
-10. Shared UI for evidence, caveats, runtime guardrails, and execution visibility.
+5. Constrained managed-agent authoring in Seer UI backed by canonical RDF stored in a dedicated `seer_data` named graph.
+6. Event, object, and relationship history persistence in ClickHouse.
+7. Managed action orchestration and agent runtime control-plane state in PostgreSQL.
+8. AI-first investigation workflows.
+9. Ontology-defined executable actions and managed-agent action execution.
+10. Evidence-backed analytical tooling such as process mining and RCA.
+11. Shared UI for evidence, caveats, runtime guardrails, authoring, and execution visibility.
 
 ## 5.2 Out Of Scope (Current Phase)
 
-1. Ontology authoring in Seer UI.
+1. General ontology authoring in Seer UI beyond constrained managed-agent authoring.
 2. A separate action catalog outside the ontology.
 3. Workflow compilation into fixed DAG/spec artifacts as the canonical execution model.
 4. Multi-tenant data-layer complexity.
@@ -224,6 +225,8 @@ flowchart LR
 Ontology authoring remains config-as-code in Prophet.
 
 Seer consumes ontology releases; Seer UI is not a general ontology authoring environment.
+
+Seer may author managed-agent RDF clusters in the dedicated `seer_data` graph, but that is a constrained product flow for executable managed agents rather than broad ontology editing.
 
 ## 7.2 Seer Ontology Responsibilities
 

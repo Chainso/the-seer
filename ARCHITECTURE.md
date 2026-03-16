@@ -60,7 +60,7 @@ Seer presents:
 Primary responsibilities:
 
 1. AI-first investigation experiences.
-2. Managed-agent run visibility, trusted-mode inspection controls, and operator surfaces.
+2. Managed-agent authoring, run visibility, trusted-mode inspection controls, and operator surfaces.
 3. Expert drill-down over ontology, history, process, and RCA evidence.
 4. Unified assistant experience across shell and dedicated assistant surfaces.
 5. Dedicated `/assistant` conversation shell with an attached optional artifact canvas.
@@ -74,7 +74,7 @@ Expected internal areas:
 
 Architectural boundary:
 
-- UI remains read-only for ontology authoring and should not become a general-purpose workflow compiler/editor.
+- UI must not become a general-purpose ontology editor or workflow compiler; the only ontology-backed write surface is constrained managed-agent authoring through backend-validated `seer_data` updates.
 
 ### `seer-backend/` (System Core)
 
@@ -94,6 +94,7 @@ Expected internal service areas:
    - Turtle ingestion
    - SHACL validation against Prophet and Seer extension contracts
    - Fuseki named-graph upsert
+   - constrained managed-agent authoring persisted to the dedicated `seer_data` named graph
    - read-only SPARQL query service
    - concept and capability index/list APIs for UI and AI context
 2. `history` domain:
@@ -169,13 +170,14 @@ Flow:
 
 1. ingest local ontology Turtle,
 2. validate against Prophet plus Seer execution constraints,
-3. upsert into named graphs,
-4. expose read/query interfaces for UI, AI investigation, and managed execution.
+3. upsert release graphs and constrained managed-agent authoring graphs into named graphs,
+4. expose read/query interfaces for UI, AI investigation, managed-agent authoring, and managed execution.
 
 Design intent:
 
 - the ontology is both the business meaning layer and the executable capability catalog.
 - Seer extends Prophet with `seer:AgenticWorkflow`, which remains a subtype of `prophet:Action` rather than a parallel capability model.
+- UI-authored managed agents live as canonical RDF in `seer_data`; Seer still does not offer broad ontology editing beyond that constrained action-authoring surface.
 
 ### History Plane
 
@@ -292,7 +294,7 @@ The following invariants are deliberate and must hold unless explicitly changed 
 21. Every managed-agent execution is also a generic action execution, and child executions are linked through `parent_execution_id`.
 22. Produced events may carry optional `produced_by_execution_id` provenance when runtime execution emitted them.
 23. Backend owns execution governance, runtime guardrail enforcement, and audit trails for managed agents.
-24. UI remains read-only for ontology definitions and should not become a general workflow compiler/editor.
+24. UI must not become a general ontology-definition editor or workflow compiler; constrained managed-agent authoring through backend-validated `seer_data` updates is the only ontology-backed write surface.
 25. Multi-tenant data-layer design is out of current architecture scope.
 26. Governance/trust-center modules are intentionally out of current scope.
 

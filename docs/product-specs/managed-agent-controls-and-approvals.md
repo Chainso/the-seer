@@ -1,8 +1,8 @@
 # Managed Agent Runtime Controls
 
 **Status:** completed (`trusted-mode execution inspection surface; approvals deferred`)
-**Owner plan:** `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`
-**Last updated:** 2026-03-08
+**Owner plan:** `docs/exec-plans/completed/managed-agent-authoring-and-seer-data.md`
+**Last updated:** 2026-03-16
 
 ---
 
@@ -15,7 +15,8 @@ The delivered scope is about runtime visibility and auditability:
 1. what execution is running or finished,
 2. what it already did,
 3. which child actions and produced events came from it,
-4. and how a user inspects the canonical transcript history of that run.
+4. how a user inspects the canonical transcript history of that run,
+5. and how that run inspection now stays scoped beneath the parent managed agent.
 
 ## Why It Exists
 
@@ -43,10 +44,11 @@ At any point, the user should be able to answer:
 ### Inspect Agent Run History
 
 1. User opens `/inspector/managed-agents`.
-2. User filters execution history by runtime state such as running, completed, failed, or dead-letter.
-3. User can also narrow by time window and ontology-backed action selection.
-4. User opens one execution from a browseable inspector card rather than an action-column-only table flow.
-4. User sees:
+2. User opens one managed agent from the agent table.
+3. User switches to the `Runs` tab.
+4. User filters execution history by runtime state or search.
+5. User opens one execution from the agent-scoped runs table.
+6. User sees:
    - managed-agent action identity,
    - current lifecycle state,
    - execution-chain orientation before transcript deep-reading,
@@ -55,12 +57,12 @@ At any point, the user should be able to answer:
    - executed actions,
    - produced events,
    - failures.
-5. Transcript entries are grouped and summarized for scanability, while raw payloads and identifiers remain available as supporting detail.
-6. User can inspect the evidence behind a major decision and watch newly persisted transcript messages arrive live while the execution is still running.
+7. Transcript entries are grouped and summarized for scanability, while raw payloads and identifiers remain available as supporting detail.
+8. User can inspect the evidence behind a major decision and watch newly persisted transcript messages arrive live while the execution is still running.
 
 ### Inspect Execution Traceability
 
-1. User opens one execution detail page.
+1. User opens one nested execution detail page beneath a managed agent.
 2. The page shows child actions and produced events in dedicated tables.
 3. Managed-agent action, child action, and event names resolve through shared ontology display helpers.
 4. Raw identifiers remain available as supporting detail when needed for audit/debug work.
@@ -70,8 +72,8 @@ At any point, the user should be able to answer:
 The control surface should expose:
 
 1. current lifecycle state,
-2. execution list/history with reasonable filters,
-3. execution detail drill-in,
+2. agent-scoped execution list/history with reasonable filters,
+3. nested execution detail drill-in,
 4. canonical persisted transcript messages for one run,
 5. child action lineage,
 6. produced-event provenance,
@@ -127,7 +129,7 @@ That means:
 ## Acceptance Expectations
 
 1. Users can inspect recent agent decisions without reading raw logs.
-2. Users can list/filter agent executions and drill into one execution's transcript, child actions, and produced events.
+2. Users can list/filter agent executions from the parent managed-agent page and drill into one nested execution's transcript, child actions, and produced events.
 3. Users can watch a running execution through persisted-message live tailing rather than a token-only debug stream.
 4. The execution list read surface works without `user_id`, while generic action control-plane write/claim semantics remain user-scoped.
 5. Managed-agent action, child action, and event identity are shown with ontology-resolved labels as the primary presentation.

@@ -20,7 +20,7 @@ For a new reader, the shortest useful summary is:
 
 ## Current Design Themes
 
-1. Ontology is consumed in Seer as read-only semantic context and executable capability catalog; authoring remains in Prophet.
+1. Ontology is consumed in Seer as semantic context and executable capability catalog; general authoring remains in Prophet, while Seer supports constrained managed-agent authoring in `seer_data`.
 2. Seer extends Prophet with execution concepts for managed AI workflows rather than inventing a disconnected action model; `seer:AgenticWorkflow` is a Seer subtype of `prophet:Action`.
 3. Event, object, and relationship history are first-class and immutable evidence for both investigation and execution.
 4. AI investigation through `/assistant` is the primary user-facing analytics experience; process mining and RCA are tools and drill-down surfaces, not the default entry point.

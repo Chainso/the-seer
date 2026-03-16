@@ -249,8 +249,14 @@ function ExecutionRunCard({
 
 export function AgenticWorkflowExecutionDetailsPanel({
   executionId,
+  backHref: backHrefOverride,
+  backLabel = "Back to Runs",
+  buildExecutionHref,
 }: {
   executionId: string;
+  backHref?: string;
+  backLabel?: string;
+  buildExecutionHref?: (action: AgenticWorkflowActionSummary) => string | undefined;
 }) {
   const searchParams = useSearchParams();
   const ontologyDisplay = useOntologyDisplay();
@@ -356,16 +362,23 @@ export function AgenticWorkflowExecutionDetailsPanel({
   }, [executionId, streamReady]);
 
   const query = useMemo(() => searchParams.toString(), [searchParams]);
-  const backHref = useMemo(
+  const fallbackBackHref = useMemo(
     () => (query ? `/inspector/managed-agents?${query}` : "/inspector/managed-agents"),
     [query]
   );
-  const buildExecutionHref = (targetExecutionId: string) =>
+  const legacyBuildExecutionHref = (targetExecutionId: string) =>
     query
       ? `/inspector/managed-agents/${targetExecutionId}?${query}`
       : `/inspector/managed-agents/${targetExecutionId}`;
-  const buildExecutionHrefForAction = (action: AgenticWorkflowActionSummary) =>
-    action.action_kind === "agentic_workflow" ? buildExecutionHref(action.action_id) : undefined;
+  const backHref = backHrefOverride || fallbackBackHref;
+  const buildExecutionHrefForAction = (action: AgenticWorkflowActionSummary) => {
+    if (buildExecutionHref) {
+      return buildExecutionHref(action);
+    }
+    return action.action_kind === "agentic_workflow"
+      ? legacyBuildExecutionHref(action.action_id)
+      : undefined;
+  };
 
   const currentStatus = detail?.execution.action.status || snapshot?.status;
   const lastOrdinal = snapshot?.last_ordinal || messages[messages.length - 1]?.ordinal || 0;
@@ -544,7 +557,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
         <Button asChild variant="outline">
           <Link href={backHref}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Runs
+            {backLabel}
           </Link>
         </Button>
       </div>

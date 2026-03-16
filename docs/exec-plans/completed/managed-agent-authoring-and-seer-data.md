@@ -1,10 +1,10 @@
 # Managed Agent Authoring And `seer_data`
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP follow-on  
 **Agent slot:** AGENT-MANAGED-AUTHORING-1  
 **Predecessor:** `docs/exec-plans/completed/managed-agent-runtime-and-agentic-workflows.md`  
-**Last updated:** 2026-03-15
+**Last updated:** 2026-03-16
 
 ---
 
@@ -18,8 +18,8 @@ The end-user result should feel like an agent management product, not a raw exec
 
 - [x] 2026-03-15 Create the active execution plan, add it to `docs/exec-plans/active/index.md`, and record baseline validation results before implementation.
 - [x] 2026-03-15 Phase 1: land backend `seer_data` authoring/storage/query support plus managed-agent authoring APIs and tests.
-- [ ] 2026-03-15 Phase 2: land agent-first UI routes, managed-agent list/detail/runs surfaces, create/edit experience, and frontend validation.
-- [ ] 2026-03-15 Phase 3: ratify canonical docs/specs, run final validation, archive the plan, and update indexes/references.
+- [x] 2026-03-16 Phase 2: land agent-first UI routes, managed-agent list/detail/runs surfaces, create/edit experience, and frontend validation.
+- [x] 2026-03-16 Phase 3: ratify canonical docs/specs, run final validation, archive the plan, and update indexes/references.
 
 ## Surprises & Discoveries
 
@@ -29,16 +29,17 @@ The end-user result should feel like an agent management product, not a raw exec
 - 2026-03-15: Prophet action validity is stricter than just `rdf:type seer:AgenticWorkflow`. A valid authored managed agent must also own exactly one `prophet:ActionInput` and one `prophet:Event`, and both containers are closed SHACL shapes.
 - 2026-03-15: Existing action payload validation treats `prophet:ObjectReference` inputs as generic JSON objects, not a deeper object-reference wire contract. That keeps the first editor payload surface simpler because object-reference fields only need to submit an object-shaped value.
 - 2026-03-15: Widening `OntologyService._scoped_graphs()` is enough to make UI-authored managed agents discoverable to existing action validation and frontend ontology-backed selectors. No changes were required in `ActionsService` beyond using the broader ontology scope.
+- 2026-03-16: Using `managed_agent_key` as the route identity turned out to be cleaner than encoding canonical action IRIs in the frontend route. The backend authoring APIs are already keyed that way, and the RDF identity is still visible in the editor/detail surfaces as supporting detail.
 
 ## Decision Log
 
 - 2026-03-15, Codex: Store UI-authored managed agents as canonical RDF in a dedicated Fuseki named graph, `seer_data`, rather than PostgreSQL-only records. Rationale: Seer's executable capability model is ontology-first, and introducing a separate control-plane catalog for agent definitions would violate current architecture.
 - 2026-03-15, Codex: Keep v1 lifecycle forward-only and live on save. Rationale: the user explicitly rejected draft/publish; `seer:enabled` is sufficient for first-pass operational control.
 - 2026-03-15, Codex: Use an agent-first information architecture with nested run routes under the parent managed agent. Rationale: this aligns with the requested UX and keeps execution inspection anchored to the authored capability.
-- 2026-03-15, Codex: Use encoded canonical IRI as the route key for managed-agent detail/edit pages. Rationale: the RDF subject IRI remains the identity, while the route stays reversible and stable without inventing a second surrogate identifier.
 - 2026-03-15, Codex: Support first-class input/output schema authoring in v1 by reusing existing ontology value types rather than building a full type authoring system. Rationale: the Prophet action model requires input/output shape authoring, but new type authoring is broader than the requested scope.
 - 2026-03-15, Codex: Keep backend authoring inside `OntologyService` and the existing `agentic_workflows` API router instead of adding a separate managed-agent registry service. Rationale: the authoritative persistence and validation concerns are ontology graph concerns, and this keeps discovery/execution aligned with current architecture.
 - 2026-03-15, Codex: Use a pragmatic editor field contract of `required` + `multi_value` + (`value_type_iri` or `object_model_iri`) instead of exposing raw cardinality and RDF type internals in the first backend payload. Rationale: this is sufficient to generate Prophet-valid property definitions while keeping the UI schema builder intuitive.
+- 2026-03-16, Codex: Use `managed_agent_key` as the route identity for managed-agent pages and nested run routes. Rationale: the backend CRUD endpoints are already keyed that way, it avoids unnecessary action-IRI encoding/decoding, and the canonical RDF URI still remains visible in the detail/editor surfaces.
 
 ## Outcomes & Retrospective
 
@@ -61,6 +62,27 @@ The end-user result should feel like an agent management product, not a raw exec
    - `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src/seer_backend/ontology src/seer_backend/api/agentic_workflows.py tests/test_managed_agent_authoring_phase1.py`
    - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_managed_agent_authoring_phase1.py`
    - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_agent_orchestration_phase4.py tests/test_managed_agent_authoring_phase1.py`
+
+2026-03-16 Phase 2 frontend delivery:
+
+1. Replaced the top-level managed-agents route with a managed-agent catalog table and primary `New Managed Agent` CTA.
+2. Added agent-first routes for create, detail, edit, and nested run detail under the parent managed agent.
+3. Added a shared managed-agent editor with basics, instruction, input/output definitions, field-builder dialogs, and generated identity preview.
+4. Reused the existing execution detail surface for nested run inspection by making its back-link and related-run link construction configurable.
+5. Phase 2 validation passed:
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/agentic-workflows.contract.test.mjs`
+   - `cd /workspaces/seer-python/seer-ui && npm run build`
+
+2026-03-16 Phase 3 doc/archive delivery:
+
+1. Updated `VISION.md`, `DESIGN.md`, and `ARCHITECTURE.md` so repository truth now reflects constrained managed-agent authoring in `seer_data`.
+2. Updated the managed-agent product specs to describe the agent-first authoring/catalog/runtime experience and nested run inspection model.
+3. Re-ran the key backend/frontend validations and prepared the plan for archive.
+4. Final validation passed:
+   - `cd /workspaces/seer-python/seer-backend && .venv/bin/ruff check src/seer_backend/ontology src/seer_backend/api/agentic_workflows.py tests/test_managed_agent_authoring_phase1.py`
+   - `cd /workspaces/seer-python/seer-backend && .venv/bin/pytest tests/test_agent_orchestration_phase4.py tests/test_managed_agent_authoring_phase1.py` (`10 passed in 11.01s`)
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/agentic-workflows.contract.test.mjs`
+   - `cd /workspaces/seer-python/seer-ui && npm run build`
 
 ## Context and Orientation
 
@@ -224,7 +246,7 @@ Only backend/domain/API/test work for `seer_data` and managed-agent authoring. D
 
 1. `AGENTS.md`
 2. `PLANS.md`
-3. `docs/exec-plans/active/managed-agent-authoring-and-seer-data.md`
+3. `docs/exec-plans/completed/managed-agent-authoring-and-seer-data.md`
 4. `seer-backend/src/seer_backend/ontology/service.py`
 5. `seer-backend/src/seer_backend/ontology/repository.py`
 6. `seer-backend/src/seer_backend/actions/service.py`
@@ -300,7 +322,7 @@ Frontend routes, components, API client/types, contract tests, and any minimal b
 
 1. `AGENTS.md`
 2. `PLANS.md`
-3. `docs/exec-plans/active/managed-agent-authoring-and-seer-data.md`
+3. `docs/exec-plans/completed/managed-agent-authoring-and-seer-data.md`
 4. `seer-ui/app/inspector/managed-agents/page.tsx`
 5. `seer-ui/app/inspector/managed-agents/[executionId]/page.tsx`
 6. `seer-ui/app/components/inspector/agentic-workflow-execution-panel.tsx`
@@ -349,15 +371,15 @@ Frontend routes, components, API client/types, contract tests, and any minimal b
 
 **Status**
 
-Pending.
+Completed.
 
 **Completion Notes**
 
-Not started.
+The UI now starts from a managed-agent table, details default to the definition-first view with a `Runs` tab, run detail is nested under the parent managed agent, and create/edit share one backend-backed authoring screen with field-builder dialogs and inline validation.
 
 **Next Starter Context**
 
-Reuse the current run-detail panel where possible, but re-anchor it under the agent route and move the top-level managed-agents page to an authored-agent table.
+No Phase 2 restart needed. If future follow-on work touches managed-agent UX again, start from `seer-ui/app/components/inspector/managed-agent-list-panel.tsx`, `seer-ui/app/components/inspector/managed-agent-detail-panel.tsx`, `seer-ui/app/components/inspector/managed-agent-editor.tsx`, and the nested routes under `seer-ui/app/inspector/managed-agents/[managedAgentKey]/`.
 
 ## Phase 3
 
@@ -375,7 +397,7 @@ Docs/spec/index/archive work only, plus final validation reruns and any tiny cle
 
 1. `AGENTS.md`
 2. `PLANS.md`
-3. `docs/exec-plans/active/managed-agent-authoring-and-seer-data.md`
+3. `docs/exec-plans/completed/managed-agent-authoring-and-seer-data.md`
 4. `VISION.md`
 5. `ARCHITECTURE.md`
 6. `docs/product-specs/index.md`
@@ -420,12 +442,12 @@ Docs/spec/index/archive work only, plus final validation reruns and any tiny cle
 
 **Status**
 
-Pending.
+Completed.
 
 **Completion Notes**
 
-Not started.
+Canonical docs/specs now describe constrained managed-agent authoring in `seer_data`, the key backend/frontend validations were rerun, and the plan is ready to move from `active/` to `completed/` with updated indexes.
 
 **Next Starter Context**
 
-Use the final working tree and validation ledger from Phases 1 and 2; do not archive until the plan's living sections are internally consistent.
+No Phase 3 restart needed. Future follow-on work should start from the archived plan plus the updated managed-agent specs if more authoring/runtime controls are added.

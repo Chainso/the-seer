@@ -8,6 +8,7 @@ export type AgenticWorkflowStatus =
 
 export type AgenticWorkflowActionKind = 'action' | 'agentic_workflow';
 export type AgenticWorkflowMessageRole = 'system' | 'user' | 'assistant' | 'tool';
+export type ManagedAgentFieldType = 'value_type' | 'object_reference';
 
 export interface AgenticWorkflowActionSummary {
   action_id: string;
@@ -46,6 +47,83 @@ export interface AgenticWorkflowExecutionListResponse {
 export interface AgenticWorkflowCapabilityOption {
   value: string;
   label: string;
+}
+
+export interface ManagedAgentFieldDefinition {
+  field_key: string;
+  label: string;
+  description: string | null;
+  required: boolean;
+  multi_value: boolean;
+  field_type: ManagedAgentFieldType;
+  value_type_iri: string | null;
+  object_model_iri: string | null;
+}
+
+export interface ManagedAgentSummary {
+  managed_agent_key: string;
+  action_uri: string;
+  name: string;
+  description: string | null;
+  instruction: string;
+  enabled: boolean;
+  updated_at: string;
+  input_field_count: number;
+  output_field_count: number;
+}
+
+export interface ManagedAgentDetail {
+  managed_agent_key: string;
+  action_uri: string;
+  name: string;
+  description: string | null;
+  instruction: string;
+  enabled: boolean;
+  updated_at: string;
+  input_name: string;
+  input_description: string | null;
+  output_name: string;
+  output_description: string | null;
+  input_fields: ManagedAgentFieldDefinition[];
+  output_fields: ManagedAgentFieldDefinition[];
+}
+
+export interface ManagedAgentListResponse {
+  total: number;
+  managed_agents: ManagedAgentSummary[];
+}
+
+export interface ManagedAgentCatalogItem {
+  iri: string;
+  label: string;
+  kind: string;
+}
+
+export interface ManagedAgentEditorCatalog {
+  object_models: ManagedAgentCatalogItem[];
+  value_types: ManagedAgentCatalogItem[];
+}
+
+export interface ManagedAgentUpsertRequest {
+  managed_agent_key: string;
+  name: string;
+  description: string | null;
+  instruction: string;
+  enabled: boolean;
+  input_name: string;
+  input_description: string | null;
+  output_name: string;
+  output_description: string | null;
+  input_fields: ManagedAgentFieldDefinition[];
+  output_fields: ManagedAgentFieldDefinition[];
+}
+
+export interface ManagedAgentApiErrorDetail {
+  code?: string;
+  message?: string;
+  field?: string;
+  diagnostics?: Array<Record<string, unknown>>;
+  [key: string]: unknown;
 }
 
 export interface AgenticWorkflowProducedEvent {

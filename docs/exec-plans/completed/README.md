@@ -56,3 +56,4 @@ Each completed plan should preserve:
 44. `phase-handoff-capsules-in-execution-plans.md` - completed (2026-03-15)
 45. `prophet-action-only-alignment.md` - completed (2026-03-15)
 46. `ontology-graph-reference-linkage-fix.md` - completed (2026-03-15)
+47. `managed-agent-authoring-and-seer-data.md` - completed (2026-03-16)

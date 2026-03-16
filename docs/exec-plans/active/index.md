@@ -66,11 +66,11 @@ Current execution state:
 
 ## Post-MVP Active Plans
 
-1. `docs/exec-plans/active/managed-agent-authoring-and-seer-data.md` - in progress (opened 2026-03-15 to add canonical `seer_data` RDF-backed managed-agent authoring, agent-first inspector routes, and the create/edit managed-agent UI)
+1. none
 
 ## Post-MVP Status Tracking
 
-- [ ] Managed-agent authoring and `seer_data` delivery in progress
+- [x] Managed-agent authoring and `seer_data` delivery complete
 - [x] Ontology graph reference linkage fix complete
 - [x] UI Experience Replatform complete
 - [x] Ontology Copilot OpenAI client migration complete
@@ -85,8 +85,9 @@ Current execution state:
 
 Current post-MVP execution state:
 
-- `in_progress`: `docs/exec-plans/active/managed-agent-authoring-and-seer-data.md`
+- `in_progress`: none
 - `blocked`: none
+- `completed`: `docs/exec-plans/completed/managed-agent-authoring-and-seer-data.md` (archived on 2026-03-16 after adding canonical `seer_data` RDF-backed managed-agent authoring, shipping the agent-first managed-agent catalog/detail/editor UI with nested run routes, updating canonical docs/specs, and revalidating backend/frontend contracts)
 - `completed`: `docs/exec-plans/completed/ontology-graph-reference-linkage-fix.md` (archived on 2026-03-15 after replacing duplicate explorer reference-edge derivation with the shared traversal, restoring action/event links to object models, centralizing per-edge-type presentation in a shared utility, adding a legend-backed relationship encoding, and aligning automation-edge classification to Prophet `triggers`)
 - `completed`: `docs/exec-plans/completed/prophet-action-only-alignment.md` (archived on 2026-03-15 after aligning Seer to Prophet's action-only executable model, renaming public managed-agent contracts to `action_uri`, migrating lifecycle display to state-carrier field semantics, removing stale explorer/analytics taxonomy, ratifying canonical docs/specs, and recording the remaining internal `workflow_uri` storage column as explicit tech debt)
 - `completed`: `docs/exec-plans/completed/object-store-combined-rca-ocdfg-workspace.md` (archived on 2026-03-14 after replacing Object Store's embedded RCA/OC-DFG tabs with one combined workspace, adding anchor-only OC-DFG comparison support for RCA results, updating the relevant specs, and validating with backend Ruff/pytest plus targeted UI contract tests and `npm run build`)

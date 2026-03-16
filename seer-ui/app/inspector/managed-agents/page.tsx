@@ -1,10 +1,10 @@
 import { Suspense } from 'react';
-import { AgenticWorkflowExecutionPanel } from '@/app/components/inspector/agentic-workflow-execution-panel';
+import { ManagedAgentListPanel } from '@/app/components/inspector/managed-agent-list-panel';
 
-export default function AgenticWorkflowExecutionsPage() {
+export default function ManagedAgentsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading managed-agent runs...</div>}>
-      <AgenticWorkflowExecutionPanel />
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading managed agents...</div>}>
+      <ManagedAgentListPanel />
     </Suspense>
   );
 }
