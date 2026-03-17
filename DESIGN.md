@@ -28,7 +28,7 @@ For a new reader, the shortest useful summary is:
 6. Generic execution lifecycle remains in `actions`, while `agent_orchestration` owns LLM-backed execution, transcript semantics, and agent-specific execution APIs.
 7. Safe execution is a core design problem: runtime guardrails, budgets, auditability, and idempotent action semantics must be explicit even before platform authz is designed.
 8. Canonical managed-agent transcript state is persisted ordered `completion_messages` in ClickHouse, not transient executor memory or mutable PostgreSQL control-plane fields.
-9. Managed-agent runtime tool access is intentionally narrow: managed-agent mode on the shared copilot runtime exposes `load_skill` only for deep ontology, object store, and object history, and ontology-defined execution flows through `load_action`.
+9. Managed-agent runtime tool access is intentionally narrow: managed-agent mode on the shared copilot runtime exposes `load_skill` only for deep ontology, object store, and object history, ontology-defined execution flows through `load_action`, and self-recursive `load_action` attempts against the currently executing managed agent are rejected.
 10. User-visible field/state display in inspector and investigation flows remains centralized in a shared ontology display layer.
 11. Managed-agent execution list/detail/live-tail surfaces should feel like Seer's ontology/history inspector experiences rather than a separate raw admin console.
 12. User-visible evidence and caveats are required for analytical and agent-driven conclusions.

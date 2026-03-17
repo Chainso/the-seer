@@ -2,8 +2,25 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from typing import Any
+
+_USE_COLOR = sys.stdout.isatty() and os.environ.get("NO_COLOR") is None
+_RESET = "\033[0m"
+_DIM = "\033[2m"
+_CYAN = "\033[36m"
+_BLUE = "\033[34m"
+_MAGENTA = "\033[35m"
+_YELLOW = "\033[33m"
+_GREEN = "\033[32m"
+_RED = "\033[31m"
+
+
+def _paint(text: str, color: str) -> str:
+    if not _USE_COLOR:
+        return text
+    return f"{color}{text}{_RESET}"
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -25,6 +42,10 @@ def _compact(value: Any, limit: int = 96) -> str:
     return f"{text[: limit - 3]}..."
 
 
+def _single_line(value: Any) -> str:
+    return " ".join(_string(value).split()).strip()
+
+
 def _short_id(value: Any) -> str:
     text = _string(value)
     if len(text) <= 8:
@@ -44,7 +65,7 @@ def _compact_ts(value: Any) -> str:
 def _format_line(record: dict[str, Any]) -> str:
     message = _string(record.get("message"))
     extra = _as_dict(record.get("extra"))
-    ts = _compact_ts(record.get("ts"))
+    ts = _paint(_compact_ts(record.get("ts")), f"{_DIM}{_CYAN}")
     turn = _short_id(extra.get("turn_id"))
     thread = _short_id(extra.get("thread_id"))
 
@@ -53,23 +74,35 @@ def _format_line(record: dict[str, Any]) -> str:
         route = _string(extra.get("route")) or "-"
         prompt = _compact(extra.get("prompt_preview"))
         return (
-            f"{ts} START turn={turn} thread={thread} module={module_context} "
+            f"{ts} {_paint('START', _BLUE)} turn={turn} thread={thread} module={module_context} "
             f"route={route} prompt=\"{prompt}\""
         )
 
     if message == "assistant_turn_response_started":
         first_delta_ms = extra.get("time_to_first_delta_ms", "-")
-        return f"{ts} MODEL turn={turn} thread={thread} first_delta={first_delta_ms}ms"
+        return f"{ts} {_paint('MODEL', _MAGENTA)} turn={turn} thread={thread} first_delta={first_delta_ms}ms"
 
     if message == "assistant_turn_tool_status":
         tool = _string(extra.get("tool")) or "-"
         status = _string(extra.get("status")) or "-"
         call_id = _short_id(extra.get("call_id"))
-        summary = _compact(extra.get("summary"))
-        return (
-            f"{ts} TOOL  turn={turn} thread={thread} status={status} tool={tool} "
+        summary = _single_line(extra.get("summary"))
+        error = _single_line(extra.get("error"))
+        if status == "started":
+            label = _paint("CALL", _YELLOW)
+        elif status == "completed":
+            label = _paint("RESULT", _GREEN)
+        elif status == "failed":
+            label = _paint("FAIL", _RED)
+        else:
+            label = _paint("TOOL", _YELLOW)
+        line = (
+            f"{ts} {label}  turn={turn} thread={thread} status={status} tool={tool} "
             f"call={call_id} {summary}"
         )
+        if error:
+            line = f'{line} error="{error}"'
+        return line
 
     if message == "assistant_turn_completed":
         duration_ms = extra.get("duration_ms", "-")
@@ -79,7 +112,7 @@ def _format_line(record: dict[str, Any]) -> str:
         caveat_count = extra.get("caveat_count", 0)
         answer_preview = _compact(extra.get("answer_preview"))
         return (
-            f"{ts} DONE  turn={turn} thread={thread} duration={duration_ms}ms "
+            f"{ts} {_paint('DONE', _GREEN)}  turn={turn} thread={thread} duration={duration_ms}ms "
             f"answer_chars={answer_chars} tools={tool_event_count} evidence={evidence_count} "
             f"caveats={caveat_count} answer=\"{answer_preview}\""
         )
@@ -87,13 +120,13 @@ def _format_line(record: dict[str, Any]) -> str:
     if message == "assistant_turn_failed":
         duration_ms = extra.get("duration_ms", "-")
         error_type = _string(extra.get("error_type")) or "Error"
-        error_message = _compact(extra.get("error_message"))
+        error_message = _single_line(extra.get("error_message"))
         return (
-            f"{ts} FAIL  turn={turn} thread={thread} duration={duration_ms}ms "
+            f"{ts} {_paint('FAIL', _RED)}  turn={turn} thread={thread} duration={duration_ms}ms "
             f"{error_type}: {error_message}"
         )
 
-    return f"{ts} LOG   {message} {_compact(json.dumps(extra, default=str), limit=120)}"
+    return f"{ts} {_paint('LOG', _YELLOW)}   {message} {_compact(json.dumps(extra, default=str), limit=120)}"
 
 
 def main() -> int:

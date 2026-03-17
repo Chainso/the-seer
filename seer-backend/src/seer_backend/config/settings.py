@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     log_level: str = "INFO"
     assistant_turn_log_path: str | None = None
+    managed_agent_log_path: str | None = None
     assistant_skill_dirs: list[str] = Field(
         default_factory=lambda: list(_DEFAULT_ASSISTANT_SKILL_DIRS)
     )

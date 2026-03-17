@@ -9,6 +9,7 @@ import re
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
+from urllib.parse import urlparse
 from uuid import UUID
 
 from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI
@@ -22,7 +23,10 @@ from seer_backend.actions.service import (
     ResolvedActionContract,
     action_contract_parameters_schema,
 )
-from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
+from seer_backend.ai.assistant_tools import (
+    AssistantDomainToolAdapter,
+    normalize_openai_function_tool_schema,
+)
 from seer_backend.ai.skills import (
     AssistantSkill,
     AssistantSkillError,
@@ -212,6 +216,16 @@ Your job:
   chat assistant.
 - Use `load_skill` only when the managed-agent runtime exposes a skill that is
   directly relevant to completing the current task.
+- Use the object-store and object-history skills when you need to inspect
+  object models, event history, object state, or relationships that already
+  exist in Seer's evidence stores.
+- Use `load_action` when the ontology exposes an ordinary executable action
+  that should be invoked as part of completing the managed-agent objective.
+- Never use `load_action` to load the current managed agent's own action URI.
+  Self-recursive action loading is not allowed.
+- Do not ask the user clarifying questions during execution. There is no live
+  human in the loop for managed-agent runs, so you must proceed with the best
+  bounded action you can take from the available evidence and tools.
 
 Workflow for each turn:
 1. Read the current execution context, operating instruction, and prior transcript.
@@ -226,7 +240,13 @@ Workflow for each turn:
 Tool planning and budget:
 - Prefer bounded tool usage over exploration.
 - Avoid speculative tool calls that do not directly help complete the task.
-- If evidence is insufficient, say exactly what is missing instead of guessing.
+- Prefer object/history tools to gather the exact evidence you need before
+  taking action.
+- Prefer ontology-defined actions over inventing side effects in prose when
+  the ontology already exposes an executable capability for the step.
+- If evidence is insufficient, do not ask the user for clarification; instead
+  report the missing information in your final result and stop at the safest
+  bounded point.
 
 Answer style:
 - Be concise, direct, and operational.
@@ -563,6 +583,7 @@ class CopilotActionExecutionContext:
     user_id: str
     parent_execution_id: UUID | None = None
     priority: int | None = None
+    current_action_uri: str | None = None
 
 
 class OpenAiChatCompletionsRuntime:
@@ -929,6 +950,7 @@ class OntologyCopilotService:
             return await self._execute_load_action_call(
                 tool_call,
                 action_runtime=action_runtime,
+                action_execution_context=action_execution_context,
             )
         if tool_call.tool == "create_ontology_graph_artifact":
             return _execute_create_ontology_graph_artifact_call(tool_call)
@@ -1035,6 +1057,7 @@ class OntologyCopilotService:
         tool_call: CopilotToolCall,
         *,
         action_runtime: CopilotActionRuntime | None,
+        action_execution_context: CopilotActionExecutionContext | None = None,
     ) -> CopilotToolResult:
         if action_runtime is None:
             return CopilotToolResult(
@@ -1050,13 +1073,37 @@ class OntologyCopilotService:
                 action_uri=None,
                 error="tool execution failed: missing action_uri",
             )
+        if not _looks_like_absolute_iri(action_uri):
+            return CopilotToolResult(
+                tool="load_action",
+                action_uri=action_uri,
+                error=(
+                    "tool execution failed: action_uri must be a full absolute IRI "
+                    "(for example `urn:...` or `http://...`)"
+                ),
+            )
+        current_action_uri = (action_execution_context.current_action_uri or "").strip()
+        if current_action_uri and action_uri == current_action_uri:
+            return CopilotToolResult(
+                tool="load_action",
+                action_uri=action_uri,
+                error=(
+                    "tool execution failed: load_action cannot load the currently "
+                    "executing managed agent's own action_uri"
+                ),
+            )
 
         try:
             contract = await action_runtime.resolve_action_contract(
                 ontology_service=self._ontology_service,
                 action_uri=action_uri,
             )
-        except (ActionValidationError, ActionDependencyUnavailableError) as exc:
+        except (
+            ActionValidationError,
+            ActionDependencyUnavailableError,
+            OntologyError,
+            OntologyDependencyUnavailableError,
+        ) as exc:
             return CopilotToolResult(
                 tool="load_action",
                 action_uri=action_uri,
@@ -1352,6 +1399,18 @@ def _extract_tool_action_uri_from_arguments(arguments: Any) -> str | None:
     return None
 
 
+def _looks_like_absolute_iri(value: str) -> bool:
+    cleaned = value.strip()
+    if not cleaned or any(character.isspace() for character in cleaned):
+        return False
+    parsed = urlparse(cleaned)
+    if not parsed.scheme:
+        return False
+    if parsed.scheme in {"http", "https"}:
+        return bool(parsed.netloc)
+    return True
+
+
 def _parse_tool_arguments(arguments: Any) -> dict[str, Any]:
     if isinstance(arguments, str):
         try:
@@ -1542,7 +1601,7 @@ def _tool_schemas(
 
     if runtime_mode == "managed_agent":
         schemas.extend(_loaded_action_tool_schemas(conversation_messages))
-    return schemas
+    return [normalize_openai_function_tool_schema(schema) for schema in schemas]
 
 
 def _build_skill_catalog_markdown(

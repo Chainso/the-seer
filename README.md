@@ -148,8 +148,8 @@ Single-command launch with zellij multiplexing:
 ```
 
 This starts Fuseki + ClickHouse in Docker, then opens a `zellij` session with panes
-for backend, UI, actions sweeper, managed-agent runner, DB logs, and a dedicated
-assistant turn log stream.
+for backend, managed-agent logs, UI, actions sweeper, managed-agent runner, DB logs,
+and a dedicated assistant turn log stream.
 
 By default, rerunning the script recreates that zellij session so pane commands and
 layout changes are applied immediately rather than reattaching to stale panes.
@@ -162,6 +162,15 @@ The assistant pane tails:
 
 The backend writes that file when `SEER_ASSISTANT_TURN_LOG_PATH` is set. The
 zellij helper sets it automatically by default for local development.
+
+The managed-agent log pane tails:
+
+```bash
+.local/logs/managed-agent-runner.jsonl
+```
+
+The runner writes that file when `SEER_MANAGED_AGENT_LOG_PATH` is set. The zellij
+helper sets it automatically by default for local development.
 
 By default, when that zellij session is fully quit (not just detached), the script
 automatically runs:
@@ -192,6 +201,12 @@ Override the assistant turn log file path:
 
 ```bash
 SEER_ASSISTANT_TURN_LOG_PATH=/tmp/seer-assistant-turns.jsonl ./scripts/dev-local-zellij.sh
+```
+
+Override the managed-agent log file path:
+
+```bash
+SEER_MANAGED_AGENT_LOG_PATH=/tmp/seer-managed-agent-runner.jsonl ./scripts/dev-local-zellij.sh
 ```
 
 When finished:

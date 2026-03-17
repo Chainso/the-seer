@@ -74,10 +74,13 @@ export SEER_MANAGED_AGENT_RUNNER_INTERVAL_SECONDS="${SEER_MANAGED_AGENT_RUNNER_I
 export SEER_MANAGED_AGENT_RUNNER_BATCH_SIZE="${SEER_MANAGED_AGENT_RUNNER_BATCH_SIZE:-5}"
 export SEER_MANAGED_AGENT_RUNNER_INSTANCE_ID="${SEER_MANAGED_AGENT_RUNNER_INSTANCE_ID:-seer-managed-agent-runner}"
 export SEER_ASSISTANT_TURN_LOG_PATH="${SEER_ASSISTANT_TURN_LOG_PATH:-${ROOT_DIR}/.local/logs/assistant-turns.jsonl}"
+export SEER_MANAGED_AGENT_LOG_PATH="${SEER_MANAGED_AGENT_LOG_PATH:-${ROOT_DIR}/.local/logs/managed-agent-runner.jsonl}"
 export NEXT_PUBLIC_API_BASE_URL="${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}"
 
 mkdir -p "$(dirname "${SEER_ASSISTANT_TURN_LOG_PATH}")"
 touch "${SEER_ASSISTANT_TURN_LOG_PATH}"
+mkdir -p "$(dirname "${SEER_MANAGED_AGENT_LOG_PATH}")"
+touch "${SEER_MANAGED_AGENT_LOG_PATH}"
 
 docker compose -f docker-compose.db.yml up -d
 
@@ -119,7 +122,11 @@ layout {
   tab name="seer-local-dev" {
     pane split_direction="Vertical" {
       pane split_direction="Horizontal" {
-        pane name="backend" command="${ROOT_DIR}/scripts/dev-backend.sh" cwd="${ROOT_DIR}" {
+        pane split_direction="Horizontal" {
+          pane name="backend" command="${ROOT_DIR}/scripts/dev-backend.sh" cwd="${ROOT_DIR}" {
+          }
+          pane name="managed-agent-logs" command="${ROOT_DIR}/scripts/dev-managed-agent-logs.sh" cwd="${ROOT_DIR}" {
+          }
         }
         pane split_direction="Vertical" {
           pane name="ui" command="${ROOT_DIR}/scripts/dev-ui.sh" cwd="${ROOT_DIR}" {

@@ -20,6 +20,7 @@ from seer_backend.actions.service import (
     UnavailableActionsService,
     build_actions_service,
 )
+from seer_backend.agent_orchestration.models import AgentTranscriptMessageRecord
 from seer_backend.agent_orchestration.repository import ClickHouseAgentTranscriptRepository
 from seer_backend.agent_orchestration.service import AgentTranscriptService
 from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
@@ -43,6 +44,9 @@ from seer_backend.ontology.managed_agents import (
 from seer_backend.ontology.service import OntologyService, UnavailableOntologyService
 
 _RUNNER_SOURCE = "seer.managed_agent_runner"
+_MANAGED_AGENT_LOGGER = logging.getLogger("seer_backend.agent_orchestration.managed_agent")
+
+
 class ManagedAgentCopilotRuntime(Protocol):
     async def answer(
         self,
@@ -83,6 +87,7 @@ class ManagedAgentExecutionService:
         self._transcript_service = transcript_service
         self._copilot_service = copilot_service
         self._assistant_tool_adapter = assistant_tool_adapter
+        self._logger = _MANAGED_AGENT_LOGGER
 
     async def claim_and_execute_batch(
         self,
@@ -118,64 +123,73 @@ class ManagedAgentExecutionService:
         action: ActionRecord,
         instance_id: str,
     ) -> bool:
-        if action.action_kind is not ActionKind.AGENTIC_WORKFLOW:
+        attempt_no = max(int(action.attempt_count), 1)
+        self._logger.info(
+            "managed_agent_execution_started",
+            extra={
+                "action_id": str(action.action_id),
+                "action_uri": action.action_uri,
+                "user_id": action.user_id,
+                "attempt_no": attempt_no,
+            },
+        )
+
+        async def fail_action(error_code: str, error_detail: str) -> bool:
+            self._logger.warning(
+                "managed_agent_execution_failed",
+                extra={
+                    "action_id": str(action.action_id),
+                    "action_uri": action.action_uri,
+                    "user_id": action.user_id,
+                    "attempt_no": attempt_no,
+                    "error_code": error_code,
+                    "error_detail": error_detail,
+                },
+            )
             await self._actions_service.fail_action(
                 action_id=action.action_id,
                 instance_id=instance_id,
-                error_code="unsupported_action_capability",
-                error_detail=(
+                error_code=error_code,
+                error_detail=error_detail,
+            )
+            return False
+
+        if action.action_kind is not ActionKind.AGENTIC_WORKFLOW:
+            return await fail_action(
+                "unsupported_action_capability",
+                (
                     f"Managed-agent runner received unsupported action kind "
                     f"'{action.action_kind.value}'."
                 ),
             )
-            return False
 
         managed_agent_key = managed_agent_key_from_action_uri(action.action_uri)
         if managed_agent_key is None:
-            await self._actions_service.fail_action(
-                action_id=action.action_id,
-                instance_id=instance_id,
-                error_code="unsupported_action_capability",
-                error_detail=(
+            return await fail_action(
+                "unsupported_action_capability",
+                (
                     "Managed-agent runner only supports Seer-managed action URIs with prefix "
                     "'urn:seer:managed-agent:'."
                 ),
             )
-            return False
 
         try:
             detail = await self._ontology_service.get_managed_agent(managed_agent_key)
         except ValueError as exc:
-            await self._actions_service.fail_action(
-                action_id=action.action_id,
-                instance_id=instance_id,
-                error_code="unsupported_action_capability",
-                error_detail=str(exc),
-            )
-            return False
+            return await fail_action("unsupported_action_capability", str(exc))
         except (OntologyDependencyUnavailableError, OntologyError) as exc:
-            await self._actions_service.fail_action(
-                action_id=action.action_id,
-                instance_id=instance_id,
-                error_code="transient_dependency_error",
-                error_detail=str(exc),
-            )
-            return False
+            return await fail_action("transient_dependency_error", str(exc))
 
         if not detail.enabled:
-            await self._actions_service.fail_action(
-                action_id=action.action_id,
-                instance_id=instance_id,
-                error_code="unsupported_action_capability",
-                error_detail=f"Managed agent '{managed_agent_key}' is disabled.",
+            return await fail_action(
+                "unsupported_action_capability",
+                f"Managed agent '{managed_agent_key}' is disabled.",
             )
-            return False
 
         system_prompt = _build_system_prompt(detail)
         user_prompt = _build_user_prompt(detail=detail, action=action)
-        attempt_no = max(int(action.attempt_count), 1)
         try:
-            await self._transcript_service.append_completion_messages(
+            initial_records = await self._transcript_service.append_completion_messages(
                 execution_id=action.action_id,
                 action_uri=action.action_uri,
                 attempt_no=attempt_no,
@@ -184,6 +198,7 @@ class ManagedAgentExecutionService:
                     {"role": "user", "content": user_prompt},
                 ],
             )
+            self._log_transcript_records(initial_records)
             response = await self._copilot_service.answer(
                 user_prompt,
                 assistant_tool_adapter=self._assistant_tool_adapter,
@@ -192,17 +207,19 @@ class ManagedAgentExecutionService:
                     user_id=action.user_id,
                     parent_execution_id=action.action_id,
                     priority=action.priority,
+                    current_action_uri=action.action_uri,
                 ),
                 runtime_mode="managed_agent",
                 workflow_system_prompt_override=system_prompt,
             )
             if response.completion_messages_delta:
-                await self._transcript_service.append_completion_messages(
+                delta_records = await self._transcript_service.append_completion_messages(
                     execution_id=action.action_id,
                     action_uri=action.action_uri,
                     attempt_no=attempt_no,
                     completion_messages=response.completion_messages_delta,
                 )
+                self._log_transcript_records(delta_records)
             output_payload = _coerce_output_payload(
                 response.answer,
                 expects_json=bool(detail.output_fields),
@@ -221,23 +238,46 @@ class ManagedAgentExecutionService:
                 action_id=action.action_id,
                 instance_id=instance_id,
             )
+            self._logger.info(
+                "managed_agent_execution_completed",
+                extra={
+                    "action_id": str(action.action_id),
+                    "action_uri": action.action_uri,
+                    "user_id": action.user_id,
+                    "attempt_no": attempt_no,
+                    "produced_event_type": managed_agent_output_event_iri(
+                        detail.managed_agent_key
+                    ),
+                },
+            )
             return True
         except TimeoutError as exc:
-            await self._actions_service.fail_action(
-                action_id=action.action_id,
-                instance_id=instance_id,
-                error_code="upstream_timeout",
-                error_detail=str(exc),
-            )
-            return False
+            return await fail_action("upstream_timeout", str(exc))
         except Exception as exc:
-            await self._actions_service.fail_action(
-                action_id=action.action_id,
-                instance_id=instance_id,
-                error_code="transient_dependency_error",
-                error_detail=str(exc),
-            )
-            return False
+            return await fail_action("transient_dependency_error", str(exc))
+
+    def _log_transcript_records(
+        self,
+        records: list[AgentTranscriptMessageRecord],
+    ) -> None:
+        for record in records:
+            payload = {
+                "action_id": str(record.execution_id),
+                "action_uri": record.action_uri,
+                "attempt_no": record.attempt_no,
+                "sequence_no": record.sequence_no,
+                "role": record.message_role,
+                "message_kind": record.message_kind,
+                "call_id": record.call_id,
+                "message_json": record.message_json,
+            }
+            if record.message_kind == "tool_call":
+                self._logger.info("managed_agent_transcript_tool_call", extra=payload)
+                continue
+            if record.message_kind == "tool_result":
+                self._logger.info("managed_agent_transcript_tool_result", extra=payload)
+                continue
+            self._logger.info("managed_agent_transcript_message", extra=payload)
 
 
 async def run_managed_agent_runner_loop(settings: Settings) -> int:
@@ -355,7 +395,10 @@ def run() -> None:
     """CLI entrypoint for managed-agent runner process."""
 
     settings = Settings()
-    configure_logging(settings.log_level)
+    configure_logging(
+        settings.log_level,
+        managed_agent_log_path=settings.managed_agent_log_path,
+    )
     raise SystemExit(asyncio.run(run_managed_agent_runner_loop(settings)))
 
 
@@ -386,8 +429,28 @@ def _build_system_prompt(detail: ManagedAgentDetail) -> str:
             "Follow the operating instruction exactly and stay within the provided "
             "input/output contract."
         ),
+        (
+            "Never call load_action with this managed agent's own action URI. "
+            "Do not recursively invoke or reload the current managed agent."
+        ),
+        (
+            "You may inspect existing objects, events, and relationships through "
+            "the managed-agent-visible object-store and object-history skills when "
+            "that evidence is needed to complete the task accurately."
+        ),
+        (
+            "You may use load_action to load and invoke ordinary executable "
+            "ontology actions when the ontology already defines the operational "
+            "step you need."
+        ),
+        (
+            "Do not ask the user clarifying questions during execution. There is "
+            "no live human inspecting this run, so proceed with the best bounded "
+            "action supported by the available evidence and tools."
+        ),
         "",
         f"Managed agent: {detail.name}",
+        f"Managed agent action URI: {detail.action_uri}",
         f"Managed agent key: {detail.managed_agent_key}",
         "",
         "Operating instruction:",

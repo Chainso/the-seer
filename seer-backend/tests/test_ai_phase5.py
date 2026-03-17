@@ -13,6 +13,7 @@ from uuid import uuid4
 from fastapi.testclient import TestClient
 
 import seer_backend.ai.gateway as ai_gateway
+import seer_backend.ai.ontology_copilot as ontology_copilot
 from seer_backend.actions.repository import InMemoryActionsRepository
 from seer_backend.actions.service import ActionsService
 from seer_backend.ai.assistant_tools import AssistantDomainToolAdapter
@@ -63,6 +64,17 @@ ASSISTANT_SKILLS_ROOT = (
 )
 _ORDER_URI = "urn:seer:test:order"
 _CHILD_ACTION_URI = "urn:seer:test:action.email_customer"
+_OPENAI_INVALID_TOP_LEVEL_PARAMETER_KEYS = {"oneOf", "anyOf", "allOf", "enum", "not"}
+_LONG_POLICY_BLOCK_ERROR = (
+    "SPARQL update operations are not allowed because the assistant runtime only "
+    "permits read-only SELECT or ASK queries against the ontology graph, and this "
+    "request attempted to mutate data with INSERT DATA."
+)
+_LONG_NOT_READY_ERROR = (
+    "Ontology release is still initializing and the current release graph has not "
+    "finished loading into the read-only runtime yet, so exact query answers are "
+    "temporarily unavailable."
+)
 
 
 def _to_uri_identifier(value: str) -> str:
@@ -104,6 +116,15 @@ def _normalize_event_payload(payload: dict[str, object]) -> dict[str, object]:
 
 def _object_ref_hash(object_ref: dict[str, object]) -> int:
     return xxhash64_uint64(canonicalize_object_ref(object_ref))
+
+
+def _assert_openai_function_tool_schema(schema: dict[str, object]) -> None:
+    function = schema["function"]
+    assert isinstance(function, dict)
+    parameters = function["parameters"]
+    assert isinstance(parameters, dict)
+    assert parameters["type"] == "object"
+    assert _OPENAI_INVALID_TOP_LEVEL_PARAMETER_KEYS.isdisjoint(parameters)
 
 
 class StubOntologyCopilotService:
@@ -174,7 +195,7 @@ class StubOntologyCopilotWithPolicyBlock:
             tool_result=CopilotToolResult(
                 tool="sparql_read_only_query",
                 query="INSERT DATA { <urn:test:s> <urn:test:p> \"x\" . }",
-                error="SPARQL update operations are not allowed",
+                error=_LONG_POLICY_BLOCK_ERROR,
             ),
             completion_messages_delta=[
                 {
@@ -213,7 +234,7 @@ class StubOntologyCopilotWithPolicyBlock:
                 status="failed",
                 tool=response.tool_call.tool,
                 call_id=call_id,
-                summary="Read-only SPARQL query failed: SPARQL update operations are not allowed",
+                summary=f"Read-only SPARQL query failed: {_LONG_POLICY_BLOCK_ERROR}",
                 query_preview=response.tool_call.query,
                 error=response.tool_result.error if response.tool_result else None,
             )
@@ -230,7 +251,7 @@ class StubOntologyCopilotNotReady:
         assistant_tool_adapter: object | None = None,
     ) -> CopilotChatResponse:
         del question, conversation, completion_conversation, assistant_tool_adapter
-        raise OntologyNotReadyError("Ontology release is still initializing")
+        raise OntologyNotReadyError(_LONG_NOT_READY_ERROR)
 
     async def answer_stream(
         self,
@@ -240,7 +261,7 @@ class StubOntologyCopilotNotReady:
         assistant_tool_adapter: object | None = None,
     ) -> AsyncIterator[CopilotAnswerStreamEvent]:
         del question, conversation, completion_conversation, assistant_tool_adapter
-        raise OntologyNotReadyError("Ontology release is still initializing")
+        raise OntologyNotReadyError(_LONG_NOT_READY_ERROR)
         yield CopilotAssistantDeltaEvent(text="")
 
 
@@ -527,6 +548,72 @@ class _ManagedAgentLoadActionRuntime(CopilotModelRuntime):
         return CopilotStructuredOutput(
             mode="direct_answer",
             answer="Loaded and submitted the child action.",
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _ManagedAgentInvalidLoadActionRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        del messages
+        self.calls += 1
+        assert tools is not None
+        if self.calls == 1:
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Trying to load an action with a bad identifier.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="load_action",
+                    action_uri="create sales order",
+                    call_id="call_bad_load_action_1",
+                ),
+            )
+
+        assert self.calls == 2
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="The invalid action identifier was rejected as a tool error.",
+            evidence=[],
+            tool_call=None,
+        )
+
+
+class _ManagedAgentSelfLoadActionRuntime(CopilotModelRuntime):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def run_messages(
+        self,
+        messages: list[dict[str, object]],
+        tools: list[dict[str, object]] | None = None,
+    ) -> CopilotStructuredOutput:
+        del messages
+        self.calls += 1
+        assert tools is not None
+        if self.calls == 1:
+            return CopilotStructuredOutput(
+                mode="tool_call",
+                answer="Trying to load the current managed agent action.",
+                evidence=[],
+                tool_call=CopilotToolCall(
+                    tool="load_action",
+                    action_uri="urn:seer:managed-agent:create_and_close_sales_order",
+                    call_id="call_self_load_action_1",
+                ),
+            )
+
+        assert self.calls == 2
+        return CopilotStructuredOutput(
+            mode="direct_answer",
+            answer="The self-recursive load_action attempt was rejected as a tool error.",
             evidence=[],
             tool_call=None,
         )
@@ -1006,6 +1093,26 @@ def test_ontology_copilot_service_supports_managed_agent_workflow_prompt_mode() 
         "You are Seer's managed-agent execution copilot." in message
         for message in system_messages
     )
+    assert any(
+        "Never use `load_action` to load the current managed agent's own action URI."
+        in message
+        for message in system_messages
+    )
+    assert any(
+        "Use the object-store and object-history skills when you need to inspect"
+        in message
+        for message in system_messages
+    )
+    assert any(
+        "Use `load_action` when the ontology exposes an ordinary executable action"
+        in message
+        for message in system_messages
+    )
+    assert any(
+        "Do not ask the user clarifying questions during execution."
+        in message
+        for message in system_messages
+    )
     assert not any(
         "You are Seer's conversational assistant." in message
         for message in system_messages
@@ -1146,6 +1253,67 @@ def test_managed_agent_mode_load_action_registers_callable_tool_and_submits_chil
     assert load_action_result["tool"] == "load_action"
     assert load_action_result["action_uri"] == _CHILD_ACTION_URI
     assert load_action_result["loaded_action_tool_name"].startswith("invoke_action__")
+
+
+def test_managed_agent_mode_invalid_load_action_fails_gracefully() -> None:
+    repository = InMemoryActionsRepository()
+    actions_service = ActionsService(repository=repository)
+    copilot = OntologyCopilotService(
+        _ManagedAgentActionOntologyService(),
+        model_runtime=_ManagedAgentInvalidLoadActionRuntime(),
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+
+    response = asyncio.run(
+        copilot.answer(
+            "Try to load an action with a bad identifier.",
+            conversation=[],
+            runtime_mode="managed_agent",
+            action_runtime=actions_service,
+            action_execution_context=CopilotActionExecutionContext(
+                user_id="managed-agent-user",
+                parent_execution_id=uuid4(),
+            ),
+        )
+    )
+
+    assert response.answer == "The invalid action identifier was rejected as a tool error."
+    assert response.tool_result is not None
+    assert response.tool_result.tool == "load_action"
+    assert "full absolute IRI" in (response.tool_result.error or "")
+
+
+def test_managed_agent_mode_rejects_loading_current_managed_agent_action() -> None:
+    repository = InMemoryActionsRepository()
+    actions_service = ActionsService(repository=repository)
+    copilot = OntologyCopilotService(
+        _ManagedAgentActionOntologyService(),
+        model_runtime=_ManagedAgentSelfLoadActionRuntime(),
+        skill_registry=AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)]),
+    )
+
+    response = asyncio.run(
+        copilot.answer(
+            "Do not recurse into the current managed agent.",
+            conversation=[],
+            runtime_mode="managed_agent",
+            action_runtime=actions_service,
+            action_execution_context=CopilotActionExecutionContext(
+                user_id="managed-agent-user",
+                parent_execution_id=uuid4(),
+                current_action_uri="urn:seer:managed-agent:create_and_close_sales_order",
+            ),
+        )
+    )
+
+    assert response.answer == (
+        "The self-recursive load_action attempt was rejected as a tool error."
+    )
+    assert response.tool_result is not None
+    assert response.tool_result.tool == "load_action"
+    assert "cannot load the currently executing managed agent" in (
+        response.tool_result.error or ""
+    )
 
 
 def test_ai_workbench_chat_streams_investigation_answer_and_linked_surfaces() -> None:
@@ -1346,6 +1514,9 @@ def test_ai_assistant_chat_logs_tool_status_events(caplog) -> None:
     assert all(record.thread_id == "thread-tools-1" for record in tool_records)
     assert tool_records[0].tool == "sparql_read_only_query"
     assert tool_records[0].call_id == "call_1"
+    assert tool_records[1].error == _LONG_POLICY_BLOCK_ERROR
+    assert tool_records[1].summary.endswith(_LONG_POLICY_BLOCK_ERROR)
+    assert len(tool_records[1].summary) > 160
 
 
 def test_ai_assistant_chat_load_skill_updates_permissions_and_logs_tool_status(
@@ -1582,7 +1753,7 @@ def test_assistant_domain_tool_schemas_are_fully_specified() -> None:
     )
 
     schemas = {
-        schema["function"]["name"]: schema["function"]["parameters"]
+        schema["function"]["name"]: schema["function"]
         for schema in adapter.tool_schemas(
             {
                 "root_cause.run",
@@ -1594,7 +1765,7 @@ def test_assistant_domain_tool_schemas_are_fully_specified() -> None:
         )
     }
 
-    root_cause_run = schemas["root_cause_run"]
+    root_cause_run = schemas["root_cause_run"]["parameters"]
     assert root_cause_run["properties"]["outcome"]["properties"]["event_type"]["type"] == "string"
     assert root_cause_run["properties"]["filters"]["items"]["properties"]["op"]["enum"] == [
         "eq",
@@ -1606,7 +1777,7 @@ def test_assistant_domain_tool_schemas_are_fully_specified() -> None:
         "lte",
     ]
 
-    interpret = schemas["root_cause_assist_interpret"]
+    interpret = schemas["root_cause_assist_interpret"]["parameters"]
     insight_items = interpret["properties"]["insights"]["items"]
     assert insight_items["properties"]["score"]["properties"]["lift"]["type"] == "number"
     assert (
@@ -1617,20 +1788,20 @@ def test_assistant_domain_tool_schemas_are_fully_specified() -> None:
     )
     assert insight_items["additionalProperties"] is False
 
-    object_events = schemas["history_object_events"]
+    object_events = schemas["history_object_events"]["parameters"]
     assert object_events["required"] == ["object_type"]
-    assert object_events["anyOf"] == [
-        {"required": ["object_ref_hash"]},
-        {"required": ["object_ref_canonical"]},
-    ]
+    assert "anyOf" not in object_events
+    assert schemas["history_object_events"]["description"].endswith(
+        "`object_ref_canonical`."
+    )
 
-    relations = schemas["history_relations"]
-    assert relations["anyOf"] == [
-        {"required": ["event_id"]},
-        {"required": ["object_type", "object_ref_hash"]},
-    ]
+    relations = schemas["history_relations"]["parameters"]
+    assert "anyOf" not in relations
+    assert "either `event_id` or both `object_type` and `object_ref_hash`" in schemas[
+        "history_relations"
+    ]["description"]
 
-    latest_objects = schemas["history_latest_objects"]
+    latest_objects = schemas["history_latest_objects"]["parameters"]
     assert latest_objects["properties"]["property_filters"]["items"] == {
         "type": "object",
         "properties": {
@@ -1644,6 +1815,70 @@ def test_assistant_domain_tool_schemas_are_fully_specified() -> None:
         "required": ["key", "op", "value"],
         "additionalProperties": False,
     }
+
+
+def test_all_copilot_tool_schemas_are_openai_compatible() -> None:
+    adapter = AssistantDomainToolAdapter(
+        process_service=UnavailableProcessMiningService("unavailable"),
+        root_cause_service=UnavailableRootCauseService("unavailable"),
+        history_service=UnavailableHistoryService("unavailable"),
+    )
+    skill_registry = AssistantSkillRegistry([str(ASSISTANT_SKILLS_ROOT)])
+    available_skills = skill_registry.discover()
+
+    assistant_schemas = ontology_copilot._tool_schemas(
+        conversation_messages=[
+            {
+                "role": "tool",
+                "content": json.dumps(
+                    {
+                        "tool": "load_skill",
+                        "skill_name": "object-history",
+                        "allowed_tools": [
+                            "history.object_events",
+                            "history.relations",
+                            "history.object_timeline",
+                            "history.latest_objects",
+                        ],
+                    }
+                ),
+            }
+        ],
+        assistant_tool_adapter=adapter,
+        action_runtime=None,
+        available_skills=available_skills,
+        runtime_mode="assistant",
+    )
+
+    managed_agent_schemas = ontology_copilot._tool_schemas(
+        conversation_messages=[
+            {
+                "role": "tool",
+                "content": json.dumps(
+                    {
+                        "tool": "load_action",
+                        "action_uri": _CHILD_ACTION_URI,
+                        "action_label": "Email Customer",
+                        "loaded_action_tool_name": "invoke_action__email_customer__1234567890",
+                        "loaded_action_parameters_schema": {
+                            "type": "object",
+                            "properties": {"customer_id": {"type": "string"}},
+                            "required": ["customer_id"],
+                            "anyOf": [{"required": ["customer_id"]}],
+                            "additionalProperties": False,
+                        },
+                    }
+                ),
+            }
+        ],
+        assistant_tool_adapter=adapter,
+        action_runtime=ActionsService(repository=InMemoryActionsRepository()),
+        available_skills=available_skills,
+        runtime_mode="managed_agent",
+    )
+
+    for schema in assistant_schemas + managed_agent_schemas:
+        _assert_openai_function_tool_schema(schema)
 
 
 def test_ai_assistant_chat_object_store_skill_unlocks_search_tool_and_persists_result() -> None:
@@ -1922,7 +2157,7 @@ def test_ai_assistant_chat_logs_failure(caplog) -> None:
     )
     assert failed.thread_id == "thread-failure-1"
     assert failed.error_type == "OntologyNotReadyError"
-    assert "initializing" in failed.error_message.lower()
+    assert failed.error_message == _LONG_NOT_READY_ERROR
 
 
 def test_ai_assistant_chat_rejects_legacy_messages_only_payload() -> None:

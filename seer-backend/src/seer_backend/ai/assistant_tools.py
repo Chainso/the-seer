@@ -52,14 +52,39 @@ class AssistantToolDefinition:
 
     @property
     def schema(self) -> dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {
-                "name": self.function_name,
-                "description": self.description,
-                "parameters": self.parameters,
-            },
-        }
+        return normalize_openai_function_tool_schema(
+            {
+                "type": "function",
+                "function": {
+                    "name": self.function_name,
+                    "description": self.description,
+                    "parameters": self.parameters,
+                },
+            }
+        )
+
+
+_OPENAI_INVALID_TOP_LEVEL_PARAMETER_KEYS = frozenset({"oneOf", "anyOf", "allOf", "enum", "not"})
+
+
+def normalize_openai_function_tool_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    function_schema = schema.get("function")
+    if not isinstance(function_schema, dict):
+        return schema
+
+    parameters = function_schema.get("parameters")
+    if not isinstance(parameters, dict):
+        return schema
+
+    sanitized_parameters = dict(parameters)
+    for key in _OPENAI_INVALID_TOP_LEVEL_PARAMETER_KEYS:
+        sanitized_parameters.pop(key, None)
+
+    sanitized_function_schema = dict(function_schema)
+    sanitized_function_schema["parameters"] = sanitized_parameters
+    sanitized_schema = dict(schema)
+    sanitized_schema["function"] = sanitized_function_schema
+    return sanitized_schema
 
 
 class _ProcessTraceRequest(BaseModel):
@@ -442,7 +467,11 @@ class AssistantDomainToolAdapter:
             AssistantToolDefinition(
                 permission_name="history.object_events",
                 function_name="history_object_events",
-                description="Fetch the events linked to one object instance.",
+                description=(
+                    "Fetch the events linked to one object instance. Provide "
+                    "`object_type` plus either `object_ref_hash` or "
+                    "`object_ref_canonical`."
+                ),
                 parameters={
                     "type": "object",
                     "properties": {
@@ -465,7 +494,11 @@ class AssistantDomainToolAdapter:
             AssistantToolDefinition(
                 permission_name="history.relations",
                 function_name="history_relations",
-                description="Fetch neighboring objects related to one event or object instance.",
+                description=(
+                    "Fetch neighboring objects related to one event or object "
+                    "instance. Provide either `event_id` or both `object_type` "
+                    "and `object_ref_hash`."
+                ),
                 parameters={
                     "type": "object",
                     "properties": {

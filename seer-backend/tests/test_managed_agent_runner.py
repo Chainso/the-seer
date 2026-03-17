@@ -316,6 +316,22 @@ def test_managed_agent_runner_executes_claimed_run_and_emits_output_event() -> N
     assert isinstance(execution_context, CopilotActionExecutionContext)
     assert execution_context.user_id == "managed-agent-user"
     assert execution_context.parent_execution_id == submit_result.action.action_id
+    assert (
+        execution_context.current_action_uri
+        == "urn:seer:managed-agent:ticket_triage_assistant"
+    )
+    system_prompt = str(copilot_service.calls[0]["workflow_system_prompt_override"])
+    assert "Never call load_action with this managed agent's own action URI." in system_prompt
+    assert "You may inspect existing objects, events, and relationships through" in (
+        system_prompt
+    )
+    assert "You may use load_action to load and invoke ordinary executable" in (
+        system_prompt
+    )
+    assert "Do not ask the user clarifying questions during execution." in system_prompt
+    assert "Managed agent action URI: urn:seer:managed-agent:ticket_triage_assistant" in (
+        system_prompt
+    )
     assert len(events.items) == 1
     assert events.items[0].event_type == "urn:seer:managed-agent:ticket_triage_assistant:output"
     assert events.items[0].payload["newState"] == "closed"

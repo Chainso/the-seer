@@ -418,12 +418,12 @@ class AiGatewayService:
                             "tool": stream_event.tool,
                             "status": stream_event.status,
                             "call_id": stream_event.call_id,
-                            "summary": _preview_text(stream_event.summary),
+                            "summary": stream_event.summary,
                             "query_type": stream_event.query_type,
-                            "query_preview": _preview_text(stream_event.query_preview),
+                            "query_preview": stream_event.query_preview,
                             "row_count": stream_event.row_count,
                             "truncated": stream_event.truncated,
-                            "error": _preview_text(stream_event.error),
+                            "error": stream_event.error,
                         },
                     )
                     yield (
@@ -505,7 +505,7 @@ class AiGatewayService:
                         "delta_chars": delta_chars,
                         "tool_event_count": tool_event_count,
                         "error_type": type(exc).__name__,
-                        "error_message": _preview_text(str(exc)),
+                        "error_message": str(exc),
                     },
                 )
             raise
