@@ -1,6 +1,6 @@
 # Catalog Reframe And Lifecycle Workspace
 
-**Status:** in_progress  
+**Status:** completed  
 **Target order:** post-MVP follow-on  
 **Agent slot:** CATALOG-UX-1  
 **Predecessor:** none  
@@ -31,7 +31,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - [x] 2026-03-17 Phase 2 finisher: refine catalog runtime tables to remove user-visible internal identifier columns and lock the behavior in contract tests.
 - [x] 2026-03-17 Phase 3: fold the existing object-scoped investigation capability into object detail as `<Object Name> Lifecycle`, remove obsolete primary-nav flows, and complete the initial lifecycle integration.
 - [x] 2026-03-17 Phase 3 finisher: replace remaining technical lifecycle-result wording and harden object-model resolution for the catalog lifecycle tab.
-- [ ] 2026-03-17 Phase 4: ratify canonical docs/specs, run final validation, and archive the plan.
+- [x] 2026-03-17 Phase 4: ratify canonical docs/specs, run final validation, and archive the plan (moved to `docs/exec-plans/completed/catalog-reframe-and-lifecycle-workspace.md`).
 
 ## Surprises & Discoveries
 
@@ -52,6 +52,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - 2026-03-17: Catalog object detail does not currently expose object-model URIs in its API contract, but the reused lifecycle workspace requires one. Phase 3 solved this with a local object-lifecycle adapter that resolves object models from `useOntologyDisplay` and keeps URI internals out of visible UI.
 - 2026-03-17: Post-Phase 3 controller gating found two remaining lifecycle quality gaps. `seer-ui/app/components/catalog/object-lifecycle-workspace.tsx` still resolves the object model through catalog display-name matching instead of a stable catalog-key/API-backed identifier, and lifecycle mode in `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` still exposes technical result labels such as `Hypothesis`, `Lift`, `Coverage`, `anchor-field`, and `Graph compare ready`.
 - 2026-03-17: The Phase 3 finisher resolved these gaps by adding `object_type_uri` to the catalog object detail response so the lifecycle tab can point to the right model deterministically and by updating the lifecycle copy/information hierarchy to plain lifecycle language instead of score-model jargon.
+- 2026-03-17: Phase 4 ratified that catalog is the canonical user surface: `AGENTS.md`, `VISION.md`, `DESIGN.md`, and `docs/product-specs/foundation-module-shell-phase-0.md` now document the catalog-first navigation and treat `/ontology` routes/pages as deprecated retained code, while the architecture text keeps ontology as the internal capability layer behind the catalog read model.
 
 ## Decision Log
 
@@ -142,6 +143,17 @@ Execution-phase outcomes will be appended here as phases complete. The final ret
 7. Controller gating kept Phase 3 open for a narrow finisher before Phase 4:
    - replace remaining technical lifecycle-result wording with plain lifecycle language,
    - and make lifecycle object-model resolution deterministic instead of relying on catalog display-name matching alone.
+
+2026-03-17 Phase 4 outcome:
+
+1. Canonical docs were ratified: `AGENTS.md`, `VISION.md`, and `DESIGN.md` now describe `Catalog` as the primary discovery surface, `docs/product-specs/foundation-module-shell-phase-0.md` lists `/catalog` routes while marking `/ontology` pages as deprecated retained surfaces, and `ARCHITECTURE.md` keeps ontology as the internal capability layer that powers the catalog read model.
+2. Indexes and plan metadata were updated: the active plan entry was removed from `docs/exec-plans/active/index.md`, the completed-plan README gained a new entry, and this plan now lives under `docs/exec-plans/completed/catalog-reframe-and-lifecycle-workspace.md` with its living sections closed out.
+3. Final validations ran and passed:
+   - `cd /workspaces/seer-python/seer-backend && ./.venv/bin/ruff check .`
+   - `cd /workspaces/seer-python/seer-backend && ./.venv/bin/pytest`
+   - `cd /workspaces/seer-python/seer-ui && npm run build`
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs`
+4. The plan’s retrospective records that catalog routes, nav, lifecycle framing, and documentation now represent the final state; legacy ontology surfaces remain on disk purely as deprecated reference implementations.
 
 ## Context and Orientation
 
@@ -250,7 +262,7 @@ Phase 3 acceptance:
 Final acceptance:
 
 1. `AGENTS.md`, `VISION.md`, `DESIGN.md`, and relevant product specs are updated in the same change.
-2. Final validation passes, including targeted UI/backend tests and frontend production build.
+2. Final validation passes: backend Ruff, backend pytest, frontend `npm run build`, and the catalog/history/insights contract tests all succeeded.
 3. The active plan is archived and indexes are consistent.
 
 Known baseline failures before implementation: none recorded. Treat any new failure as a regression until proven otherwise.

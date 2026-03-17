@@ -32,6 +32,7 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 4. Optimize for the best current user experience, backend contract clarity, and product correctness, even when that breaks legacy implementation patterns.
 5. Treat legacy behavior as migration context, not a binding constraint.
 6. Prefer deleting, replacing, or simplifying obsolete implementation patterns over carrying them forward for consistency with the current codebase.
+7. Catalog is now the canonical user-facing discovery surface; `/catalog`, `/catalog/[kind]`, and `/catalog/[kind]/[catalogKey]` routes represent the published experience while `/ontology`, `/inspector/history`, `/inspector/insights`, and neighboring pages remain on disk only as deprecated retained surfaces.
 
 ## Read Order by Task Type
 

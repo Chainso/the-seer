@@ -60,3 +60,4 @@ Each completed plan should preserve:
 48. `seer-owned-managed-agent-runner.md` - completed (2026-03-16)
 49. `managed-agent-copilot-runtime-and-prompt-split.md` - completed (2026-03-16)
 50. `manual-action-retry.md` - completed (2026-03-17)
+51. `catalog-reframe-and-lifecycle-workspace.md` - completed (2026-03-17)

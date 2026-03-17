@@ -38,6 +38,7 @@ For a new reader, the shortest useful summary is:
 16. Seer UI components are built on Radix UI primitives as the standard accessibility and interaction foundation for reusable frontend components.
 17. The shared Seer shell is responsive by default, but shell affordances should stay subordinate to the primary investigation and managed-agent experiences.
 18. Assistant canvas artifacts should reuse the same expert display surfaces as their page counterparts wherever possible, with host differences limited to orchestration controls and outer chrome.
+19. Catalog is the primary discovery workspace: the shell exposes a single `Catalog` nav entry whose tab rail surfaces Objects, Actions, Events, and Triggers, each with table-first browsing and dedicated detail pages, including the `Summary` / `<Object Name> Lifecycle` modes; the former `/ontology`, `/inspector/history`, and `/inspector/insights` views remain retained reference surfaces rather than award-winning navigation entries.
 
 ## Design Docs Index
 

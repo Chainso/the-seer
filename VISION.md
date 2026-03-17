@@ -155,6 +155,12 @@ They remain available as:
 
 They are important product modules, but they are no longer the primary product identity.
 
+## 4.4 Catalog Discovery
+
+Catalog is the canonical discovery surface that replaces the older ontology-first home. The shared shell now exposes a single `Catalog` entry point with tab-rail navigation for Objects, Actions, Events, and Triggers, and each concept has a dedicated detail page that pairs friendly documentation with lightweight runtime evidence. Object detail remains the richest view: the Summary mode covers documentation, relationships, and instances, while `<Object Name> Lifecycle` reuses the combined RCA/OC-DFG workspace with lifecycle terminology so the same tooling reads as business context rather than academic process mining.
+
+The former `/ontology` explorer plus the `Object Store` and `Insights` shells remain on disk as deprecated diagnostics surfaces for the few scenarios that still need deep RDF or process-mining primitives, but they are no longer promoted as part of the public navigation.
+
 ---
 
 ## 5. Product Scope

@@ -10,10 +10,12 @@ Define user-visible behavior for the Phase 0 UI shell and backend connectivity s
 ## User-Facing Routes
 
 1. `/` - MVP module index and backend health summary.
-2. `/ontology` and `/ontology/[tab]` - ontology explorer shell.
-3. `/inspector/history` and `/inspector/history/object` - object-store and object-detail shell surfaces.
-4. `/inspector/insights` - analytics shell for process mining and process insights.
-5. `/assistant` - dedicated assistant workspace.
+2. `/catalog` - catalog workspace shell that hosts Objects, Actions, Events, and Triggers via a tab rail plus `/catalog/[kind]` list pages.
+3. `/catalog/[kind]/[catalogKey]` - dedicated concept detail pages with Summary documentation/runtime panes and the `<Object Name> Lifecycle` tab for objects.
+4. `/inspector/history` and `/inspector/history/object` - object-store and object-detail shell surfaces.
+5. `/inspector/insights` - analytics shell for process mining and process insights.
+6. `/assistant` - dedicated assistant workspace.
+7. `/ontology` and `/ontology/[tab]` - deprecated reference shells that now redirect to catalog while remaining available for expert-level diagnostics.
 
 ## Behavior Requirements
 
@@ -28,6 +30,7 @@ Define user-visible behavior for the Phase 0 UI shell and backend connectivity s
 9. Route navigation from the shared drawer must close the drawer and restore page scrolling.
 10. The shell must preserve reachable navigation, visible focus styles, and touch-sized controls across desktop and mobile widths.
 11. Shared shell routes must avoid major horizontal overflow or clipped primary content at common mobile widths.
+12. The shell should default to `/catalog/objects`, expose `Catalog` as the primary navigation entry, and keep the lifecycle tab on object detail in the same layout so that documentation, related concepts, and runtime evidence remain visible without exposing RDF/ontology details.
 
 ## Acceptance Checks
 

@@ -64,6 +64,7 @@ Primary responsibilities:
 3. Expert drill-down over ontology, history, process, and RCA evidence.
 4. Unified assistant experience across shell and dedicated assistant surfaces.
 5. Dedicated `/assistant` conversation shell with an attached optional artifact canvas.
+6. Catalog-first discovery: the shared shell exposes `/catalog` with a tab rail for Objects, Actions, Events, and Triggers, lightweight tables for each concept, and dedicated detail pages (Summary + `<Object Name> Lifecycle`) that surface documentation, relationships, and non-technical runtime evidence while keeping the legacy `/ontology`, `/inspector/history`, and `/inspector/insights` pages on disk as reference surfaces.
 
 Expected internal areas:
 
