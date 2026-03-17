@@ -131,18 +131,14 @@ function RuntimeTable<TKind extends CatalogKind>({
         <TableHeader>
           <TableRow>
             <TableColumnHeaderCell>Recorded</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Source Event</TableColumnHeaderCell>
             <TableColumnHeaderCell>Reference</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Data</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Snapshot</TableColumnHeaderCell>
           </TableRow>
         </TableHeader>
         <TableBody>
           {shaped.instances.map((item) => (
             <TableRow key={item.instance_id}>
               <TableCell>{formatDateTime(item.recorded_at)}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {item.source_event_id || "-"}
-              </TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {summarizeValue(item.reference)}
               </TableCell>
@@ -161,9 +157,9 @@ function RuntimeTable<TKind extends CatalogKind>({
         <TableHeader>
           <TableRow>
             <TableColumnHeaderCell>Status</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Run</TableColumnHeaderCell>
             <TableColumnHeaderCell>Submitted</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Updated</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Completed</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Attempts</TableColumnHeaderCell>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -174,9 +170,9 @@ function RuntimeTable<TKind extends CatalogKind>({
                   {item.status}
                 </Badge>
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground">{item.run_id}</TableCell>
               <TableCell>{formatDateTime(item.submitted_at)}</TableCell>
-              <TableCell>{formatDateTime(item.updated_at)}</TableCell>
+              <TableCell>{formatDateTime(item.completed_at)}</TableCell>
+              <TableCell>{item.attempt_count}</TableCell>
             </TableRow>
           ))}
         </TableBody>
@@ -192,8 +188,7 @@ function RuntimeTable<TKind extends CatalogKind>({
           <TableRow>
             <TableColumnHeaderCell>Occurred</TableColumnHeaderCell>
             <TableColumnHeaderCell>Source</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Trace</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Payload</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Summary</TableColumnHeaderCell>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -201,7 +196,6 @@ function RuntimeTable<TKind extends CatalogKind>({
             <TableRow key={item.event_id}>
               <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
               <TableCell>{item.source}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">{item.trace_id || "-"}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {summarizeValue(item.payload)}
               </TableCell>
@@ -219,8 +213,7 @@ function RuntimeTable<TKind extends CatalogKind>({
         <TableRow>
           <TableColumnHeaderCell>Occurred</TableColumnHeaderCell>
           <TableColumnHeaderCell>Source</TableColumnHeaderCell>
-          <TableColumnHeaderCell>Trace</TableColumnHeaderCell>
-          <TableColumnHeaderCell>Payload</TableColumnHeaderCell>
+          <TableColumnHeaderCell>Summary</TableColumnHeaderCell>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -228,7 +221,6 @@ function RuntimeTable<TKind extends CatalogKind>({
           <TableRow key={item.event_id}>
             <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
             <TableCell>{item.source}</TableCell>
-            <TableCell className="text-xs text-muted-foreground">{item.trace_id || "-"}</TableCell>
             <TableCell className="text-xs text-muted-foreground">{summarizeValue(item.payload)}</TableCell>
           </TableRow>
         ))}

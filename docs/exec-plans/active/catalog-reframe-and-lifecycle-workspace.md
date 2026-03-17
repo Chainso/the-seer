@@ -28,6 +28,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - [x] 2026-03-17 Create the active execution plan, add it to `docs/exec-plans/active/index.md`, and record baseline validation before implementation.
 - [x] 2026-03-17 Phase 1: land backend catalog read models and dedicated per-concept catalog APIs with regression coverage.
 - [x] 2026-03-17 Phase 2: land shell/navigation changes plus catalog list/detail routes and reusable summary/runtime layouts.
+- [x] 2026-03-17 Phase 2 finisher: refine catalog runtime tables to remove user-visible internal identifier columns and lock the behavior in contract tests.
 - [ ] 2026-03-17 Phase 3: fold the existing object-scoped investigation capability into object detail as `<Object Name> Lifecycle`, remove obsolete primary-nav flows, and complete the copy/deprecation audit.
 - [ ] 2026-03-17 Phase 4: ratify canonical docs/specs, run final validation, and archive the plan.
 
@@ -46,6 +47,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - 2026-03-17: The canonical minimal ontology fixture labels the trigger as `On Ticket Created` (not `On Ticket Created Trigger`), which required a test expectation correction during Phase 1 validation.
 - 2026-03-17: Next.js app-router route params are promise-shaped in this codebase (`params: Promise<{...}>`), so new catalog dynamic routes and legacy ontology redirects should follow the same async signature for consistency and compile-time safety.
 - 2026-03-17: Existing contract tests hard-asserted old sidebar entries (`Object Store`, `Insights`). Phase 2 required updating those assertions to keep test coverage aligned with the new catalog-first shell while preserving the underlying inspector routes as retained code-on-disk surfaces.
+- 2026-03-17: Controller validation after initial Phase 2 found that catalog runtime tables still presented raw internal identifiers (`source_event_id`, `run_id`, `trace_id`) as primary columns, which conflicted with the catalog UX requirement for light, user-facing operational language.
 
 ## Decision Log
 
@@ -62,6 +64,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - 2026-03-17, Codex: Make `/catalog` the single primary shell destination and model concept switching with URL-backed rail tabs (`/catalog/objects|actions|events|triggers`) instead of separate sidebar items. Rationale: this keeps catalog concepts as one coherent workspace while preserving fast switching and linkable URLs.
 - 2026-03-17, Codex: Keep `/ontology/*`, `/inspector/history`, and `/inspector/insights` routes on disk but remove ontology/object-store/insights from primary nav. Rationale: final-state product IA requires catalog-first framing now, while retained legacy routes still support internal reuse and transition work in later phases.
 - 2026-03-17, Codex: Implement Phase 2 object detail as summary-plus-runtime with an explicit lifecycle placeholder note, deferring actual lifecycle tab integration to Phase 3. Rationale: this satisfies phase scope boundaries and keeps the detail route ready for the lifecycle workspace without prematurely pulling in investigation components.
+- 2026-03-17, Codex: Runtime evidence tables in catalog detail should favor operational/user-facing column names and remove raw identifier-first columns (`source_event_id`, `run_id`, `trace_id`) from visible table headers/cells. Rationale: catalog-first UX should expose clarity and utility, not storage/trace implementation details.
 
 ## Outcomes & Retrospective
 
@@ -106,6 +109,18 @@ Execution-phase outcomes will be appended here as phases complete. The final ret
    - `seer-ui/tests/history.contract.test.mjs`
    - `seer-ui/tests/insights.contract.test.mjs`
 6. Phase 2 validation passed:
+   - `cd /workspaces/seer-python/seer-ui && npm run build`
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs`
+
+2026-03-17 Phase 2 finisher outcome:
+
+1. Refined catalog detail runtime tables to remove internal identifier-first presentation:
+   - objects now show `Recorded`, `Reference`, and `Snapshot`
+   - actions now show `Status`, `Submitted`, `Completed`, and `Attempts`
+   - events and triggers now show `Occurred`, `Source`, and `Summary`
+2. Kept raw internal identifiers out of visible runtime table columns and cells in `seer-ui/app/components/catalog/catalog-detail-page.tsx`.
+3. Strengthened `seer-ui/tests/catalog.contract.test.mjs` with explicit assertions for the user-facing headers and explicit guards against old internal-ID headers.
+4. Phase 2 finisher validation passed:
    - `cd /workspaces/seer-python/seer-ui && npm run build`
    - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs`
 
@@ -491,6 +506,15 @@ completed
 6. Validation evidence:
    - `cd /workspaces/seer-python/seer-ui && npm run build` passed.
    - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs` passed (`11/11` tests).
+7. 2026-03-17 finisher pass refined runtime table clarity in `seer-ui/app/components/catalog/catalog-detail-page.tsx`:
+   - objects: `Recorded`, `Reference`, `Snapshot`
+   - actions: `Status`, `Submitted`, `Completed`, `Attempts`
+   - events/triggers: `Occurred`, `Source`, `Summary`
+   - removed user-visible `source_event_id`, `run_id`, and `trace_id` columns
+8. Added explicit contract coverage in `seer-ui/tests/catalog.contract.test.mjs` to keep those internal-ID columns from reappearing.
+9. Finisher validation evidence:
+   - `cd /workspaces/seer-python/seer-ui && npm run build` passed.
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs` passed (`11/11` tests).
 
 **Next Starter Context**
 
@@ -498,7 +522,7 @@ Phase 3 should focus only on object detail lifecycle integration:
 
 1. Replace the object-detail lifecycle placeholder note in `seer-ui/app/components/catalog/catalog-detail-page.tsx` with a real `Summary` / `<Object Name> Lifecycle` tab model.
 2. Reuse `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` as the lifecycle implementation base, but reframe labels/copy away from `Insights` and `OC-DFG`.
-3. Keep action/event/trigger detail pages as single-page summary/runtime layouts.
+3. Keep action/event/trigger detail pages as single-page summary/runtime layouts and preserve the new user-facing runtime-column language.
 
 ## Phase 3
 
