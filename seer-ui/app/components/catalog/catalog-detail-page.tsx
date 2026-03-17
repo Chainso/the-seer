@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { CatalogKindTabs } from "@/app/components/catalog/catalog-kind-tabs";
+import { ObjectLifecycleWorkspace } from "@/app/components/catalog/object-lifecycle-workspace";
 import { Badge } from "@/app/components/ui/badge";
 import { Card } from "@/app/components/ui/card";
 import {
@@ -14,6 +15,7 @@ import {
   TableRoot,
   TableRow,
 } from "@/app/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { getCatalogDetailByKind, getCatalogRuntimeByKind } from "@/app/lib/api/catalog";
 import { buildCatalogDetailHref, buildCatalogKindHref, CATALOG_KIND_LABEL } from "@/app/lib/catalog-routes";
 import type {
@@ -229,6 +231,66 @@ function RuntimeTable<TKind extends CatalogKind>({
   );
 }
 
+function DetailSummaryLayout({
+  kind,
+  detail,
+  runtime,
+  sections,
+}: {
+  kind: CatalogKind;
+  detail: CatalogDetailResponseByKind[CatalogKind];
+  runtime: CatalogRuntimeResponseByKind[CatalogKind];
+  sections: RelatedSection[];
+}) {
+  return (
+    <div className="grid gap-6 xl:grid-cols-[minmax(20rem,0.9fr)_minmax(0,1.3fr)]">
+      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Documentation
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {detail.documentation || "No documentation provided."}
+            </p>
+          </div>
+
+          {sections.map((section) => (
+            <div key={section.title} className="space-y-2">
+              <h3 className="text-sm font-semibold">{section.title}</h3>
+              {section.links.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No related {section.title.toLowerCase()}.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {section.links.map((link) => (
+                    <li key={`${section.targetKind}-${link.catalog_key}`}>
+                      <Link
+                        href={buildCatalogDetailHref(section.targetKind, link.catalog_key)}
+                        className="text-sm text-foreground underline-offset-2 hover:underline"
+                      >
+                        {link.name}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="mb-4">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {runtimeTitle(kind)}
+          </h2>
+        </div>
+        <RuntimeTable kind={kind} payload={runtime} />
+      </Card>
+    </div>
+  );
+}
+
 export function CatalogDetailPage({
   kind,
   catalogKey,
@@ -240,6 +302,7 @@ export function CatalogDetailPage({
   const [runtime, setRuntime] = useState<CatalogRuntimeResponseByKind[CatalogKind] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [objectViewTab, setObjectViewTab] = useState<"summary" | "lifecycle">("summary");
 
   useEffect(() => {
     let active = true;
@@ -283,6 +346,10 @@ export function CatalogDetailPage({
     };
   }, [catalogKey, kind]);
 
+  useEffect(() => {
+    setObjectViewTab("summary");
+  }, [catalogKey, kind]);
+
   const sections = useMemo(() => {
     if (!detail) {
       return [];
@@ -319,58 +386,45 @@ export function CatalogDetailPage({
         <Card className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">
           Loading detail...
         </Card>
-      ) : (
-        <div className="grid gap-6 xl:grid-cols-[minmax(20rem,0.9fr)_minmax(0,1.3fr)]">
-          <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Documentation
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  {detail.documentation || "No documentation provided."}
+      ) : kind === "objects" ? (
+        <Tabs
+          value={objectViewTab}
+          onValueChange={(nextValue) => {
+            if (nextValue === "summary" || nextValue === "lifecycle") {
+              setObjectViewTab(nextValue);
+            }
+          }}
+          className="space-y-5"
+        >
+          <TabsList variant="rail" className="grid grid-cols-2 gap-0">
+            <TabsTrigger value="summary" variant="rail" className="min-h-[84px] px-1 py-0 transition-colors duration-200">
+              <div className="flex w-full flex-col gap-1 px-3 pb-4 pt-3 text-left">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Overview</span>
+                <p className="text-sm font-semibold leading-tight text-foreground">Summary</p>
+                <p className="hidden text-xs leading-5 text-muted-foreground md:block">
+                  Read documentation, review related catalog concepts, and inspect runtime instances.
                 </p>
               </div>
-
-              {sections.map((section) => (
-                <div key={section.title} className="space-y-2">
-                  <h3 className="text-sm font-semibold">{section.title}</h3>
-                  {section.links.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No related {section.title.toLowerCase()}.</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {section.links.map((link) => (
-                        <li key={`${section.targetKind}-${link.catalog_key}`}>
-                          <Link
-                            href={buildCatalogDetailHref(section.targetKind, link.catalog_key)}
-                            className="text-sm text-foreground underline-offset-2 hover:underline"
-                          >
-                            {link.name}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ))}
-
-              {kind === "objects" ? (
-                <div className="rounded-xl border border-dashed border-border p-3 text-xs text-muted-foreground">
-                  The <strong>{detail.name} Lifecycle</strong> tab lands in Phase 3.
-                </div>
-              ) : null}
-            </div>
-          </Card>
-
-          <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <div className="mb-4">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                {runtimeTitle(kind)}
-              </h2>
-            </div>
-            <RuntimeTable kind={kind} payload={runtime} />
-          </Card>
-        </div>
+            </TabsTrigger>
+            <TabsTrigger value="lifecycle" variant="rail" className="min-h-[84px] px-1 py-0 transition-colors duration-200">
+              <div className="flex w-full flex-col gap-1 px-3 pb-4 pt-3 text-left">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Investigation</span>
+                <p className="text-sm font-semibold leading-tight text-foreground">{detail.name} Lifecycle</p>
+                <p className="hidden text-xs leading-5 text-muted-foreground md:block">
+                  Explore lifecycle flow and compare findings across scoped runtime patterns.
+                </p>
+              </div>
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="summary" className="space-y-4">
+            <DetailSummaryLayout kind={kind} detail={detail} runtime={runtime} sections={sections} />
+          </TabsContent>
+          <TabsContent value="lifecycle" className="space-y-4">
+            <ObjectLifecycleWorkspace objectName={detail.name} catalogKey={detail.catalog_key} isActive={objectViewTab === "lifecycle"} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <DetailSummaryLayout kind={kind} detail={detail} runtime={runtime} sections={sections} />
       )}
     </div>
   );

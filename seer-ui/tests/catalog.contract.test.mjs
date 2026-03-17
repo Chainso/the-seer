@@ -44,6 +44,7 @@ test("catalog list and detail surfaces use rail tabs, table-first lists, and ded
   const tabs = read("app/components/catalog/catalog-kind-tabs.tsx");
   const list = read("app/components/catalog/catalog-list-page.tsx");
   const detail = read("app/components/catalog/catalog-detail-page.tsx");
+  const lifecycle = read("app/components/catalog/object-lifecycle-workspace.tsx");
   const routes = read("app/lib/catalog-routes.ts");
 
   assert.match(tabs, /TabsList variant="rail"/);
@@ -70,7 +71,14 @@ test("catalog list and detail surfaces use rail tabs, table-first lists, and ded
   assert.doesNotMatch(detail, /TableColumnHeaderCell>Payload</);
   assert.doesNotMatch(detail, /item\.source_event_id/);
   assert.doesNotMatch(detail, /item\.trace_id/);
-  assert.match(detail, /The <strong>\{detail.name\} Lifecycle<\/strong> tab lands in Phase 3\./);
+  assert.match(detail, /value="summary"/);
+  assert.match(detail, /value="lifecycle"/);
+  assert.match(detail, /ObjectLifecycleWorkspace/);
+  assert.match(detail, /Summary/);
+  assert.match(detail, /Lifecycle/);
+  assert.match(lifecycle, /ObjectStoreInsightsWorkspace/);
+  assert.match(lifecycle, /mode="lifecycle"/);
+  assert.match(lifecycle, /data-object-lifecycle-workspace/);
   assert.match(routes, /CATALOG_KIND_ORDER/);
   assert.match(routes, /mapLegacyOntologyTabToCatalogKind/);
 });

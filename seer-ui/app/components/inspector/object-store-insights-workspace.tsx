@@ -115,17 +115,20 @@ function graphEventLabels(
 interface ObjectStoreInsightsWorkspaceProps {
   objectType: string;
   isActive: boolean;
+  mode?: "insights" | "lifecycle";
 }
 
 export function ObjectStoreInsightsWorkspace({
   objectType,
   isActive,
+  mode = "insights",
 }: ObjectStoreInsightsWorkspaceProps) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const ontologyDisplay = useOntologyDisplay();
   const { graph: ontologyGraph } = useOntologyGraphContext();
+  const lifecycleMode = mode === "lifecycle";
 
   const [windowPreset, setWindowPreset] = useState<SharedWindowPreset>(() => {
     const preset = searchParams.get("os_preset");
@@ -238,6 +241,7 @@ export function ObjectStoreInsightsWorkspace({
     () => modelOptions.find((model) => model.uri === objectType) || null,
     [modelOptions, objectType]
   );
+  const selectedModelName = selectedModel?.name || ontologyDisplay.displayObjectType(objectType);
   const anchorObjectType = selectedModel?.uri || objectType;
   const displayEventType = useCallback(
     (eventType: string) =>
@@ -330,11 +334,11 @@ export function ObjectStoreInsightsWorkspace({
       setPrimaryGraph(ocdfgData);
     } catch (error) {
       setPrimaryGraph(null);
-      setPrimaryError(error instanceof Error ? error.message : "Failed to load OC-DFG.");
+      setPrimaryError(error instanceof Error ? error.message : lifecycleMode ? "Failed to load lifecycle map." : "Failed to load OC-DFG.");
     } finally {
       setPrimaryLoading(false);
     }
-  }, [anchorObjectType, resolvedFrom, resolvedModelUris, resolvedTo]);
+  }, [anchorObjectType, lifecycleMode, resolvedFrom, resolvedModelUris, resolvedTo]);
 
   const loadComparisonGraph = useCallback(async (insight: RootCauseInsightResultContract) => {
     if (!anchorObjectType || !resolvedFrom || !resolvedTo) {
@@ -364,26 +368,26 @@ export function ObjectStoreInsightsWorkspace({
     } catch (error) {
       setComparisonGraph(null);
       setComparisonError(
-        error instanceof Error ? error.message : "Failed to load comparison OC-DFG."
+        error instanceof Error ? error.message : lifecycleMode ? "Failed to load lifecycle comparison." : "Failed to load comparison OC-DFG."
       );
     } finally {
       setComparisonLoading(false);
     }
-  }, [anchorObjectType, resolvedFrom, resolvedModelUris, resolvedTo]);
+  }, [anchorObjectType, lifecycleMode, resolvedFrom, resolvedModelUris, resolvedTo]);
 
   const runAnalysis = useCallback(async () => {
     if (!anchorObjectType) {
-      setRunError("Select an object model before running RCA.");
+      setRunError(lifecycleMode ? "Select an object before running lifecycle analysis." : "Select an object model before running RCA.");
       setRunState("error");
       return;
     }
     if (!outcomeEventType.trim()) {
-      setRunError("Outcome event type is required.");
+      setRunError(lifecycleMode ? "Lifecycle milestone event is required." : "Outcome event type is required.");
       setRunState("error");
       return;
     }
     if (!resolvedFrom || !resolvedTo) {
-      setRunError("Select a valid time window before running RCA.");
+      setRunError(lifecycleMode ? "Select a valid time window before analyzing lifecycle patterns." : "Select a valid time window before running RCA.");
       setRunState("error");
       return;
     }
@@ -422,7 +426,7 @@ export function ObjectStoreInsightsWorkspace({
     } catch (error) {
       setRun(null);
       setRunState("error");
-      setRunError(error instanceof Error ? error.message : "Root-cause analysis failed.");
+      setRunError(error instanceof Error ? error.message : lifecycleMode ? "Lifecycle analysis failed." : "Root-cause analysis failed.");
       persistScopeQuery({
         os_rca_run: null,
         os_rca_insight: null,
@@ -436,6 +440,7 @@ export function ObjectStoreInsightsWorkspace({
     resolvedFrom,
     resolvedTo,
     searchParams,
+    lifecycleMode,
   ]);
 
   useEffect(() => {
@@ -681,37 +686,57 @@ export function ObjectStoreInsightsWorkspace({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="os-outcome">Outcome event</Label>
+            <Label htmlFor="os-outcome">{lifecycleMode ? "Lifecycle milestone" : "Outcome event"}</Label>
             <SearchableSelect
               triggerId="os-outcome"
               value={outcomeEventType || OUTCOME_SENTINEL}
               onValueChange={handleOutcomeChange}
               groups={[
                 {
-                  label: "Outcome event types",
+                  label: lifecycleMode ? "Lifecycle milestone events" : "Outcome event types",
                   options: [
-                    { value: OUTCOME_SENTINEL, label: "Select event type" },
+                    { value: OUTCOME_SENTINEL, label: lifecycleMode ? "Select lifecycle event" : "Select event type" },
                     ...searchableOutcomeOptions,
                   ],
                 },
               ]}
-              placeholder="Select event type"
-              searchPlaceholder="Search event types..."
+              placeholder={lifecycleMode ? "Select lifecycle event" : "Select event type"}
+              searchPlaceholder={lifecycleMode ? "Search lifecycle events..." : "Search event types..."}
               emptyMessage="No event types found."
             />
           </div>
 
           <div className="flex items-end">
             <Button className="w-full" onClick={runAnalysis} disabled={runState === "running"}>
-              {runState === "running" ? "Running RCA..." : "Run RCA"}
+              {runState === "running"
+                ? lifecycleMode
+                  ? "Analyzing lifecycle..."
+                  : "Running RCA..."
+                : lifecycleMode
+                  ? "Analyze lifecycle"
+                  : "Run RCA"}
             </Button>
           </div>
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>{resolvedModelUris.length} included models in the OC-DFG scope.</span>
-          <span>Primary OC-DFG reruns automatically when time or depth changes.</span>
-          {outcomeOptions.length > 0 ? <span>{outcomeOptions.length} outcome options resolved from ontology.</span> : null}
+          <span>
+            {lifecycleMode
+              ? `${resolvedModelUris.length} related models included in this lifecycle scope.`
+              : `${resolvedModelUris.length} included models in the OC-DFG scope.`}
+          </span>
+          <span>
+            {lifecycleMode
+              ? "Lifecycle map reruns automatically when time or depth changes."
+              : "Primary OC-DFG reruns automatically when time or depth changes."}
+          </span>
+          {outcomeOptions.length > 0 ? (
+            <span>
+              {lifecycleMode
+                ? `${outcomeOptions.length} lifecycle milestone options resolved from ontology.`
+                : `${outcomeOptions.length} outcome options resolved from ontology.`}
+            </span>
+          ) : null}
         </div>
 
         {(primaryError || runError) && (
@@ -735,9 +760,11 @@ export function ObjectStoreInsightsWorkspace({
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                Scoped Baseline
+                {lifecycleMode ? "Lifecycle Baseline" : "Scoped Baseline"}
               </p>
-              <h2 className="mt-2 font-display text-2xl">Object-Centric Flow Graph</h2>
+              <h2 className="mt-2 font-display text-2xl">
+                {lifecycleMode ? `${selectedModelName} Lifecycle Map` : "Object-Centric Flow Graph"}
+              </h2>
             </div>
             <Badge variant="outline">{primaryLoading ? "Refreshing..." : "Auto-run"}</Badge>
           </div>
@@ -752,7 +779,13 @@ export function ObjectStoreInsightsWorkspace({
               />
             ) : (
               <div className="flex h-[680px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-                {primaryLoading ? "Loading OC-DFG..." : "No OC-DFG available for the current scope."}
+                {primaryLoading
+                  ? lifecycleMode
+                    ? "Loading lifecycle map..."
+                    : "Loading OC-DFG..."
+                  : lifecycleMode
+                    ? "No lifecycle map available for the current scope."
+                    : "No OC-DFG available for the current scope."}
               </div>
             )}
           </div>
@@ -762,9 +795,9 @@ export function ObjectStoreInsightsWorkspace({
           <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                RCA Results
+                {lifecycleMode ? "Lifecycle Findings" : "RCA Results"}
               </div>
-              <Badge variant="outline">{run.insights.length} insights</Badge>
+              <Badge variant="outline">{run.insights.length} {lifecycleMode ? "findings" : "insights"}</Badge>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div className="rounded-xl border border-border bg-background px-4 py-3">
@@ -819,10 +852,10 @@ export function ObjectStoreInsightsWorkspace({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    Baseline OC-DFG
+                    {lifecycleMode ? "Baseline Lifecycle Map" : "Baseline OC-DFG"}
                   </p>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Current scope for {selectedModel?.name || ontologyDisplay.displayObjectType(objectType)}.
+                    Current scope for {selectedModelName}.
                   </p>
                 </div>
                 <Badge variant="outline">{primaryLoading ? "Refreshing..." : "Baseline"}</Badge>
@@ -839,7 +872,13 @@ export function ObjectStoreInsightsWorkspace({
                   />
                 ) : (
                   <div className="flex h-[360px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-                    {primaryLoading ? "Loading OC-DFG..." : "No OC-DFG available for the current scope."}
+                    {primaryLoading
+                      ? lifecycleMode
+                        ? "Loading lifecycle map..."
+                        : "Loading OC-DFG..."
+                      : lifecycleMode
+                        ? "No lifecycle map available for the current scope."
+                        : "No OC-DFG available for the current scope."}
                   </div>
                 )}
               </div>
@@ -849,15 +888,25 @@ export function ObjectStoreInsightsWorkspace({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                    Selected RCA Comparison
+                    {lifecycleMode ? "Selected Finding Comparison" : "Selected RCA Comparison"}
                   </p>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    {selectedInsight ? selectedInsight.title : "Select an RCA result to compare."}
+                    {selectedInsight
+                      ? selectedInsight.title
+                      : lifecycleMode
+                        ? "Select a finding to compare."
+                        : "Select an RCA result to compare."}
                   </p>
                 </div>
                 {selectedInsight ? (
                   <Badge variant={comparisonSupported ? "outline" : "secondary"}>
-                    {comparisonSupported ? "Anchor-filter graph" : "Unsupported rule family"}
+                    {comparisonSupported
+                      ? lifecycleMode
+                        ? "Comparison ready"
+                        : "Anchor-filter graph"
+                      : lifecycleMode
+                        ? "Limited comparison support"
+                        : "Unsupported rule family"}
                   </Badge>
                 ) : null}
               </div>
@@ -865,11 +914,15 @@ export function ObjectStoreInsightsWorkspace({
               <div className="mt-5">
                 {!selectedInsight ? (
                   <div className="flex h-[360px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-                    Select an RCA result to load the comparison graph.
+                    {lifecycleMode
+                      ? "Select a finding to load the comparison map."
+                      : "Select an RCA result to load the comparison graph."}
                   </div>
                 ) : !comparisonSupported ? (
                   <div className="flex h-[360px] items-center justify-center rounded-2xl border border-dashed border-border px-6 text-center text-sm text-muted-foreground">
-                    Comparison graph currently supports anchor-field RCA rules only. This result includes non-anchor RCA conditions.
+                    {lifecycleMode
+                      ? "Lifecycle comparison currently supports anchor-field findings only. This finding includes non-anchor conditions."
+                      : "Comparison graph currently supports anchor-field RCA rules only. This result includes non-anchor RCA conditions."}
                   </div>
                 ) : comparisonError ? (
                   <div className="flex h-[360px] items-center justify-center rounded-2xl border border-destructive/40 bg-destructive/10 px-6 text-center text-sm text-destructive">
@@ -886,7 +939,13 @@ export function ObjectStoreInsightsWorkspace({
                   />
                 ) : (
                   <div className="flex h-[360px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground">
-                    {comparisonLoading ? "Loading comparison OC-DFG..." : "No comparison OC-DFG available."}
+                    {comparisonLoading
+                      ? lifecycleMode
+                        ? "Loading lifecycle comparison..."
+                        : "Loading comparison OC-DFG..."
+                      : lifecycleMode
+                        ? "No lifecycle comparison available."
+                        : "No comparison OC-DFG available."}
                   </div>
                 )}
               </div>

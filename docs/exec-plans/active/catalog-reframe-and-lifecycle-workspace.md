@@ -29,7 +29,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - [x] 2026-03-17 Phase 1: land backend catalog read models and dedicated per-concept catalog APIs with regression coverage.
 - [x] 2026-03-17 Phase 2: land shell/navigation changes plus catalog list/detail routes and reusable summary/runtime layouts.
 - [x] 2026-03-17 Phase 2 finisher: refine catalog runtime tables to remove user-visible internal identifier columns and lock the behavior in contract tests.
-- [ ] 2026-03-17 Phase 3: fold the existing object-scoped investigation capability into object detail as `<Object Name> Lifecycle`, remove obsolete primary-nav flows, and complete the copy/deprecation audit.
+- [x] 2026-03-17 Phase 3: fold the existing object-scoped investigation capability into object detail as `<Object Name> Lifecycle`, remove obsolete primary-nav flows, and complete the copy/deprecation audit.
 - [ ] 2026-03-17 Phase 4: ratify canonical docs/specs, run final validation, and archive the plan.
 
 ## Surprises & Discoveries
@@ -48,6 +48,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - 2026-03-17: Next.js app-router route params are promise-shaped in this codebase (`params: Promise<{...}>`), so new catalog dynamic routes and legacy ontology redirects should follow the same async signature for consistency and compile-time safety.
 - 2026-03-17: Existing contract tests hard-asserted old sidebar entries (`Object Store`, `Insights`). Phase 2 required updating those assertions to keep test coverage aligned with the new catalog-first shell while preserving the underlying inspector routes as retained code-on-disk surfaces.
 - 2026-03-17: Controller validation after initial Phase 2 found that catalog runtime tables still presented raw internal identifiers (`source_event_id`, `run_id`, `trace_id`) as primary columns, which conflicted with the catalog UX requirement for light, user-facing operational language.
+- 2026-03-17: Catalog object detail does not currently expose object-model URIs in its API contract, but the reused lifecycle workspace requires one. Phase 3 solved this with a local object-lifecycle adapter that resolves object models from `useOntologyDisplay` and keeps URI internals out of visible UI.
 
 ## Decision Log
 
@@ -65,6 +66,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - 2026-03-17, Codex: Keep `/ontology/*`, `/inspector/history`, and `/inspector/insights` routes on disk but remove ontology/object-store/insights from primary nav. Rationale: final-state product IA requires catalog-first framing now, while retained legacy routes still support internal reuse and transition work in later phases.
 - 2026-03-17, Codex: Implement Phase 2 object detail as summary-plus-runtime with an explicit lifecycle placeholder note, deferring actual lifecycle tab integration to Phase 3. Rationale: this satisfies phase scope boundaries and keeps the detail route ready for the lifecycle workspace without prematurely pulling in investigation components.
 - 2026-03-17, Codex: Runtime evidence tables in catalog detail should favor operational/user-facing column names and remove raw identifier-first columns (`source_event_id`, `run_id`, `trace_id`) from visible table headers/cells. Rationale: catalog-first UX should expose clarity and utility, not storage/trace implementation details.
+- 2026-03-17, Codex: Add a lifecycle framing mode to `object-store-insights-workspace` instead of forking or replacing the investigation implementation. Rationale: this preserves the existing combined RCA + OC-DFG capability while letting catalog object detail present lifecycle-first wording and labels.
 
 ## Outcomes & Retrospective
 
@@ -123,6 +125,17 @@ Execution-phase outcomes will be appended here as phases complete. The final ret
 4. Phase 2 finisher validation passed:
    - `cd /workspaces/seer-python/seer-ui && npm run build`
    - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs`
+
+2026-03-17 Phase 3 outcome:
+
+1. Replaced the object-detail lifecycle placeholder with a real two-mode object detail flow in `seer-ui/app/components/catalog/catalog-detail-page.tsx`: `Summary` and `<Object Name> Lifecycle`.
+2. Added `seer-ui/app/components/catalog/object-lifecycle-workspace.tsx` as a catalog-local lifecycle adapter that resolves object model context and embeds the existing combined investigation workspace.
+3. Extended `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` with a lifecycle framing mode so catalog object detail uses lifecycle-oriented wording while inspector history/insights routes retain existing labels.
+4. Kept action/event/trigger detail pages on the existing single-page summary/runtime layout and preserved user-facing runtime table language.
+5. Updated `seer-ui/tests/catalog.contract.test.mjs` to assert lifecycle tab/wrapper integration instead of the old Phase 3 placeholder copy.
+6. Phase 3 validation passed:
+   - `cd /workspaces/seer-python/seer-ui && npm run build`
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs` passed (`11/11` tests)
 
 ## Context and Orientation
 
@@ -543,11 +556,14 @@ Object detail only: lifecycle tab integration, copy updates, and any local adapt
 3. `docs/exec-plans/active/catalog-reframe-and-lifecycle-workspace.md`
 4. `seer-ui/app/components/inspector/object-store-insights-workspace.tsx`
 5. `seer-ui/app/components/inspector/history-panel.tsx`
-6. the object detail route/components added in Phase 2
+6. `seer-ui/app/catalog/[kind]/[catalogKey]/page.tsx`
+7. `seer-ui/app/components/catalog/catalog-detail-page.tsx`
 
 **Files Expected To Change**
 
-- object detail route/component files under `seer-ui/app/catalog/objects/`
+- `seer-ui/app/components/catalog/catalog-detail-page.tsx`
+- any new lifecycle-specific wrapper or helper components under `seer-ui/app/components/catalog/`
+- `seer-ui/app/catalog/[kind]/[catalogKey]/page.tsx` only if the object-detail route host needs light route-level support
 - reused object investigation components or wrappers
 - relevant UI tests
 - this plan
@@ -555,7 +571,7 @@ Object detail only: lifecycle tab integration, copy updates, and any local adapt
 **Validation**
 
 1. `cd /workspaces/seer-python/seer-ui && npm run build`
-2. targeted UI contract tests for object detail tabs and lifecycle copy
+2. `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs`
 
 **Plan / Docs To Update**
 
@@ -581,15 +597,27 @@ One object-lifecycle-focused commit, for example: `Embed combined object investi
 
 **Status**
 
-pending
+completed
 
 **Completion Notes**
 
-Not started.
+2026-03-17: Phase 3 completed with lifecycle integration scoped to object detail.
+
+1. `seer-ui/app/components/catalog/catalog-detail-page.tsx` now renders object detail with two rail-tab modes: `Summary` and `<Object Name> Lifecycle`, defaulting to summary on open.
+2. `seer-ui/app/components/catalog/object-lifecycle-workspace.tsx` now hosts lifecycle framing and embeds the reused combined investigation capability.
+3. `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` now supports `mode="lifecycle"` to present lifecycle-first copy in catalog context while preserving existing inspector wording.
+4. `seer-ui/tests/catalog.contract.test.mjs` now asserts lifecycle tab/wrapper behavior and removes the obsolete Phase 3 placeholder expectation.
+5. Validation evidence:
+   - `cd /workspaces/seer-python/seer-ui && npm run build` passed.
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs` passed (`11/11` tests).
 
 **Next Starter Context**
 
-The key risk is copy and layout, not raw functionality. Start from the existing combined object-store RCA + OC-DFG workspace, then wrap or relabel it so the user sees object lifecycle understanding rather than a transplanted analytics tool.
+Phase 4 should now focus on docs/spec ratification and final archive readiness.
+
+1. Update `AGENTS.md`, `VISION.md`, `DESIGN.md`, and relevant product specs to codify catalog-first framing and mark legacy ontology routes/pages as deprecated retained surfaces.
+2. Keep architecture language explicit that ontology remains the internal capability layer while catalog is the user-facing discovery model.
+3. Run final full validation and prepare active/completed plan index updates for archive.
 
 ## Phase 4
 
