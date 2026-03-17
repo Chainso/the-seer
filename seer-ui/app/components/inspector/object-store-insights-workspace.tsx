@@ -382,7 +382,7 @@ export function ObjectStoreInsightsWorkspace({
       return;
     }
     if (!outcomeEventType.trim()) {
-      setRunError(lifecycleMode ? "Lifecycle milestone event is required." : "Outcome event type is required.");
+      setRunError(lifecycleMode ? "Lifecycle Milestone event is required." : "Outcome event type is required.");
       setRunState("error");
       return;
     }
@@ -686,14 +686,14 @@ export function ObjectStoreInsightsWorkspace({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="os-outcome">{lifecycleMode ? "Lifecycle milestone" : "Outcome event"}</Label>
+            <Label htmlFor="os-outcome">{lifecycleMode ? "Lifecycle Milestone" : "Outcome event"}</Label>
             <SearchableSelect
               triggerId="os-outcome"
               value={outcomeEventType || OUTCOME_SENTINEL}
               onValueChange={handleOutcomeChange}
               groups={[
                 {
-                  label: lifecycleMode ? "Lifecycle milestone events" : "Outcome event types",
+                  label: lifecycleMode ? "Lifecycle Milestone events" : "Outcome event types",
                   options: [
                     { value: OUTCOME_SENTINEL, label: lifecycleMode ? "Select lifecycle event" : "Select event type" },
                     ...searchableOutcomeOptions,
@@ -733,7 +733,7 @@ export function ObjectStoreInsightsWorkspace({
           {outcomeOptions.length > 0 ? (
             <span>
               {lifecycleMode
-                ? `${outcomeOptions.length} lifecycle milestone options resolved from ontology.`
+                ? `${outcomeOptions.length} Lifecycle Milestone options resolved from ontology.`
                 : `${outcomeOptions.length} outcome options resolved from ontology.`}
             </span>
           ) : null}

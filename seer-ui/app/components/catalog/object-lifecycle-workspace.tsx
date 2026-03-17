@@ -23,14 +23,7 @@ export function ObjectLifecycleWorkspace({
   }
 
   return (
-    <div className="space-y-4" data-object-lifecycle-workspace>
-      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Lifecycle</p>
-        <h2 className="mt-2 font-display text-2xl">{objectName} Lifecycle</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Explore lifecycle flow, inspect patterns, and compare findings for this object.
-        </p>
-      </Card>
+    <div data-object-lifecycle-workspace>
       <ObjectStoreInsightsWorkspace objectType={objectType} isActive={isActive} mode="lifecycle" />
     </div>
   );

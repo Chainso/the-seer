@@ -33,6 +33,7 @@ test("catalog is the primary shell entry and ontology routes redirect into catal
   assert.match(ontologyTab, /redirect\(`\/catalog\/\$\{catalogKind\}`\)/);
   assert.match(nav, /name:\s*'Catalog'/);
   assert.match(nav, /href:\s*'\/catalog'/);
+  assert.match(nav, /icon:\s*Boxes/);
   assert.match(nav, /name:\s*'Managed Agents'/);
   assert.match(nav, /name:\s*'Assistant'/);
   assert.doesNotMatch(nav, /name:\s*'Ontology Explorer'/);
@@ -52,12 +53,15 @@ test("catalog list and detail surfaces use rail tabs, table-first lists, and ded
   assert.match(list, /listCatalogByKind/);
   assert.match(list, /TableRoot variant="surface" striped/);
   assert.match(list, /buildCatalogDetailHref/);
+  assert.match(list, /triggers:\s*\{\s*left:\s*"When Event",\s*right:\s*"Do Action"\s*\}/);
+  assert.match(list, /left_value: item\.when_event/);
+  assert.match(list, /right_value: item\.do_action/);
   assert.match(detail, /getCatalogDetailByKind/);
   assert.match(detail, /getCatalogRuntimeByKind/);
   assert.match(detail, /runtimeTitle/);
-  assert.match(detail, /TableColumnHeaderCell>Recorded</);
-  assert.match(detail, /TableColumnHeaderCell>Reference</);
-  assert.match(detail, /TableColumnHeaderCell>Snapshot</);
+  assert.match(detail, /buildObjectInstanceColumnModel/);
+  assert.match(detail, /readObjectInstanceFieldValue/);
+  assert.match(detail, /displayObjectType|displayFieldLabel/);
   assert.match(detail, /TableColumnHeaderCell>Status</);
   assert.match(detail, /TableColumnHeaderCell>Submitted</);
   assert.match(detail, /TableColumnHeaderCell>Completed</);
@@ -95,5 +99,7 @@ test("catalog API client targets dedicated per-concept endpoints", () => {
   assert.match(api, /\/catalog\/triggers\/\$\{catalogKey\}\/firings/);
   assert.match(types, /export type CatalogKind = 'objects' \| 'actions' \| 'events' \| 'triggers';/);
   assert.match(types, /CatalogObjectListResponse/);
+  assert.match(types, /when_event: string \| null;/);
+  assert.match(types, /do_action: string \| null;/);
   assert.match(types, /CatalogTriggerFiringsResponse/);
 });

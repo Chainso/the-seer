@@ -6,13 +6,13 @@ import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
-import { Sparkles, Sun, Moon, Bot, Waypoints, Library } from 'lucide-react';
+import { Sparkles, Sun, Moon, Bot, Waypoints, Boxes } from 'lucide-react';
 
 const navigation = [
   {
     name: 'Catalog',
     href: '/catalog',
-    icon: Library,
+    icon: Boxes,
   },
   {
     name: 'Managed Agents',

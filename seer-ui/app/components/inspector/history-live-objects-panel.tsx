@@ -17,6 +17,11 @@ import type {
   ObjectPropertyFilter,
   PropertyFilterOperator,
 } from "@/app/types/history";
+import {
+  buildObjectInstanceColumnModel,
+  readObjectInstanceFieldValue,
+  stringifyObjectInstanceValue,
+} from "@/app/components/objects/object-instance-table-model";
 
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
@@ -96,57 +101,6 @@ WHERE {
 
 function objectIdentityKey(item: LatestObjectItem): string {
   return `${item.object_type}:${item.object_ref_canonical}`;
-}
-
-function normalizeFieldRank(fieldKey: string, orderedFieldKeys: string[]): number {
-  const index = orderedFieldKeys.indexOf(fieldKey);
-  return index >= 0 ? index : Number.MAX_SAFE_INTEGER;
-}
-
-function isScalarValue(value: unknown): value is string | number | boolean {
-  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-}
-
-function stringifyCellValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") {
-    return "—";
-  }
-  if (isScalarValue(value)) {
-    return String(value);
-  }
-  try {
-    return JSON.stringify(value);
-  } catch {
-    return String(value);
-  }
-}
-
-function snakeCase(value: string): string {
-  return value
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/[^a-zA-Z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")
-    .toLowerCase();
-}
-
-function isStateLikeFieldKey(fieldKey: string): boolean {
-  const normalized = fieldKey.trim().toLowerCase();
-  return (
-    normalized === "state" ||
-    normalized === "status" ||
-    normalized.endsWith("_state") ||
-    normalized.endsWith("_status")
-  );
-}
-
-function readFieldValue(item: LatestObjectItem, fieldKey: string): unknown {
-  if (item.object_payload && Object.prototype.hasOwnProperty.call(item.object_payload, fieldKey)) {
-    return item.object_payload[fieldKey];
-  }
-  if (Object.prototype.hasOwnProperty.call(item.object_ref, fieldKey)) {
-    return item.object_ref[fieldKey];
-  }
-  return null;
 }
 
 export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) {
@@ -432,63 +386,16 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
   };
 
   const liveObjects = useMemo(() => latestData?.items ?? [], [latestData]);
-  const keyPartFieldKeys = useMemo(() => {
-    const discoveredKeys = new Set<string>();
-    liveObjects.forEach((item) => {
-      Object.keys(item.object_ref).forEach((key) => discoveredKeys.add(key));
-    });
-    return Array.from(discoveredKeys).sort((left, right) => {
-      const leftRank = normalizeFieldRank(left, selectedModel?.canonicalFieldKeys || []);
-      const rightRank = normalizeFieldRank(right, selectedModel?.canonicalFieldKeys || []);
-      if (leftRank !== rightRank) {
-        return leftRank - rightRank;
-      }
-      return ontologyDisplay
-        .displayFieldLabel(left, { objectType })
-        .localeCompare(ontologyDisplay.displayFieldLabel(right, { objectType }));
-    });
-  }, [liveObjects, objectType, ontologyDisplay, selectedModel]);
-
-  const displayNameFieldCandidates = useMemo(() => {
-    const candidates = ["display_name", "name"];
-    const localFieldCandidate = selectedModel?.localName
-      ? `${snakeCase(selectedModel.localName)}_name`
-      : null;
-    if (localFieldCandidate) {
-      candidates.push(localFieldCandidate);
-    }
-    return Array.from(new Set(candidates));
-  }, [selectedModel]);
-  const displayNameFieldKey = useMemo(
+  const { keyPartFieldKeys, displayNameFieldKey, stateFieldKeys } = useMemo(
     () =>
-      displayNameFieldCandidates.find((fieldKey) => selectedModel?.canonicalFieldKeys.includes(fieldKey)) ||
-      null,
-    [displayNameFieldCandidates, selectedModel]
+      buildObjectInstanceColumnModel({
+        rows: liveObjects,
+        objectType,
+        ontologyDisplay,
+        selectedModel,
+      }),
+    [liveObjects, objectType, ontologyDisplay, selectedModel]
   );
-
-  const stateFieldKeys = useMemo(() => {
-    const excludedFields = new Set([
-      ...keyPartFieldKeys,
-      ...(displayNameFieldKey ? [displayNameFieldKey] : []),
-    ]);
-    const orderedStateKeys: string[] = [];
-    const seen = new Set<string>();
-    const pushKey = (fieldKey: string | null | undefined) => {
-      if (!fieldKey || excludedFields.has(fieldKey) || seen.has(fieldKey)) {
-        return;
-      }
-      seen.add(fieldKey);
-      orderedStateKeys.push(fieldKey);
-    };
-
-    pushKey(selectedModel?.stateFilterFieldKey);
-    (selectedModel?.canonicalFieldKeys || []).forEach((fieldKey) => {
-      if (isStateLikeFieldKey(fieldKey)) {
-        pushKey(fieldKey);
-      }
-    });
-    return orderedStateKeys;
-  }, [displayNameFieldKey, keyPartFieldKeys, selectedModel]);
 
   const displayFieldValue = useCallback(
     (fieldKey: string, rawValue: unknown) =>
@@ -501,7 +408,9 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
 
   const renderFieldValue = useCallback(
     (item: LatestObjectItem, fieldKey: string) =>
-      stringifyCellValue(displayFieldValue(fieldKey, readFieldValue(item, fieldKey))),
+      stringifyObjectInstanceValue(
+        displayFieldValue(fieldKey, readObjectInstanceFieldValue(item, fieldKey))
+      ),
     [displayFieldValue]
   );
 
@@ -510,7 +419,9 @@ export function HistoryLiveObjectsPanel({ objectType }: { objectType: string }) 
       if (!displayNameFieldKey) {
         return "—";
       }
-      return stringifyCellValue(displayFieldValue(displayNameFieldKey, readFieldValue(item, displayNameFieldKey)));
+      return stringifyObjectInstanceValue(
+        displayFieldValue(displayNameFieldKey, readObjectInstanceFieldValue(item, displayNameFieldKey))
+      );
     },
     [displayFieldValue, displayNameFieldKey]
   );

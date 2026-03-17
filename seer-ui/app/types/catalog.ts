@@ -33,8 +33,8 @@ export interface CatalogTriggerListItem {
   catalog_key: string;
   name: string;
   description: string | null;
-  event_count: number;
-  action_count: number;
+  when_event: string | null;
+  do_action: string | null;
 }
 
 export interface CatalogObjectListResponse {

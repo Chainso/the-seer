@@ -30,15 +30,18 @@ interface CatalogListRow {
   catalog_key: string;
   name: string;
   description: string | null;
-  left_metric: number;
-  right_metric: number;
+  left_value: string | number | null;
+  right_value: string | number | null;
 }
+
+const CATALOG_TABLE_CONTAINER_CLASS =
+  "max-h-[min(36rem,calc(100vh-20rem))] overflow-auto rounded-2xl border border-border";
 
 const METRIC_HEADERS: Record<CatalogKind, { left: string; right: string }> = {
   objects: { left: "Actions", right: "Events" },
   actions: { left: "Objects", right: "Triggers" },
   events: { left: "Objects", right: "Triggers" },
-  triggers: { left: "Events", right: "Actions" },
+  triggers: { left: "When Event", right: "Do Action" },
 };
 
 function toRows(
@@ -51,8 +54,8 @@ function toRows(
       catalog_key: item.catalog_key,
       name: item.name,
       description: item.description,
-      left_metric: item.action_count,
-      right_metric: item.event_count,
+      left_value: item.action_count,
+      right_value: item.event_count,
     }));
   }
   if (kind === "actions") {
@@ -61,8 +64,8 @@ function toRows(
       catalog_key: item.catalog_key,
       name: item.name,
       description: item.description,
-      left_metric: item.object_count,
-      right_metric: item.trigger_count,
+      left_value: item.object_count,
+      right_value: item.trigger_count,
     }));
   }
   if (kind === "events") {
@@ -71,8 +74,8 @@ function toRows(
       catalog_key: item.catalog_key,
       name: item.name,
       description: item.description,
-      left_metric: item.object_count,
-      right_metric: item.trigger_count,
+      left_value: item.object_count,
+      right_value: item.trigger_count,
     }));
   }
   const shaped = payload as CatalogTriggerListResponse;
@@ -80,8 +83,8 @@ function toRows(
     catalog_key: item.catalog_key,
     name: item.name,
     description: item.description,
-    left_metric: item.event_count,
-    right_metric: item.action_count,
+    left_value: item.when_event,
+    right_value: item.do_action,
   }));
 }
 
@@ -143,17 +146,34 @@ export function CatalogListPage({ kind }: { kind: CatalogKind }) {
       <CatalogKindTabs kind={kind} />
 
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-3xl space-y-2">
-            <div className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Catalog
-            </div>
-            <h1 className="font-display text-3xl">{title}</h1>
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
+        <div className="max-w-3xl space-y-2">
+          <div className="text-sm font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            Catalog
+          </div>
+          <h1 className="font-display text-3xl">{title}</h1>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+      </Card>
+
+      {error ? (
+        <Card className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+          {error}
+        </Card>
+      ) : null}
+
+      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div className="space-y-1">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Browse {title}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {loading ? "Loading results..." : `${rows.length} ${title.toLowerCase()} shown`}
+            </p>
           </div>
           <div className="w-full max-w-sm space-y-2">
             <label htmlFor="catalog-search" className="text-sm font-medium">
-              Search
+              Search {title}
             </label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -167,15 +187,6 @@ export function CatalogListPage({ kind }: { kind: CatalogKind }) {
             </div>
           </div>
         </div>
-      </Card>
-
-      {error ? (
-        <Card className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-          {error}
-        </Card>
-      ) : null}
-
-      <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
         {loading ? (
           <div className="rounded-2xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
             Loading {title.toLowerCase()}...
@@ -185,8 +196,8 @@ export function CatalogListPage({ kind }: { kind: CatalogKind }) {
             No {title.toLowerCase()} match this search.
           </div>
         ) : (
-          <TableRoot variant="surface" striped>
-            <TableHeader>
+          <TableRoot variant="surface" striped containerClassName={CATALOG_TABLE_CONTAINER_CLASS}>
+            <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
               <TableRow>
                 <TableColumnHeaderCell>Name</TableColumnHeaderCell>
                 <TableColumnHeaderCell>Description</TableColumnHeaderCell>
@@ -214,8 +225,8 @@ export function CatalogListPage({ kind }: { kind: CatalogKind }) {
                   <TableCell className="text-sm text-muted-foreground">
                     {row.description || "No description provided."}
                   </TableCell>
-                  <TableCell>{row.left_metric}</TableCell>
-                  <TableCell>{row.right_metric}</TableCell>
+                  <TableCell>{row.left_value ?? "-"}</TableCell>
+                  <TableCell>{row.right_value ?? "-"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

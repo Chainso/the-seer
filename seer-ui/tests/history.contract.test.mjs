@@ -50,11 +50,13 @@ test("inspector root and object store route expose model-locked object store tab
   assert.match(liveObjectsPanel, /History Filters/);
   assert.match(liveObjectsPanel, /displayNameFieldKey/);
   assert.match(liveObjectsPanel, /displayFieldLabel\(displayNameFieldKey/);
+  assert.match(liveObjectsPanel, /buildObjectInstanceColumnModel/);
+  assert.match(liveObjectsPanel, /readObjectInstanceFieldValue/);
+  assert.match(liveObjectsPanel, /stringifyObjectInstanceValue/);
   assert.match(liveObjectsPanel, /router\.push\(`\/inspector\/history\/object\?/);
   assert.match(historyPanel, /object_type/);
   assert.match(liveObjectsPanel, /object_ref_canonical/);
   assert.match(liveObjectsPanel, /<Table\.Root[\s\S]*striped/);
-  assert.match(liveObjectsPanel, /display_name/);
   assert.match(liveObjectsPanel, /stateFilterFieldKey/);
   assert.match(detailsPanel, /ObjectHistoryDisplaySurface/);
   assert.match(detailsPanel, /Graph time source/);

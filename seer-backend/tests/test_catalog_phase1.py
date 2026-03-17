@@ -140,14 +140,18 @@ def test_catalog_list_endpoints_expose_clean_concept_contracts() -> None:
     created_event = next(item for item in event_items if item["name"] == "Ticket Created")
     created_trigger = next(item for item in trigger_items if item["name"] == "On Ticket Created")
 
+    assert ticket_object["description"] == "Support request tracked through a minimal triage lifecycle."
+    assert triage_action["description"] == "Runs ticket triage and returns the updated ticket state."
+    assert created_event["description"] == "Event emitted when a new ticket is created."
+    assert created_trigger["description"] == "Starts triage when the TicketCreated event is observed."
     assert ticket_object["action_count"] >= 1
     assert ticket_object["event_count"] >= 1
     assert triage_action["object_count"] >= 1
     assert triage_action["trigger_count"] >= 1
     assert created_event["object_count"] >= 1
     assert created_event["trigger_count"] >= 1
-    assert created_trigger["event_count"] >= 1
-    assert created_trigger["action_count"] >= 1
+    assert created_trigger["when_event"] == "Ticket Created"
+    assert created_trigger["do_action"] == "Triage Ticket"
 
     assert "iri" not in ticket_object
     assert "iri" not in triage_action
@@ -172,6 +176,8 @@ def test_catalog_object_detail_and_instances_use_catalog_keys() -> None:
     detail_body = detail.json()
     assert detail_body["catalog_key"] == object_key
     assert detail_body["name"] == "Ticket"
+    assert detail_body["description"] == "Support request tracked through a minimal triage lifecycle."
+    assert detail_body["documentation"] == "Support request tracked through a minimal triage lifecycle."
     assert detail_body["actions"]
     assert detail_body["events"]
     assert detail_body["triggers"]

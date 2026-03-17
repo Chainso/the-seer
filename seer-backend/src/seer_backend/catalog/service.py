@@ -46,7 +46,7 @@ _SUPPORTED_KINDS = frozenset(_KIND_BY_CATEGORY.values())
 _COMMENT_QUERY = """
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX prophet: <http://prophet.platform/ontology#>
-SELECT DISTINCT ?concept ?comment
+SELECT DISTINCT ?concept ?description ?documentation ?comment
 WHERE {
   VALUES ?categoryIri {
     prophet:ObjectModel
@@ -56,6 +56,8 @@ WHERE {
   }
   ?concept a ?typeIri .
   ?typeIri rdfs:subClassOf* ?categoryIri .
+  OPTIONAL { ?concept prophet:description ?description . }
+  OPTIONAL { ?concept prophet:documentation ?documentation . }
   OPTIONAL { ?concept rdfs:comment ?comment . }
 }
 """.strip()
@@ -116,6 +118,7 @@ class _CatalogConcept:
     category: str
     name: str
     description: str | None
+    documentation: str | None
     catalog_key: str
 
 
@@ -221,8 +224,8 @@ class CatalogService:
                     catalog_key=concept.catalog_key,
                     name=concept.name,
                     description=concept.description,
-                    event_count=len(index.trigger_to_events[concept.iri]),
-                    action_count=len(index.trigger_to_actions[concept.iri]),
+                    when_event=self._joined_names(index, index.trigger_to_events[concept.iri]),
+                    do_action=self._joined_names(index, index.trigger_to_actions[concept.iri]),
                 )
             )
         return CatalogTriggerListResponse(items=items)
@@ -234,7 +237,7 @@ class CatalogService:
             catalog_key=concept.catalog_key,
             name=concept.name,
             description=concept.description,
-            documentation=concept.description,
+            documentation=concept.documentation,
             object_type_uri=concept.iri,
             actions=self._links(index, index.object_to_actions[concept.iri]),
             events=self._links(index, index.object_to_events[concept.iri]),
@@ -248,7 +251,7 @@ class CatalogService:
             catalog_key=concept.catalog_key,
             name=concept.name,
             description=concept.description,
-            documentation=concept.description,
+            documentation=concept.documentation,
             objects=self._links(index, index.action_to_objects[concept.iri]),
             events=self._links(index, index.action_to_events[concept.iri]),
             triggers=self._links(index, index.action_to_triggers[concept.iri]),
@@ -261,7 +264,7 @@ class CatalogService:
             catalog_key=concept.catalog_key,
             name=concept.name,
             description=concept.description,
-            documentation=concept.description,
+            documentation=concept.documentation,
             objects=self._links(index, index.event_to_objects[concept.iri]),
             actions=self._links(index, index.event_to_actions[concept.iri]),
             triggers=self._links(index, index.event_to_triggers[concept.iri]),
@@ -274,7 +277,7 @@ class CatalogService:
             catalog_key=concept.catalog_key,
             name=concept.name,
             description=concept.description,
-            documentation=concept.description,
+            documentation=concept.documentation,
             events=self._links(index, index.trigger_to_events[concept.iri]),
             actions=self._links(index, index.trigger_to_actions[concept.iri]),
             objects=self._links(index, index.trigger_to_objects[concept.iri]),
@@ -462,14 +465,15 @@ class CatalogService:
             kind = _KIND_BY_CATEGORY.get(concept.category)
             if kind is None:
                 continue
-            description = comments.get(concept.iri)
+            metadata = comments.get(concept.iri) or {}
             catalog_key = _build_catalog_key(concept.label, concept.iri)
             shaped = _CatalogConcept(
                 iri=concept.iri,
                 kind=kind,
                 category=concept.category,
                 name=concept.label,
-                description=description,
+                description=metadata.get("description"),
+                documentation=metadata.get("documentation"),
                 catalog_key=catalog_key,
             )
             by_iri[concept.iri] = shaped
@@ -554,15 +558,20 @@ class CatalogService:
         return result.bindings
 
     @staticmethod
-    def _comment_map(rows: list[dict[str, str]]) -> dict[str, str]:
-        comments: dict[str, str] = {}
+    def _comment_map(rows: list[dict[str, str]]) -> dict[str, dict[str, str | None]]:
+        comments: dict[str, dict[str, str | None]] = {}
         for row in rows:
             concept_iri = row.get("concept", "").strip()
+            description = row.get("description", "").strip()
+            documentation = row.get("documentation", "").strip()
             comment = row.get("comment", "").strip()
-            if not concept_iri or not comment:
+            if not concept_iri:
                 continue
             if concept_iri not in comments:
-                comments[concept_iri] = comment
+                comments[concept_iri] = {
+                    "description": description or comment or None,
+                    "documentation": documentation or description or comment or None,
+                }
         return comments
 
     @staticmethod
@@ -609,6 +618,13 @@ class CatalogService:
         concepts = [index.by_iri[iri] for iri in iris if iri in index.by_iri]
         concepts.sort(key=lambda item: (item.name.lower(), item.name, item.iri))
         return [self._link(concept) for concept in concepts]
+
+    def _joined_names(self, index: _CatalogIndex, iris: set[str]) -> str | None:
+        concepts = [index.by_iri[iri] for iri in iris if iri in index.by_iri]
+        concepts.sort(key=lambda item: (item.name.lower(), item.name, item.iri))
+        if not concepts:
+            return None
+        return ", ".join(concept.name for concept in concepts)
 
     @staticmethod
     def _link(concept: _CatalogConcept) -> CatalogConceptLink:

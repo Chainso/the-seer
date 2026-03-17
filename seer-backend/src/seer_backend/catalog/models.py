@@ -42,8 +42,8 @@ class CatalogTriggerListItem(BaseModel):
     catalog_key: str
     name: str
     description: str | None = None
-    event_count: int
-    action_count: int
+    when_event: str | None = None
+    do_action: str | None = None
 
 
 class CatalogObjectListResponse(BaseModel):

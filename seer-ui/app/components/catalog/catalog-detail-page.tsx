@@ -5,6 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 
 import { CatalogKindTabs } from "@/app/components/catalog/catalog-kind-tabs";
 import { ObjectLifecycleWorkspace } from "@/app/components/catalog/object-lifecycle-workspace";
+import {
+  buildObjectInstanceColumnModel,
+  readObjectInstanceFieldValue,
+  stringifyObjectInstanceValue,
+} from "@/app/components/objects/object-instance-table-model";
 import { Badge } from "@/app/components/ui/badge";
 import { Card } from "@/app/components/ui/card";
 import {
@@ -18,6 +23,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import { getCatalogDetailByKind, getCatalogRuntimeByKind } from "@/app/lib/api/catalog";
 import { buildCatalogDetailHref, buildCatalogKindHref, CATALOG_KIND_LABEL } from "@/app/lib/catalog-routes";
+import { useOntologyDisplay } from "@/app/lib/ontology-display";
 import type {
   CatalogActionDetailResponse,
   CatalogActionRunsResponse,
@@ -64,6 +70,100 @@ function summarizeValue(value: unknown): string {
   }
 }
 
+function CatalogObjectRuntimeTable({
+  detail,
+  payload,
+}: {
+  detail: CatalogObjectDetailResponse;
+  payload: CatalogObjectInstancesResponse;
+}) {
+  const ontologyDisplay = useOntologyDisplay();
+  const selectedModel = useMemo(
+    () => ontologyDisplay.resolveObjectModel(detail.object_type_uri),
+    [detail.object_type_uri, ontologyDisplay]
+  );
+  const { keyPartFieldKeys, displayNameFieldKey, stateFieldKeys } = useMemo(
+    () =>
+      buildObjectInstanceColumnModel({
+        rows: payload.instances.map((item) => ({
+          object_ref: item.reference,
+          object_payload: item.data,
+        })),
+        objectType: detail.object_type_uri,
+        ontologyDisplay,
+        selectedModel,
+      }),
+    [detail.object_type_uri, ontologyDisplay, payload.instances, selectedModel]
+  );
+
+  const displayFieldValue = (fieldKey: string, rawValue: unknown) =>
+    ontologyDisplay.displayFieldValue(fieldKey, rawValue, {
+      objectType: detail.object_type_uri,
+      stateLabelByToken: selectedModel?.stateLabelByToken,
+    });
+
+  return (
+    <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
+      <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
+        <TableRow>
+          {keyPartFieldKeys.map((fieldKey) => (
+            <TableColumnHeaderCell key={fieldKey}>
+              {ontologyDisplay.displayFieldLabel(fieldKey, { objectType: detail.object_type_uri })}
+            </TableColumnHeaderCell>
+          ))}
+          {displayNameFieldKey ? (
+            <TableColumnHeaderCell>
+              {ontologyDisplay.displayFieldLabel(displayNameFieldKey, {
+                objectType: detail.object_type_uri,
+              })}
+            </TableColumnHeaderCell>
+          ) : null}
+          {stateFieldKeys.map((fieldKey) => (
+            <TableColumnHeaderCell key={fieldKey}>
+              {ontologyDisplay.displayFieldLabel(fieldKey, { objectType: detail.object_type_uri })}
+            </TableColumnHeaderCell>
+          ))}
+          <TableColumnHeaderCell>Recorded</TableColumnHeaderCell>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {payload.instances.map((item) => {
+          const shapedItem = { object_ref: item.reference, object_payload: item.data };
+          return (
+            <TableRow key={item.instance_id}>
+              {keyPartFieldKeys.map((fieldKey) => (
+                <TableCell key={`${item.instance_id}-${fieldKey}`} className="whitespace-normal">
+                  {stringifyObjectInstanceValue(
+                    displayFieldValue(fieldKey, readObjectInstanceFieldValue(shapedItem, fieldKey))
+                  )}
+                </TableCell>
+              ))}
+              {displayNameFieldKey ? (
+                <TableCell className="whitespace-normal break-words">
+                  {stringifyObjectInstanceValue(
+                    displayFieldValue(
+                      displayNameFieldKey,
+                      readObjectInstanceFieldValue(shapedItem, displayNameFieldKey)
+                    )
+                  )}
+                </TableCell>
+              ) : null}
+              {stateFieldKeys.map((fieldKey) => (
+                <TableCell key={`${item.instance_id}-${fieldKey}-state`} className="whitespace-normal">
+                  {stringifyObjectInstanceValue(
+                    displayFieldValue(fieldKey, readObjectInstanceFieldValue(shapedItem, fieldKey))
+                  )}
+                </TableCell>
+              ))}
+              <TableCell>{formatDateTime(item.recorded_at)}</TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </TableRoot>
+  );
+}
+
 function runtimeTitle(kind: CatalogKind): string {
   if (kind === "objects") {
     return "Instances";
@@ -82,6 +182,9 @@ type RelatedSection = {
   targetKind: CatalogKind;
   links: { catalog_key: string; name: string }[];
 };
+
+const RUNTIME_TABLE_CONTAINER_CLASS =
+  "max-h-[min(32rem,calc(100vh-22rem))] overflow-auto rounded-2xl border border-border";
 
 function relatedSections<TKind extends CatalogKind>(
   kind: TKind,
@@ -122,41 +225,22 @@ function relatedSections<TKind extends CatalogKind>(
 function RuntimeTable<TKind extends CatalogKind>({
   kind,
   payload,
+  objectDetail,
 }: {
   kind: TKind;
   payload: CatalogRuntimeResponseByKind[CatalogKind];
+  objectDetail?: CatalogObjectDetailResponse | null;
 }) {
-  if (kind === "objects") {
+  if (kind === "objects" && objectDetail) {
     const shaped = payload as CatalogObjectInstancesResponse;
-    return (
-      <TableRoot variant="surface" striped>
-        <TableHeader>
-          <TableRow>
-            <TableColumnHeaderCell>Recorded</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Reference</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Snapshot</TableColumnHeaderCell>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {shaped.instances.map((item) => (
-            <TableRow key={item.instance_id}>
-              <TableCell>{formatDateTime(item.recorded_at)}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {summarizeValue(item.reference)}
-              </TableCell>
-              <TableCell className="text-xs text-muted-foreground">{summarizeValue(item.data)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </TableRoot>
-    );
+    return <CatalogObjectRuntimeTable detail={objectDetail} payload={shaped} />;
   }
 
   if (kind === "actions") {
     const shaped = payload as CatalogActionRunsResponse;
     return (
-      <TableRoot variant="surface" striped>
-        <TableHeader>
+      <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
           <TableRow>
             <TableColumnHeaderCell>Status</TableColumnHeaderCell>
             <TableColumnHeaderCell>Submitted</TableColumnHeaderCell>
@@ -185,8 +269,8 @@ function RuntimeTable<TKind extends CatalogKind>({
   if (kind === "events") {
     const shaped = payload as CatalogEventOccurrencesResponse;
     return (
-      <TableRoot variant="surface" striped>
-        <TableHeader>
+      <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
           <TableRow>
             <TableColumnHeaderCell>Occurred</TableColumnHeaderCell>
             <TableColumnHeaderCell>Source</TableColumnHeaderCell>
@@ -210,8 +294,8 @@ function RuntimeTable<TKind extends CatalogKind>({
 
   const shaped = payload as CatalogTriggerFiringsResponse;
   return (
-    <TableRoot variant="surface" striped>
-      <TableHeader>
+    <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
+      <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
         <TableRow>
           <TableColumnHeaderCell>Occurred</TableColumnHeaderCell>
           <TableColumnHeaderCell>Source</TableColumnHeaderCell>
@@ -242,6 +326,7 @@ function DetailSummaryLayout({
   runtime: CatalogRuntimeResponseByKind[CatalogKind];
   sections: RelatedSection[];
 }) {
+  const objectDetail = kind === "objects" ? (detail as CatalogObjectDetailResponse) : null;
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(20rem,0.9fr)_minmax(0,1.3fr)]">
       <Card className="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -285,7 +370,7 @@ function DetailSummaryLayout({
             {runtimeTitle(kind)}
           </h2>
         </div>
-        <RuntimeTable kind={kind} payload={runtime} />
+        <RuntimeTable kind={kind} payload={runtime} objectDetail={objectDetail} />
       </Card>
     </div>
   );
@@ -405,21 +490,15 @@ export function CatalogDetailPage({
         >
           <TabsList variant="rail" className="grid grid-cols-2 gap-0">
             <TabsTrigger value="summary" variant="rail" className="min-h-[84px] px-1 py-0 transition-colors duration-200">
-              <div className="flex w-full flex-col gap-1 px-3 pb-4 pt-3 text-left">
+              <div className="flex w-full flex-col gap-1 px-3 py-4 text-left">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Overview</span>
                 <p className="text-sm font-semibold leading-tight text-foreground">Summary</p>
-                <p className="hidden text-xs leading-5 text-muted-foreground md:block">
-                  Read documentation, review related catalog concepts, and inspect runtime instances.
-                </p>
               </div>
             </TabsTrigger>
             <TabsTrigger value="lifecycle" variant="rail" className="min-h-[84px] px-1 py-0 transition-colors duration-200">
-              <div className="flex w-full flex-col gap-1 px-3 pb-4 pt-3 text-left">
+              <div className="flex w-full flex-col gap-1 px-3 py-4 text-left">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Investigation</span>
                 <p className="text-sm font-semibold leading-tight text-foreground">{objectDetail.name} Lifecycle</p>
-                <p className="hidden text-xs leading-5 text-muted-foreground md:block">
-                  Explore lifecycle flow and compare findings across scoped runtime patterns.
-                </p>
               </div>
             </TabsTrigger>
           </TabsList>
