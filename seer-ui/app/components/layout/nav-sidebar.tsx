@@ -6,23 +6,13 @@ import { usePathname } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { cn } from '@/app/lib/utils';
 import { Button } from '@/app/components/ui/button';
-import { Network, Sparkles, Sun, Moon, Database, Bot, Waypoints } from 'lucide-react';
+import { Sparkles, Sun, Moon, Bot, Waypoints, Library } from 'lucide-react';
 
 const navigation = [
   {
-    name: 'Ontology Explorer',
-    href: '/ontology/overview',
-    icon: Network,
-  },
-  {
-    name: 'Object Store',
-    href: '/inspector/history',
-    icon: Database,
-  },
-  {
-    name: 'Insights',
-    href: '/inspector/insights',
-    icon: Sparkles,
+    name: 'Catalog',
+    href: '/catalog',
+    icon: Library,
   },
   {
     name: 'Managed Agents',

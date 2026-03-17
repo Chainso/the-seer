@@ -67,8 +67,11 @@ test("insights panel consolidates root-cause and process-mining tabs", () => {
   assert.match(rootCauseApi, /\/root-cause\/evidence/);
   assert.match(rootCauseApi, /\/root-cause\/assist\/setup/);
   assert.match(rootCauseApi, /\/root-cause\/assist\/interpret/);
-  assert.match(nav, /name:\s*'Insights'/);
-  assert.match(nav, /href:\s*'\/inspector\/insights'/);
+  assert.match(nav, /name:\s*'Catalog'/);
+  assert.match(nav, /href:\s*'\/catalog'/);
+  assert.doesNotMatch(nav, /name:\s*'Insights'/);
+  assert.doesNotMatch(nav, /name:\s*'Object Store'/);
+  assert.doesNotMatch(nav, /name:\s*'Ontology Explorer'/);
   assert.doesNotMatch(nav, /name:\s*'Process Mining'/);
 });
 

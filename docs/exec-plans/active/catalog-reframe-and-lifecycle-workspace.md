@@ -27,7 +27,7 @@ This plan intentionally keeps the old ontology implementation code and routes in
 
 - [x] 2026-03-17 Create the active execution plan, add it to `docs/exec-plans/active/index.md`, and record baseline validation before implementation.
 - [x] 2026-03-17 Phase 1: land backend catalog read models and dedicated per-concept catalog APIs with regression coverage.
-- [ ] 2026-03-17 Phase 2: land shell/navigation changes plus catalog list/detail routes and reusable summary/runtime layouts.
+- [x] 2026-03-17 Phase 2: land shell/navigation changes plus catalog list/detail routes and reusable summary/runtime layouts.
 - [ ] 2026-03-17 Phase 3: fold the existing object-scoped investigation capability into object detail as `<Object Name> Lifecycle`, remove obsolete primary-nav flows, and complete the copy/deprecation audit.
 - [ ] 2026-03-17 Phase 4: ratify canonical docs/specs, run final validation, and archive the plan.
 
@@ -44,6 +44,8 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - 2026-03-17: The current production route table still exposes `/ontology`, `/ontology/[tab]`, `/inspector/history`, and `/inspector/insights`. That route list is useful baseline evidence and confirms the current shell still promotes older discovery flows.
 - 2026-03-17: Object-to-event relationships are not represented as direct concept-to-concept edges in the ontology graph; they are encoded through event property definitions with `valueType -> ObjectReference -> referencesObjectModel`. Phase 1 catalog read models therefore need explicit SPARQL traversal for relationship composition rather than simple direct edge joins.
 - 2026-03-17: The canonical minimal ontology fixture labels the trigger as `On Ticket Created` (not `On Ticket Created Trigger`), which required a test expectation correction during Phase 1 validation.
+- 2026-03-17: Next.js app-router route params are promise-shaped in this codebase (`params: Promise<{...}>`), so new catalog dynamic routes and legacy ontology redirects should follow the same async signature for consistency and compile-time safety.
+- 2026-03-17: Existing contract tests hard-asserted old sidebar entries (`Object Store`, `Insights`). Phase 2 required updating those assertions to keep test coverage aligned with the new catalog-first shell while preserving the underlying inspector routes as retained code-on-disk surfaces.
 
 ## Decision Log
 
@@ -57,6 +59,9 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - 2026-03-17, Codex: Do not preserve backward compatibility or migration behavior as a design constraint for this work. Rationale: this is pre-launch work aimed at the best final catalog-first product state, not a user migration.
 - 2026-03-17, Codex: Build Phase 1 catalog relation composition from ontology SPARQL queries rather than reusing `/ontology/graph` output directly. Rationale: SPARQL traversal can express the required object/event/action/trigger joins (especially object references) without exposing raw graph payloads as the primary contract and without depending on frontend graph parsing.
 - 2026-03-17, Codex: Define trigger firing runtime evidence as occurrences of the trigger's `listensTo` event type, with the trigger detail returning linked event/action catalog links. Rationale: there is no dedicated trigger firing persistence model yet, and listened-event occurrences provide a concrete, testable, user-facing runtime signal for trigger activity.
+- 2026-03-17, Codex: Make `/catalog` the single primary shell destination and model concept switching with URL-backed rail tabs (`/catalog/objects|actions|events|triggers`) instead of separate sidebar items. Rationale: this keeps catalog concepts as one coherent workspace while preserving fast switching and linkable URLs.
+- 2026-03-17, Codex: Keep `/ontology/*`, `/inspector/history`, and `/inspector/insights` routes on disk but remove ontology/object-store/insights from primary nav. Rationale: final-state product IA requires catalog-first framing now, while retained legacy routes still support internal reuse and transition work in later phases.
+- 2026-03-17, Codex: Implement Phase 2 object detail as summary-plus-runtime with an explicit lifecycle placeholder note, deferring actual lifecycle tab integration to Phase 3. Rationale: this satisfies phase scope boundaries and keeps the detail route ready for the lifecycle workspace without prematurely pulling in investigation components.
 
 ## Outcomes & Retrospective
 
@@ -87,13 +92,31 @@ Execution-phase outcomes will be appended here as phases complete. The final ret
    - `cd /workspaces/seer-python/seer-backend && ./.venv/bin/pytest tests/test_catalog_phase1.py`
    - `cd /workspaces/seer-python/seer-backend && ./.venv/bin/pytest`
 
+2026-03-17 Phase 2 outcome:
+
+1. Reframed primary shell navigation to `Catalog`, `Managed Agents`, and `Assistant`, and switched `/` to redirect to `/catalog/objects`.
+2. Added new catalog route tree and UI surfaces:
+   - `/catalog` redirect
+   - `/catalog/[kind]` list pages with URL-backed rail tabs
+   - `/catalog/[kind]/[catalogKey]` dedicated concept detail pages with summary-left/runtime-right layouts
+3. Added frontend catalog contracts and clients in `seer-ui/app/types/catalog.ts` and `seer-ui/app/lib/api/catalog.ts`, consuming the dedicated `/api/v1/catalog/*` endpoints from Phase 1.
+4. Converted `/ontology` and `/ontology/[tab]` to redirect into catalog kinds while leaving old ontology components present on disk.
+5. Added/updated UI contract coverage for catalog-first IA and nav/redirect behavior in:
+   - `seer-ui/tests/catalog.contract.test.mjs`
+   - `seer-ui/tests/history.contract.test.mjs`
+   - `seer-ui/tests/insights.contract.test.mjs`
+6. Phase 2 validation passed:
+   - `cd /workspaces/seer-python/seer-ui && npm run build`
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs`
+
 ## Context and Orientation
 
 Current UI state:
 
-- `seer-ui/app/components/layout/nav-sidebar.tsx` defines the main shell nav and currently lists `Ontology Explorer`, `Object Store`, `Insights`, `Managed Agents`, and `Assistant`.
-- `seer-ui/app/page.tsx` redirects `/` to `/ontology/overview`.
-- `seer-ui/app/ontology/page.tsx` and `seer-ui/app/ontology/[tab]/page.tsx` drive the graph-oriented ontology explorer.
+- `seer-ui/app/components/layout/nav-sidebar.tsx` now defines the main shell nav as `Catalog`, `Managed Agents`, and `Assistant`.
+- `seer-ui/app/page.tsx` now redirects `/` to `/catalog/objects`.
+- `seer-ui/app/catalog/` now hosts the primary catalog workspace (`/catalog`, `/catalog/[kind]`, `/catalog/[kind]/[catalogKey]`).
+- `seer-ui/app/ontology/page.tsx` and `seer-ui/app/ontology/[tab]/page.tsx` now redirect to catalog routes, while the graph-oriented ontology components remain retained code.
 - `seer-ui/app/components/ontology/ontology-explorer-tabs.tsx` is graph-first and not the desired primary catalog experience.
 - `seer-ui/app/components/ui/tabs.tsx` and `seer-ui/app/components/ui/table.tsx` already provide the interaction primitives needed for a catalog workspace.
 - `seer-ui/app/components/inspector/history-panel.tsx`, `seer-ui/app/components/inspector/insights-panel.tsx`, and `seer-ui/app/components/inspector/managed-agent-detail-panel.tsx` provide reusable tab, summary, and detail layout patterns.
@@ -101,7 +124,8 @@ Current UI state:
 
 Current backend/data-contract state:
 
-- `seer-ui/app/lib/api/ontology.ts` and `seer-backend/src/seer_backend/api/ontology.py` expose ontology graph/query reads that are implementation-oriented rather than catalog-oriented.
+- `seer-ui/app/lib/api/catalog.ts` and `seer-backend/src/seer_backend/api/catalog.py` now expose dedicated per-concept catalog list/detail/runtime reads as the primary catalog contract.
+- `seer-ui/app/lib/api/ontology.ts` and `seer-backend/src/seer_backend/api/ontology.py` remain available for legacy ontology/graph consumers and retained expert surfaces.
 - `seer-ui/app/lib/api/history.ts` and `seer-backend/src/seer_backend/api/history.py` already cover latest objects and event occurrences needed for object/event runtime evidence.
 - `seer-backend/src/seer_backend/api/actions.py` exposes generic action-status reads, but not a clean catalog-ready action list/detail-by-concept contract.
 - No dedicated trigger-firings read model exists today.
@@ -412,7 +436,7 @@ Frontend shell, routes, tab-rail workspace, concept tables, detail layouts, and 
 **Validation**
 
 1. `cd /workspaces/seer-python/seer-ui && npm run build`
-2. targeted UI contract tests for shell nav, redirects, and catalog list/detail behavior
+2. `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs`
 
 **Plan / Docs To Update**
 
@@ -439,15 +463,42 @@ One frontend IA commit, for example: `Add catalog workspace and redirect ontolog
 
 **Status**
 
-pending
+completed
 
 **Completion Notes**
 
-Not started.
+2026-03-17: Phase 2 landed catalog-first shell/nav/routes and legacy ontology redirects.
+
+1. Updated primary shell navigation in `seer-ui/app/components/layout/nav-sidebar.tsx` to `Catalog`, `Managed Agents`, and `Assistant`.
+2. Switched `seer-ui/app/page.tsx` to redirect `/` to `/catalog/objects`.
+3. Added catalog routes/components and frontend contracts:
+   - `seer-ui/app/catalog/page.tsx`
+   - `seer-ui/app/catalog/[kind]/page.tsx`
+   - `seer-ui/app/catalog/[kind]/[catalogKey]/page.tsx`
+   - `seer-ui/app/components/catalog/catalog-kind-tabs.tsx`
+   - `seer-ui/app/components/catalog/catalog-list-page.tsx`
+   - `seer-ui/app/components/catalog/catalog-detail-page.tsx`
+   - `seer-ui/app/lib/api/catalog.ts`
+   - `seer-ui/app/lib/catalog-routes.ts`
+   - `seer-ui/app/types/catalog.ts`
+4. Updated legacy ontology route files to redirect into catalog:
+   - `seer-ui/app/ontology/page.tsx`
+   - `seer-ui/app/ontology/[tab]/page.tsx`
+5. Updated contract tests for catalog-first shell behavior and new catalog route/API expectations:
+   - `seer-ui/tests/catalog.contract.test.mjs`
+   - `seer-ui/tests/history.contract.test.mjs`
+   - `seer-ui/tests/insights.contract.test.mjs`
+6. Validation evidence:
+   - `cd /workspaces/seer-python/seer-ui && npm run build` passed.
+   - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs` passed (`11/11` tests).
 
 **Next Starter Context**
 
-Start by landing the shell/nav and route skeleton, then wire list pages, then detail pages, then redirects. Favor reusing existing table and summary-layout primitives rather than inventing a new page framework.
+Phase 3 should focus only on object detail lifecycle integration:
+
+1. Replace the object-detail lifecycle placeholder note in `seer-ui/app/components/catalog/catalog-detail-page.tsx` with a real `Summary` / `<Object Name> Lifecycle` tab model.
+2. Reuse `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` as the lifecycle implementation base, but reframe labels/copy away from `Insights` and `OC-DFG`.
+3. Keep action/event/trigger detail pages as single-page summary/runtime layouts.
 
 ## Phase 3
 

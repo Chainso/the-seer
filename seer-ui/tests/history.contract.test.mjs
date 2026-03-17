@@ -57,8 +57,11 @@ test("inspector root and object store route expose model-locked object store tab
   assert.match(displaySurface, /Timeline by Day/);
   assert.match(displaySurface, /Load older/);
   assert.doesNotMatch(displaySurface, /Object-Centric Timeline \+ Graph/);
-  assert.match(nav, /name:\s*'Object Store'/);
-  assert.match(nav, /href:\s*'\/inspector\/history'/);
+  assert.match(nav, /name:\s*'Catalog'/);
+  assert.match(nav, /href:\s*'\/catalog'/);
+  assert.doesNotMatch(nav, /name:\s*'Object Store'/);
+  assert.doesNotMatch(nav, /name:\s*'Insights'/);
+  assert.doesNotMatch(nav, /name:\s*'Ontology Explorer'/);
 });
 
 test("history API client targets canonical history endpoints for object discovery + graph construction", () => {
