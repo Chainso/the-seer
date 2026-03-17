@@ -38,7 +38,13 @@ test("inspector root and object store route expose model-locked object store tab
   assert.match(insightsWorkspace, /getOcdfgGraph/);
   assert.match(insightsWorkspace, /Run RCA/);
   assert.match(insightsWorkspace, /Primary OC-DFG reruns automatically/);
-  assert.match(insightsWorkspace, /Comparison graph currently supports anchor-field RCA rules only/);
+  assert.match(insightsWorkspace, /Comparison graph currently supports anchor-based RCA rules only/);
+  assert.match(insightsWorkspace, /Table\.ColumnHeaderCell>Insight</);
+  assert.match(insightsWorkspace, /Table\.ColumnHeaderCell className="text-right">Influence</);
+  assert.match(insightsWorkspace, /Table\.ColumnHeaderCell className="text-right">Reach</);
+  assert.match(insightsWorkspace, /Ready for comparison/);
+  assert.match(insightsWorkspace, /Limited comparison support/);
+  assert.doesNotMatch(insightsWorkspace, /Hypothesis/);
   assert.match(insightsWorkspace, /heightClass="h-\[360px\]"/);
   assert.match(insightsWorkspace, /anchorFilters:/);
   assert.match(liveObjectsPanel, /History Filters/);

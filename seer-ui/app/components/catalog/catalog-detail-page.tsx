@@ -357,6 +357,13 @@ export function CatalogDetailPage({
     return relatedSections(kind, detail);
   }, [detail, kind]);
 
+  const objectDetail = useMemo(() => {
+    if (kind === "objects" && detail) {
+      return detail as CatalogObjectDetailResponse;
+    }
+    return null;
+  }, [detail, kind]);
+
   return (
     <div className="space-y-6" data-catalog-detail-page={kind}>
       <CatalogKindTabs kind={kind} />
@@ -386,7 +393,7 @@ export function CatalogDetailPage({
         <Card className="rounded-2xl border border-border bg-card p-8 text-sm text-muted-foreground">
           Loading detail...
         </Card>
-      ) : kind === "objects" ? (
+      ) : kind === "objects" && objectDetail ? (
         <Tabs
           value={objectViewTab}
           onValueChange={(nextValue) => {
@@ -409,7 +416,7 @@ export function CatalogDetailPage({
             <TabsTrigger value="lifecycle" variant="rail" className="min-h-[84px] px-1 py-0 transition-colors duration-200">
               <div className="flex w-full flex-col gap-1 px-3 pb-4 pt-3 text-left">
                 <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Investigation</span>
-                <p className="text-sm font-semibold leading-tight text-foreground">{detail.name} Lifecycle</p>
+                <p className="text-sm font-semibold leading-tight text-foreground">{objectDetail.name} Lifecycle</p>
                 <p className="hidden text-xs leading-5 text-muted-foreground md:block">
                   Explore lifecycle flow and compare findings across scoped runtime patterns.
                 </p>
@@ -417,10 +424,14 @@ export function CatalogDetailPage({
             </TabsTrigger>
           </TabsList>
           <TabsContent value="summary" className="space-y-4">
-            <DetailSummaryLayout kind={kind} detail={detail} runtime={runtime} sections={sections} />
+            <DetailSummaryLayout kind={kind} detail={objectDetail} runtime={runtime} sections={sections} />
           </TabsContent>
           <TabsContent value="lifecycle" className="space-y-4">
-            <ObjectLifecycleWorkspace objectName={detail.name} catalogKey={detail.catalog_key} isActive={objectViewTab === "lifecycle"} />
+            <ObjectLifecycleWorkspace
+              objectName={objectDetail.name}
+              objectType={objectDetail.object_type_uri}
+              isActive={objectViewTab === "lifecycle"}
+            />
           </TabsContent>
         </Tabs>
       ) : (

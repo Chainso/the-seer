@@ -235,6 +235,7 @@ class CatalogService:
             name=concept.name,
             description=concept.description,
             documentation=concept.description,
+            object_type_uri=concept.iri,
             actions=self._links(index, index.object_to_actions[concept.iri]),
             events=self._links(index, index.object_to_events[concept.iri]),
             triggers=self._links(index, index.object_to_triggers[concept.iri]),

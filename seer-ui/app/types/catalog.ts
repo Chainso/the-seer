@@ -58,6 +58,7 @@ export interface CatalogObjectDetailResponse {
   name: string;
   description: string | null;
   documentation: string | null;
+  object_type_uri: string;
   actions: CatalogConceptLink[];
   events: CatalogConceptLink[];
   triggers: CatalogConceptLink[];

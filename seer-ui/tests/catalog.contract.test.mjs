@@ -76,6 +76,7 @@ test("catalog list and detail surfaces use rail tabs, table-first lists, and ded
   assert.match(detail, /ObjectLifecycleWorkspace/);
   assert.match(detail, /Summary/);
   assert.match(detail, /Lifecycle/);
+  assert.match(detail, /ObjectLifecycleWorkspace[\s\S]*objectType=\{objectDetail\.object_type_uri\}/);
   assert.match(lifecycle, /ObjectStoreInsightsWorkspace/);
   assert.match(lifecycle, /mode="lifecycle"/);
   assert.match(lifecycle, /data-object-lifecycle-workspace/);

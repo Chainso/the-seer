@@ -810,13 +810,13 @@ export function ObjectStoreInsightsWorkspace({
               </div>
             </div>
             <Table.Root className="mt-4" variant="surface" striped>
-              <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeaderCell>Hypothesis</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell className="text-right">Lift</Table.ColumnHeaderCell>
-                  <Table.ColumnHeaderCell className="text-right">Coverage</Table.ColumnHeaderCell>
-                </Table.Row>
-              </Table.Header>
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>Insight</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell className="text-right">Influence</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell className="text-right">Reach</Table.ColumnHeaderCell>
+              </Table.Row>
+            </Table.Header>
               <Table.Body>
                 {run.insights.map((insight) => {
                   const supported = isAnchorOnlyInsight(insight);
@@ -832,9 +832,9 @@ export function ObjectStoreInsightsWorkspace({
                           {insight.rank}. {insight.title}
                         </div>
                         <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                          <span>support {insight.score.support}</span>
+                          <span>confidence {insight.score.support}</span>
                           <Badge variant={supported ? "outline" : "secondary"} className="rounded-full px-2 py-0 text-[10px]">
-                            {supported ? "Graph compare ready" : "Anchor-only compare"}
+                            {supported ? "Ready for comparison" : "Single finding only"}
                           </Badge>
                         </div>
                       </Table.RowHeaderCell>
@@ -900,13 +900,7 @@ export function ObjectStoreInsightsWorkspace({
                 </div>
                 {selectedInsight ? (
                   <Badge variant={comparisonSupported ? "outline" : "secondary"}>
-                    {comparisonSupported
-                      ? lifecycleMode
-                        ? "Comparison ready"
-                        : "Anchor-filter graph"
-                      : lifecycleMode
-                        ? "Limited comparison support"
-                        : "Unsupported rule family"}
+                    {comparisonSupported ? "Ready for comparison" : "Limited comparison support"}
                   </Badge>
                 ) : null}
               </div>
@@ -921,8 +915,8 @@ export function ObjectStoreInsightsWorkspace({
                 ) : !comparisonSupported ? (
                   <div className="flex h-[360px] items-center justify-center rounded-2xl border border-dashed border-border px-6 text-center text-sm text-muted-foreground">
                     {lifecycleMode
-                      ? "Lifecycle comparison currently supports anchor-field findings only. This finding includes non-anchor conditions."
-                      : "Comparison graph currently supports anchor-field RCA rules only. This result includes non-anchor RCA conditions."}
+                      ? "Lifecycle comparison currently supports anchor-based findings only. This result includes broader conditions."
+                      : "Comparison graph currently supports anchor-based RCA rules only. This result includes broader conditions."}
                   </div>
                 ) : comparisonError ? (
                   <div className="flex h-[360px] items-center justify-center rounded-2xl border border-destructive/40 bg-destructive/10 px-6 text-center text-sm text-destructive">

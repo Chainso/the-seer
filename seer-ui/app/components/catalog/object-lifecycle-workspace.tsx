@@ -1,51 +1,23 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { ObjectStoreInsightsWorkspace } from "@/app/components/inspector/object-store-insights-workspace";
 import { Card } from "@/app/components/ui/card";
-import { useOntologyDisplay } from "@/app/lib/ontology-display";
-
-function toSlug(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
 
 interface ObjectLifecycleWorkspaceProps {
   objectName: string;
-  catalogKey: string;
+  objectType: string | null | undefined;
   isActive: boolean;
 }
 
 export function ObjectLifecycleWorkspace({
   objectName,
-  catalogKey,
+  objectType,
   isActive,
 }: ObjectLifecycleWorkspaceProps) {
-  const ontologyDisplay = useOntologyDisplay();
-
-  const objectType = useMemo(() => {
-    const normalizedName = objectName.trim().toLowerCase();
-    const byName = ontologyDisplay.catalog.objectModels.find(
-      (model) => model.name.trim().toLowerCase() === normalizedName
-    );
-    if (byName) {
-      return byName.uri;
-    }
-
-    const bySlug = ontologyDisplay.catalog.objectModels.find(
-      (model) => toSlug(model.name) === catalogKey
-    );
-    return bySlug?.uri ?? null;
-  }, [catalogKey, objectName, ontologyDisplay.catalog.objectModels]);
-
   if (!objectType) {
     return (
       <Card className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground shadow-sm">
-        {objectName} lifecycle details are unavailable right now. Summary and runtime data are still available.
+        {objectName} lifecycle details are unavailable right now because the object schema could not be resolved. Summary and runtime data are still available.
       </Card>
     );
   }

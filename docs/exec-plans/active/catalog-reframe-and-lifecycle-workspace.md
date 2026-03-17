@@ -29,7 +29,8 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - [x] 2026-03-17 Phase 1: land backend catalog read models and dedicated per-concept catalog APIs with regression coverage.
 - [x] 2026-03-17 Phase 2: land shell/navigation changes plus catalog list/detail routes and reusable summary/runtime layouts.
 - [x] 2026-03-17 Phase 2 finisher: refine catalog runtime tables to remove user-visible internal identifier columns and lock the behavior in contract tests.
-- [x] 2026-03-17 Phase 3: fold the existing object-scoped investigation capability into object detail as `<Object Name> Lifecycle`, remove obsolete primary-nav flows, and complete the copy/deprecation audit.
+- [x] 2026-03-17 Phase 3: fold the existing object-scoped investigation capability into object detail as `<Object Name> Lifecycle`, remove obsolete primary-nav flows, and complete the initial lifecycle integration.
+- [x] 2026-03-17 Phase 3 finisher: replace remaining technical lifecycle-result wording and harden object-model resolution for the catalog lifecycle tab.
 - [ ] 2026-03-17 Phase 4: ratify canonical docs/specs, run final validation, and archive the plan.
 
 ## Surprises & Discoveries
@@ -49,6 +50,8 @@ This plan intentionally keeps the old ontology implementation code and routes in
 - 2026-03-17: Existing contract tests hard-asserted old sidebar entries (`Object Store`, `Insights`). Phase 2 required updating those assertions to keep test coverage aligned with the new catalog-first shell while preserving the underlying inspector routes as retained code-on-disk surfaces.
 - 2026-03-17: Controller validation after initial Phase 2 found that catalog runtime tables still presented raw internal identifiers (`source_event_id`, `run_id`, `trace_id`) as primary columns, which conflicted with the catalog UX requirement for light, user-facing operational language.
 - 2026-03-17: Catalog object detail does not currently expose object-model URIs in its API contract, but the reused lifecycle workspace requires one. Phase 3 solved this with a local object-lifecycle adapter that resolves object models from `useOntologyDisplay` and keeps URI internals out of visible UI.
+- 2026-03-17: Post-Phase 3 controller gating found two remaining lifecycle quality gaps. `seer-ui/app/components/catalog/object-lifecycle-workspace.tsx` still resolves the object model through catalog display-name matching instead of a stable catalog-key/API-backed identifier, and lifecycle mode in `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` still exposes technical result labels such as `Hypothesis`, `Lift`, `Coverage`, `anchor-field`, and `Graph compare ready`.
+- 2026-03-17: The Phase 3 finisher resolved these gaps by adding `object_type_uri` to the catalog object detail response so the lifecycle tab can point to the right model deterministically and by updating the lifecycle copy/information hierarchy to plain lifecycle language instead of score-model jargon.
 
 ## Decision Log
 
@@ -136,6 +139,9 @@ Execution-phase outcomes will be appended here as phases complete. The final ret
 6. Phase 3 validation passed:
    - `cd /workspaces/seer-python/seer-ui && npm run build`
    - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs` passed (`11/11` tests)
+7. Controller gating kept Phase 3 open for a narrow finisher before Phase 4:
+   - replace remaining technical lifecycle-result wording with plain lifecycle language,
+   - and make lifecycle object-model resolution deterministic instead of relying on catalog display-name matching alone.
 
 ## Context and Orientation
 
@@ -402,7 +408,7 @@ One backend-focused commit, for example: `Add dedicated catalog read APIs`
 
 **Status**
 
-completed
+finisher_required
 
 **Completion Notes**
 
@@ -531,11 +537,11 @@ completed
 
 **Next Starter Context**
 
-Phase 3 should focus only on object detail lifecycle integration:
+Phase 4 should now drive the docs/spec ratification, final validation, and archive readiness work.
 
-1. Replace the object-detail lifecycle placeholder note in `seer-ui/app/components/catalog/catalog-detail-page.tsx` with a real `Summary` / `<Object Name> Lifecycle` tab model.
-2. Reuse `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` as the lifecycle implementation base, but reframe labels/copy away from `Insights` and `OC-DFG`.
-3. Keep action/event/trigger detail pages as single-page summary/runtime layouts and preserve the new user-facing runtime-column language.
+1. Update `AGENTS.md`, `VISION.md`, `DESIGN.md`, and relevant product specs to describe the catalog-first framing, document the deprecated ontology routes, and clarify that the lifecycle workspace reuses the combined RCA + OC-DFG capability without exposing ontology internals.
+2. Keep `ARCHITECTURE.md` accurate about the internal ontology layer while referencing the new catalog read model.
+3. Prepare the plan and indexes for archive by recording final acceptance, linking the completed plan, and confirming any deferred follow-on work.
 
 ## Phase 3
 
@@ -603,21 +609,21 @@ completed
 
 2026-03-17: Phase 3 completed with lifecycle integration scoped to object detail.
 
-1. `seer-ui/app/components/catalog/catalog-detail-page.tsx` now renders object detail with two rail-tab modes: `Summary` and `<Object Name> Lifecycle`, defaulting to summary on open.
-2. `seer-ui/app/components/catalog/object-lifecycle-workspace.tsx` now hosts lifecycle framing and embeds the reused combined investigation capability.
-3. `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` now supports `mode="lifecycle"` to present lifecycle-first copy in catalog context while preserving existing inspector wording.
-4. `seer-ui/tests/catalog.contract.test.mjs` now asserts lifecycle tab/wrapper behavior and removes the obsolete Phase 3 placeholder expectation.
+1. `seer-ui/app/components/catalog/catalog-detail-page.tsx` now renders object detail with two rail-tab modes: `Summary` and `<Object Name> Lifecycle`, defaulting to summary on open and feeding the lifecycle tab a backend-provided `object_type_uri` for deterministic model resolution.
+2. `seer-ui/app/components/catalog/object-lifecycle-workspace.tsx` now surfaces a friendly lifecycle notice when the object schema is unresolved while always configuring the embedded investigation workspace with the resolved object URI.
+3. `seer-ui/app/components/inspector/object-store-insights-workspace.tsx` now embraces lifecycle language in its headers, badges, and helper text so the catalog lifecycle tab reads as business-friendly lifecycle insight rather than academic analytics.
+4. `seer-ui/tests/catalog.contract.test.mjs` now guards the new column names, lifecycle copy, and `objectType` wiring while keeping tab/rail expectations intact.
 5. Validation evidence:
    - `cd /workspaces/seer-python/seer-ui && npm run build` passed.
    - `cd /workspaces/seer-python/seer-ui && node --test tests/catalog.contract.test.mjs tests/history.contract.test.mjs tests/insights.contract.test.mjs` passed (`11/11` tests).
 
 **Next Starter Context**
 
-Phase 4 should now focus on docs/spec ratification and final archive readiness.
+Phase 4 should drive the docs/spec ratification, final validation, and plan/index archive now that the lifecycle polish is complete.
 
-1. Update `AGENTS.md`, `VISION.md`, `DESIGN.md`, and relevant product specs to codify catalog-first framing and mark legacy ontology routes/pages as deprecated retained surfaces.
-2. Keep architecture language explicit that ontology remains the internal capability layer while catalog is the user-facing discovery model.
-3. Run final full validation and prepare active/completed plan index updates for archive.
+1. Explicitly document the catalog-first framing, the deprecated ontology navigation, and the lifecycle wording/copy changes in `AGENTS.md`, `VISION.md`, `DESIGN.md`, and the relevant product specs.
+2. Keep `ARCHITECTURE.md` aligned with the internal ontology capability while referencing the catalog read-model truth.
+3. Close the active plan by recording the acceptance results, updating the indexes, and noting any intentionally deferred follow-on cleanup in the tech-debt tracker.
 
 ## Phase 4
 

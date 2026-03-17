@@ -67,6 +67,7 @@ class CatalogObjectDetailResponse(BaseModel):
     name: str
     description: str | None = None
     documentation: str | None = None
+    object_type_uri: str
     actions: list[CatalogConceptLink] = Field(default_factory=list)
     events: list[CatalogConceptLink] = Field(default_factory=list)
     triggers: list[CatalogConceptLink] = Field(default_factory=list)
