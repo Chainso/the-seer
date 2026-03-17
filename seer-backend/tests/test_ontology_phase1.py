@@ -188,7 +188,6 @@ def test_openai_runtime_uses_chat_completions_json_contract() -> None:
     kwargs = captured["kwargs"]
     assert isinstance(kwargs, dict)
     assert kwargs["model"] == "local-model"
-    assert kwargs["temperature"] == 0
     assert kwargs["stream"] is False
     assert kwargs["tool_choice"] == "auto"
     assert kwargs["parallel_tool_calls"] is True

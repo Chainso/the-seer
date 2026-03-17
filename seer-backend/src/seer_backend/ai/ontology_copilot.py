@@ -617,7 +617,6 @@ class OpenAiChatCompletionsRuntime:
                     model=self._model,
                     messages=messages,
                     stream=False,
-                    temperature=0,
                     tools=tools or [_SPARQL_READ_ONLY_TOOL_SCHEMA, _LOAD_SKILL_TOOL_SCHEMA],
                     tool_choice="auto",
                     parallel_tool_calls=True,
