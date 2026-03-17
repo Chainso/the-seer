@@ -26,9 +26,12 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 
 ## Delivery Stance
 
-1. Do not preserve legacy UI or backend behavior for backward compatibility by default.
-2. Optimize for the best current user experience, backend contract clarity, and product correctness, even when that breaks legacy implementation patterns.
-3. Treat legacy behavior as migration context, not a binding constraint.
+1. Seer is pre-launch. Existing code, docs, and behavior are iteration artifacts, not a public compatibility contract.
+2. Do not preserve legacy UI or backend behavior for backward compatibility by default.
+3. Backward compatibility is required only when a spec, execution plan, or explicit user instruction says it is required.
+4. Optimize for the best current user experience, backend contract clarity, and product correctness, even when that breaks legacy implementation patterns.
+5. Treat legacy behavior as migration context, not a binding constraint.
+6. Prefer deleting, replacing, or simplifying obsolete implementation patterns over carrying them forward for consistency with the current codebase.
 
 ## Read Order by Task Type
 
@@ -68,8 +71,9 @@ Every meaningful change should satisfy this checklist:
 3. Any execution status change is reflected in the relevant active/completed plan.
 4. Index files remain accurate when docs are added, renamed, or moved.
 5. Links and references in touched docs remain valid.
-6. Legacy-compatibility concessions are not assumed; if any are retained, they are explicitly justified.
-7. UI and backend behavior changes document what legacy behavior was intentionally removed.
+6. Pre-launch status is respected: current implementation is not treated as a binding compatibility constraint unless explicitly designated otherwise.
+7. Legacy-compatibility concessions are not assumed; if any are retained, they are explicitly justified.
+8. UI and backend behavior changes document what legacy behavior was intentionally removed.
 
 ## Commit Message Standard
 
