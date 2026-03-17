@@ -43,6 +43,7 @@ test("managed-agent inspector surfaces expose agent-first list, detail, editor, 
   assert.match(runsTable, /Open/);
   assert.match(detailsPanel, /backLabel = "Back to Runs"/);
   assert.match(detailsPanel, /useNestedManagedAgentRunRoutes/);
+  assert.match(detailsPanel, /Retry Run/);
   assert.match(nav, /name:\s*'Managed Agents'/);
   assert.match(nav, /href:\s*'\/inspector\/managed-agents'/);
 });
@@ -57,9 +58,11 @@ test("managed-agent API client targets authoring and execution endpoints", () =>
   assert.match(apiClient, /getManagedAgentEditorCatalog/);
   assert.match(apiClient, /createManagedAgent/);
   assert.match(apiClient, /updateManagedAgent/);
+  assert.match(apiClient, /retryAgenticWorkflowExecution/);
   assert.match(apiClient, /\/agentic-workflows\/managed-agents/);
   assert.match(apiClient, /\/agentic-workflows\/executions\?/);
   assert.match(apiClient, /\/agentic-workflows\/executions\/\$\{executionId\}/);
+  assert.match(apiClient, /\/actions\/\$\{executionId\}\/retry/);
   assert.match(apiClient, /after_ordinal/);
   assert.match(apiClient, /messages\/stream/);
   assert.match(routes, /buildManagedAgentRunHref/);

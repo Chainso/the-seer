@@ -13,6 +13,7 @@ from typing import Any
 from uuid import UUID
 
 from seer_backend.actions.errors import (
+    ActionConflictError,
     ActionDependencyUnavailableError,
     ActionNotFoundError,
     ActionValidationError,
@@ -517,6 +518,37 @@ class ActionsService:
         )
         return ActionSubmitResult(action=created, dedupe_hit=dedupe_hit)
 
+    async def retry_action(
+        self,
+        *,
+        ontology_service: Any,
+        action_id: UUID,
+    ) -> ActionSubmitResult:
+        current = await self.get_action(action_id)
+        if current is None:
+            raise ActionNotFoundError(f"action '{action_id}' was not found")
+        if current.status not in {
+            ActionStatus.FAILED_TERMINAL,
+            ActionStatus.DEAD_LETTER,
+        }:
+            raise ActionConflictError(
+                code="action_not_retryable",
+                message=(
+                    f"Action '{action_id}' is in status '{current.status.value}' and "
+                    "cannot be manually retried. Only failed_terminal and dead_letter "
+                    "actions are retryable."
+                ),
+            )
+
+        return await self.submit_action(
+            ontology_service=ontology_service,
+            user_id=current.user_id,
+            action_uri=current.action_uri,
+            payload=current.input_payload,
+            priority=current.priority,
+            parent_execution_id=current.parent_execution_id,
+        )
+
     async def resolve_action_contract(
         self,
         *,
@@ -649,6 +681,15 @@ class UnavailableActionsService:
             priority,
             parent_execution_id,
         )
+        raise ActionDependencyUnavailableError(self.reason)
+
+    async def retry_action(
+        self,
+        *,
+        ontology_service: Any,
+        action_id: UUID,
+    ) -> ActionSubmitResult:
+        del ontology_service, action_id
         raise ActionDependencyUnavailableError(self.reason)
 
     async def resolve_action_contract(

@@ -57,6 +57,8 @@ Managed-agent operations now have six product-visible layers:
    - default local stack service that executes Seer-authored managed agents through the shared copilot runtime
    - managed-agent-specific prompt optimized for accurate, precise task completion
    - restricted runtime tool policy: managed-agent `load_skill` plus `load_action`
+   - prompt guidance that tells the runner to inspect existing objects/events through object-store and object-history evidence before acting, to invoke ontology-defined actions through `load_action` when appropriate, and to keep moving without asking a live human clarifying questions mid-run
+   - explicit self-recursive guardrail: a managed agent must not `load_action` its own action URI
    - public `/api/v1/actions/claim` exclusion for managed-agent rows
 6. `Canonical transcript state`
    - ordered append-only `completion_messages`
@@ -103,13 +105,14 @@ The Seer authoring boundary is intentionally constrained:
 4. Seer shows only the runs for that managed agent.
 5. User opens one nested run under `/inspector/managed-agents/[managedAgentKey]/runs/[executionId]`.
 6. Seer shows transcript, related actions, and produced events with ontology-aware labeling, including persisted managed-agent tool activity when the run loaded skills or actions.
+7. If the run ended in `failed_terminal` or `dead_letter`, Seer exposes a retry button that creates a fresh queued execution from the same managed-agent action and payload, then navigates to the new run.
 
 ### Execute A Managed Agent
 
 1. User submits the managed-agent action through the shared action submit surface.
 2. Seer stores the run in the shared `actions` control plane as `action_kind=agentic_workflow`.
 3. The Seer-owned managed-agent runner claims that run internally; external workers do not lease it through `POST /api/v1/actions/claim`.
-4. Seer executes the managed agent through the shared copilot runtime using the managed-agent prompt plus restricted `load_skill` / `load_action`, persists transcript messages, emits the output event, and updates the shared action lifecycle state.
+4. Seer executes the managed agent through the shared copilot runtime using the managed-agent prompt plus restricted `load_skill` / `load_action`, rejects self-recursive `load_action` attempts against the currently executing managed agent, persists transcript messages, emits the output event, and updates the shared action lifecycle state.
 
 ## Relationship To The Ontology
 
@@ -144,6 +147,7 @@ The delivered surface must make the following clear:
 7. Users can open one nested run and inspect transcript, related actions, and produced events.
 8. The UI presents ontology-resolved names and supporting identifiers together, rather than raw URI-first controls.
 9. Default-stack managed-agent submissions leave `queued` automatically because Seer picks them up without an external worker.
+10. Terminal failed managed-agent runs can be manually retried from the run detail UI, and the retry creates a new execution instead of mutating the failed record.
 
 ## Out Of Scope For This Spec
 

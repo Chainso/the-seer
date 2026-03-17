@@ -145,6 +145,16 @@ export interface AgenticWorkflowExecutionDetailResponse {
   produced_events: AgenticWorkflowProducedEvent[];
 }
 
+export interface AgenticWorkflowRetryResponse {
+  retried_from_action_id: string;
+  action: AgenticWorkflowActionSummary & {
+    payload: Record<string, unknown>;
+    ontology_release_id: string;
+    priority: number;
+    next_visible_at: string;
+  };
+}
+
 export interface AgenticWorkflowTranscriptMessage {
   ordinal: number;
   execution_id: string;

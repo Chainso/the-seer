@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Clock3, RadioTower, Rows3, Waypoints } from "lucide-react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import {
   getAgenticWorkflowExecution,
   listAgenticWorkflowMessages,
+  retryAgenticWorkflowExecution,
   streamAgenticWorkflowMessages,
 } from "@/app/lib/api/agentic-workflows";
 import {
@@ -262,6 +263,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
   backLabel?: string;
   useNestedManagedAgentRunRoutes?: boolean;
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const ontologyDisplay = useOntologyDisplay();
 
@@ -269,6 +271,8 @@ export function AgenticWorkflowExecutionDetailsPanel({
   const [messages, setMessages] = useState<AgenticWorkflowTranscriptMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [snapshot, setSnapshot] = useState<AgenticWorkflowTranscriptSnapshotEvent | null>(null);
 
   const lastOrdinalRef = useRef(0);
@@ -288,6 +292,7 @@ export function AgenticWorkflowExecutionDetailsPanel({
         lastOrdinalRef.current = messagesResponse.last_ordinal;
         setError(null);
         setStreamError(null);
+        setRetryError(null);
         setStreamReady(true);
       })
       .catch((cause) => {
@@ -535,6 +540,8 @@ export function AgenticWorkflowExecutionDetailsPanel({
   }
 
   const currentAction = detail.execution.action;
+  const resolvedStatus = currentStatus || currentAction.status;
+  const canRetry = resolvedStatus === "failed_terminal" || resolvedStatus === "dead_letter";
   const actionLabel = ontologyDisplay.displayConcept(currentAction.action_uri);
   const transcriptCountLabel = `${messages.length} loaded / ${detail.execution.transcript_message_count} persisted`;
   const producedEventCountLabel =
@@ -545,17 +552,36 @@ export function AgenticWorkflowExecutionDetailsPanel({
     ? `${detail.child_executions.length} child runs + parent context`
     : `${detail.child_executions.length} child runs`;
 
+  const handleRetry = async () => {
+    setRetryError(null);
+    setRetrying(true);
+    try {
+      const response = await retryAgenticWorkflowExecution(currentAction.action_id);
+      const managedAgentKey = managedAgentKeyFromActionUri(response.action.action_uri);
+      if (!managedAgentKey) {
+        setRetryError("Retry succeeded, but the new execution route could not be resolved.");
+        return;
+      }
+      const href = useNestedManagedAgentRunRoutes
+        ? buildManagedAgentRunHref(managedAgentKey, response.action.action_id)
+        : legacyBuildExecutionHref(response.action.action_id);
+      router.push(href);
+      router.refresh();
+    } catch (cause) {
+      setRetryError(cause instanceof Error ? cause.message : "Failed to retry managed-agent run");
+    } finally {
+      setRetrying(false);
+    }
+  };
+
   return (
     <div className="space-y-6" data-agentic-workflow-execution-details-panel>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-3">
           <h1 className="font-display text-3xl">{actionLabel}</h1>
           <div className="flex flex-wrap gap-2">
-            <Badge
-              variant="outline"
-              className={`rounded-full ${statusBadgeClass(currentStatus || currentAction.status)}`}
-            >
-              {currentStatus || currentAction.status}
+            <Badge variant="outline" className={`rounded-full ${statusBadgeClass(resolvedStatus)}`}>
+              {resolvedStatus}
             </Badge>
             <Badge variant="outline" className="rounded-full">
               Run {shortIdentifier(currentAction.action_id, 10)}
@@ -565,17 +591,30 @@ export function AgenticWorkflowExecutionDetailsPanel({
             </Badge>
           </div>
         </div>
-        <Button asChild variant="outline">
-          <Link href={backHref}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            {backLabel}
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {canRetry ? (
+            <Button onClick={handleRetry} disabled={retrying}>
+              {retrying ? "Retrying..." : "Retry Run"}
+            </Button>
+          ) : null}
+          <Button asChild variant="outline">
+            <Link href={backHref}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              {backLabel}
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {streamError && (
         <Card className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           {streamError}
+        </Card>
+      )}
+
+      {retryError && (
+        <Card className="rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+          {retryError}
         </Card>
       )}
 

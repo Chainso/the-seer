@@ -6,6 +6,7 @@ import type {
   AgenticWorkflowExecutionDetailResponse,
   AgenticWorkflowExecutionListResponse,
   AgenticWorkflowMessagesResponse,
+  AgenticWorkflowRetryResponse,
   AgenticWorkflowStatus,
   AgenticWorkflowTranscriptErrorEvent,
   AgenticWorkflowTranscriptMessage,
@@ -181,6 +182,14 @@ export async function getAgenticWorkflowExecution(
   return fetchApi<AgenticWorkflowExecutionDetailResponse>(
     `/agentic-workflows/executions/${executionId}`
   );
+}
+
+export async function retryAgenticWorkflowExecution(
+  executionId: string
+): Promise<AgenticWorkflowRetryResponse> {
+  return fetchManagedAgentApi<AgenticWorkflowRetryResponse>(`/actions/${executionId}/retry`, {
+    method: 'POST',
+  });
 }
 
 export async function listAgenticWorkflowMessages(options: {

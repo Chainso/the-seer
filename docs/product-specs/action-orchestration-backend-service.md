@@ -15,7 +15,8 @@ This spec covers:
 2. pull-based claiming by user instances for ordinary actions,
 3. Seer-owned managed-agent claiming and execution,
 4. completion/failure lifecycle behavior with retries/dead-letter transitions,
-5. status visibility for UI/operator surfaces.
+5. manual operator retry of failed executions,
+6. status visibility for UI/operator surfaces.
 
 ## Who Interacts With This
 
@@ -40,6 +41,7 @@ This spec covers:
    - `GET /api/v1/actions/{action_id}`,
    - `GET /api/v1/actions`,
    - `GET /api/v1/actions/{action_id}/stream` (SSE).
+8. Operators may trigger `POST /api/v1/actions/{action_id}/retry` for terminal failed actions, which creates a fresh queued execution from the same action capability and payload.
 
 ## Canonical Lifecycle
 
@@ -78,7 +80,7 @@ Notes:
 1. Seer-owned managed-agent runner claims `action_kind=agentic_workflow` rows through an internal service/repository path rather than the public HTTP claim API.
 2. Managed-agent claiming is global across submitter `user_id` values.
 3. Submitter `user_id` remains on the action row for audit, list/detail filtering, and provenance.
-4. The runner executes the managed agent through the shared copilot runtime using the managed-agent prompt plus restricted `load_skill` / `load_action`, persists canonical transcript messages, emits the produced output event, and then completes or fails the leased action through the existing lifecycle callbacks.
+4. The runner executes the managed agent through the shared copilot runtime using the managed-agent prompt plus restricted `load_skill` / `load_action`, rejects self-recursive `load_action` attempts against the currently executing managed agent, persists canonical transcript messages, emits the produced output event, and then completes or fails the leased action through the existing lifecycle callbacks.
 5. External callers to `POST /api/v1/actions/claim` must never receive managed-agent rows.
 
 ## Instance Heartbeat Flow
@@ -96,6 +98,13 @@ Notes:
 5. Retryable failures at max attempts transition to `dead_letter`.
 6. Terminal failures transition to `failed_terminal`.
 7. Duplicate completion callbacks for already completed actions are idempotent.
+
+## Manual Retry Flow
+
+1. Operator triggers `POST /api/v1/actions/{action_id}/retry` for a source action in `failed_terminal` or `dead_letter`.
+2. Backend leaves the failed source action untouched for audit/history.
+3. Backend creates a fresh queued action with a new `action_id`, the same `user_id`, `action_uri`, payload, priority, and `parent_execution_id`, then returns that new action record.
+4. Actions in non-terminal-failed states must reject manual retry with a conflict response.
 
 ## Status Visibility Flow
 

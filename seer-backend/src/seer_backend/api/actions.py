@@ -149,6 +149,11 @@ class ActionLifecycleResponse(BaseModel):
     last_error_detail: str | None = None
 
 
+class ActionRetryResponse(BaseModel):
+    retried_from_action_id: UUID
+    action: ActionStatusResponse
+
+
 class ActionStatusResponse(BaseModel):
     action_id: UUID
     user_id: str
@@ -485,6 +490,40 @@ async def fail_action(
     except ActionError as exc:
         raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
     return _lifecycle_response(action)
+
+
+@router.post("/{action_id}/retry", response_model=ActionRetryResponse)
+async def retry_action(
+    action_id: UUID,
+    request: Request,
+) -> ActionRetryResponse:
+    actions_service = request.app.state.actions_service
+    ontology_service = request.app.state.ontology_service
+    try:
+        result = await actions_service.retry_action(
+            ontology_service=ontology_service,
+            action_id=action_id,
+        )
+    except ActionNotFoundError as exc:
+        raise _http_error(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except ActionConflictError as exc:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            {"code": exc.code, "message": exc.message},
+        ) from exc
+    except ActionValidationError as exc:
+        raise _http_error(
+            HTTP_422_UNPROCESSABLE_CONTENT,
+            _validation_error_detail(exc),
+        ) from exc
+    except (ActionDependencyUnavailableError, OntologyDependencyUnavailableError) as exc:
+        raise _http_error(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    except (ActionError, OntologyError) as exc:
+        raise _http_error(status.HTTP_502_BAD_GATEWAY, str(exc)) from exc
+    return ActionRetryResponse(
+        retried_from_action_id=action_id,
+        action=_status_response(result.action),
+    )
 
 
 @router.post("/instances/heartbeat", response_model=InstanceHeartbeatResponse)

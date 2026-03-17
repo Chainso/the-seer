@@ -261,12 +261,12 @@ Design intent:
 6. Process/RCA tool contract:
    - backend analytical tools callable by UI and AI orchestration paths
 7. Action execution contract:
-   - ontology-defined input validation, pull/lease execution, lifecycle visibility, lineage, and at-least-once delivery semantics
+   - ontology-defined input validation, pull/lease execution, lifecycle visibility, lineage, at-least-once delivery semantics, and manual operator retry that creates a fresh queued execution from a terminal failed run
 8. Managed-agent action execution contract:
    - ontology-defined `seer:AgenticWorkflow` identity extending `prophet:Action`
    - generic action execution rows with `action_kind=agentic_workflow`
    - canonical append-only transcript `completion_messages` stored in ClickHouse
-   - shared copilot runtime with a managed-agent-specific workflow prompt, restricted `load_skill`, and `load_action`
+   - shared copilot runtime with a managed-agent-specific workflow prompt, restricted `load_skill`, `load_action`, and an explicit self-recursive action-load guardrail for the currently executing managed agent
    - dedicated execution list/detail/messages/stream APIs for inspection
 
 ## Architectural Invariants

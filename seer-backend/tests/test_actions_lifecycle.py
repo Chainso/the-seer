@@ -15,16 +15,45 @@ from seer_backend.actions.repository import InMemoryActionsRepository
 from seer_backend.actions.service import ActionsService, UnavailableActionsService
 from seer_backend.config.settings import Settings
 from seer_backend.main import create_app
+from seer_backend.ontology.repository import InMemoryOntologyRepository
+from seer_backend.ontology.service import OntologyService
+from seer_backend.ontology.validation import ShaclValidator
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PROPHET_METAMODEL = REPO_ROOT / "prophet" / "prophet.ttl"
+VALID_FIXTURE = (
+    REPO_ROOT
+    / "prophet"
+    / "examples"
+    / "turtle"
+    / "prophet_example_turtle_minimal"
+    / "gen"
+    / "turtle"
+    / "ontology.ttl"
+)
+TRIAGE_ACTION_URI = "http://prophet.platform/local/support_local#act_triage_ticket"
 
 
 def _build_lifecycle_client() -> tuple[TestClient, InMemoryActionsRepository]:
     app = create_app(settings=Settings(prophet_metamodel_path=str(PROPHET_METAMODEL)))
     repository = InMemoryActionsRepository()
     app.state.actions_service = ActionsService(repository=repository)
+    app.state.ontology_service = OntologyService(
+        repository=InMemoryOntologyRepository(),
+        validator=ShaclValidator(str(PROPHET_METAMODEL)),
+    )
     return TestClient(app), repository
+
+
+def _ingest_release(client: TestClient, release_id: str = "rel-2026-03-01") -> None:
+    response = client.post(
+        "/api/v1/ontology/ingest",
+        json={
+            "release_id": release_id,
+            "turtle": VALID_FIXTURE.read_text(encoding="utf-8"),
+        },
+    )
+    assert response.status_code == 200, response.text
 
 
 def _enqueue_action(
@@ -33,16 +62,19 @@ def _enqueue_action(
     user_id: str,
     action_uri: str,
     max_attempts: int = 3,
+    payload: dict[str, object] | None = None,
+    priority: int = 0,
 ) -> UUID:
     now = datetime(2026, 3, 1, 15, 0, tzinfo=UTC)
     action = repository.create_action(
         ActionCreate(
             user_id=user_id,
             action_uri=action_uri,
-            input_payload={"ticket_id": "T-200"},
+            input_payload=payload or {"ticket_id": "T-200"},
             ontology_release_id="rel-2026-03-01",
             validation_contract_hash="contract-hash-lifecycle-test",
             max_attempts=max_attempts,
+            priority=priority,
             submitted_at=now,
             next_visible_at=now,
         )
@@ -226,6 +258,105 @@ def test_retryable_fail_exceeding_max_attempts_transitions_to_dead_letter() -> N
     assert stored.status == ActionStatus.DEAD_LETTER
 
 
+def test_retry_failed_terminal_creates_fresh_queued_action() -> None:
+    client, repository = _build_lifecycle_client()
+    _ingest_release(client)
+    action_id = _enqueue_action(
+        repository,
+        user_id="user-lifecycle-retry-terminal",
+        action_uri=TRIAGE_ACTION_URI,
+        payload={"ticket": {"tenant": "acme", "ticket_id": "T-500"}},
+        priority=7,
+    )
+    _claim_one(client, user_id="user-lifecycle-retry-terminal", instance_id="instance-a")
+    fail = client.post(
+        f"/api/v1/actions/{action_id}/fail",
+        json={
+            "instance_id": "instance-a",
+            "error_code": "authorization_failed",
+            "error_detail": "policy denied",
+        },
+    )
+    assert fail.status_code == 200, fail.text
+    assert fail.json()["status"] == "failed_terminal"
+
+    retry = client.post(f"/api/v1/actions/{action_id}/retry")
+
+    assert retry.status_code == 200, retry.text
+    body = retry.json()
+    assert body["retried_from_action_id"] == str(action_id)
+    assert body["action"]["status"] == "queued"
+    assert body["action"]["action_id"] != str(action_id)
+    assert body["action"]["action_uri"] == TRIAGE_ACTION_URI
+    assert body["action"]["user_id"] == "user-lifecycle-retry-terminal"
+    assert body["action"]["priority"] == 7
+    assert body["action"]["payload"] == {"ticket": {"tenant": "acme", "ticket_id": "T-500"}}
+
+    original = repository.get_action(action_id)
+    retried = repository.get_action(UUID(body["action"]["action_id"]))
+    assert original is not None
+    assert retried is not None
+    assert original.status == ActionStatus.FAILED_TERMINAL
+    assert retried.status == ActionStatus.QUEUED
+    assert retried.attempt_count == 0
+
+
+def test_retry_dead_letter_creates_fresh_queued_action() -> None:
+    client, repository = _build_lifecycle_client()
+    _ingest_release(client)
+    action_id = _enqueue_action(
+        repository,
+        user_id="user-lifecycle-retry-dead-letter",
+        action_uri=TRIAGE_ACTION_URI,
+        payload={"ticket": {"tenant": "acme", "ticket_id": "T-501"}},
+        max_attempts=1,
+    )
+    _claim_one(client, user_id="user-lifecycle-retry-dead-letter", instance_id="instance-a")
+    fail = client.post(
+        f"/api/v1/actions/{action_id}/fail",
+        json={
+            "instance_id": "instance-a",
+            "error_code": "upstream_timeout",
+            "error_detail": "retry budget exhausted",
+        },
+    )
+    assert fail.status_code == 200, fail.text
+    assert fail.json()["status"] == "dead_letter"
+
+    retry = client.post(f"/api/v1/actions/{action_id}/retry")
+
+    assert retry.status_code == 200, retry.text
+    body = retry.json()
+    assert body["retried_from_action_id"] == str(action_id)
+    assert body["action"]["status"] == "queued"
+    assert body["action"]["action_id"] != str(action_id)
+
+    original = repository.get_action(action_id)
+    retried = repository.get_action(UUID(body["action"]["action_id"]))
+    assert original is not None
+    assert retried is not None
+    assert original.status == ActionStatus.DEAD_LETTER
+    assert retried.status == ActionStatus.QUEUED
+
+
+def test_retry_rejects_non_failed_action_states() -> None:
+    client, repository = _build_lifecycle_client()
+    _ingest_release(client)
+    action_id = _enqueue_action(
+        repository,
+        user_id="user-lifecycle-retry-conflict",
+        action_uri=TRIAGE_ACTION_URI,
+        payload={"ticket": {"tenant": "acme", "ticket_id": "T-502"}},
+    )
+
+    retry = client.post(f"/api/v1/actions/{action_id}/retry")
+
+    assert retry.status_code == 409, retry.text
+    detail = retry.json()["detail"]
+    assert detail["code"] == "action_not_retryable"
+    assert "cannot be manually retried" in detail["message"]
+
+
 def test_invalid_lease_owner_maps_to_actionable_409() -> None:
     client, repository = _build_lifecycle_client()
     action_id = _enqueue_action(
@@ -264,8 +395,11 @@ def test_complete_and_fail_map_dependency_unavailable_to_503() -> None:
             "error_detail": "dependency unavailable",
         },
     )
+    retry = client.post(f"/api/v1/actions/{action_id}/retry")
 
     assert complete.status_code == 503
     assert fail.status_code == 503
+    assert retry.status_code == 503
     assert "actions unavailable" in complete.json()["detail"]
     assert "actions unavailable" in fail.json()["detail"]
+    assert "actions unavailable" in retry.json()["detail"]
