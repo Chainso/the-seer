@@ -20,6 +20,7 @@ from seer_backend.api.agentic_workflows import (
 from seer_backend.api.agentic_workflows import router as agentic_workflows_router
 from seer_backend.api.ai import inject_ai_gateway_service
 from seer_backend.api.ai import router as ai_router
+from seer_backend.api.catalog import router as catalog_router
 from seer_backend.api.health import router as health_router
 from seer_backend.api.history import inject_history_service
 from seer_backend.api.history import router as history_router
@@ -77,6 +78,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     app.include_router(health_router, prefix=settings.api_prefix)
+    app.include_router(catalog_router, prefix=settings.api_prefix)
     app.include_router(ontology_router, prefix=settings.api_prefix)
     app.include_router(history_router, prefix=settings.api_prefix)
     app.include_router(actions_router, prefix=settings.api_prefix)
