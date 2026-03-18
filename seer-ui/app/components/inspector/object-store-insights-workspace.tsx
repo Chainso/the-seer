@@ -301,6 +301,8 @@ export function ObjectStoreInsightsWorkspace({
     return run.insights.find((insight) => insight.insight_id === selectedInsightId) || run.insights[0] || null;
   }, [run, selectedInsightId]);
   const comparisonSupported = useMemo(() => isAnchorOnlyInsight(selectedInsight), [selectedInsight]);
+  const hasLifecycleMilestoneSelection = Boolean(outcomeEventType.trim());
+  const isRunDisabled = runState === "running" || (lifecycleMode && !hasLifecycleMilestoneSelection);
 
   const persistScopeQuery = useCallback((updates: Record<string, string | null | undefined>) => {
     replaceQuery({
@@ -707,7 +709,16 @@ export function ObjectStoreInsightsWorkspace({
           </div>
 
           <div className="flex items-end">
-            <Button className="w-full" onClick={runAnalysis} disabled={runState === "running"}>
+            <Button
+              className="w-full"
+              onClick={runAnalysis}
+              disabled={isRunDisabled}
+              title={
+                lifecycleMode && !hasLifecycleMilestoneSelection
+                  ? "Select a lifecycle milestone before running."
+                  : undefined
+              }
+            >
               {runState === "running"
                 ? lifecycleMode
                   ? "Analyzing lifecycle..."
