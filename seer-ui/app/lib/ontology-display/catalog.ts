@@ -66,6 +66,14 @@ export function preferredOntologyName(properties: Record<string, unknown> | unde
 export function tokenVariants(value: string): string[] {
   const local = iriLocalName(value);
   const baseCandidates = new Set<string>([value, local]);
+  const includesPathSeparator = value.includes("/") || value.includes("#");
+  if (!includesPathSeparator) {
+    for (const candidate of value.split(".").filter(Boolean)) {
+      if (candidate) {
+        baseCandidates.add(candidate);
+      }
+    }
+  }
 
   const tokens = new Set<string>();
   for (const candidate of baseCandidates) {

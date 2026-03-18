@@ -90,6 +90,45 @@ WHERE {
 }
 """.strip()
 
+_ACTION_INPUT_OBJECT_REFERENCE_QUERY = """
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX prophet: <http://prophet.platform/ontology#>
+SELECT DISTINCT ?action ?fieldKey ?maxCardinality
+WHERE {
+  ?action a ?actionType .
+  ?actionType rdfs:subClassOf* prophet:Action .
+  ?action prophet:acceptsInput ?input .
+  ?input prophet:hasProperty ?property .
+  ?property prophet:fieldKey ?fieldKey ;
+            prophet:valueType ?valueType .
+  ?valueType a prophet:ObjectReference ;
+             prophet:referencesObjectModel ?_ .
+  OPTIONAL {
+    ?property prophet:maxCardinality ?maxCardinality .
+  }
+}
+ORDER BY ?action ?fieldKey
+""".strip()
+
+_EVENT_PAYLOAD_OBJECT_REFERENCE_QUERY = """
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX prophet: <http://prophet.platform/ontology#>
+SELECT DISTINCT ?event ?fieldKey ?maxCardinality
+WHERE {
+  ?event a ?eventType .
+  ?eventType rdfs:subClassOf* prophet:Event .
+  ?event prophet:hasProperty ?property .
+  ?property prophet:fieldKey ?fieldKey ;
+            prophet:valueType ?valueType .
+  ?valueType a prophet:ObjectReference ;
+             prophet:referencesObjectModel ?_ .
+  OPTIONAL {
+    ?property prophet:maxCardinality ?maxCardinality .
+  }
+}
+ORDER BY ?event ?fieldKey
+""".strip()
+
 _TRIGGER_LINKS_QUERY = """
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX prophet: <http://prophet.platform/ontology#>
@@ -139,6 +178,8 @@ class _CatalogIndex:
     object_to_actions: dict[str, set[str]]
     object_to_triggers: dict[str, set[str]]
     trigger_to_objects: dict[str, set[str]]
+    action_to_input_object_ref_fields: dict[str, list[str]]
+    event_to_payload_object_ref_fields: dict[str, list[str]]
 
 
 class CatalogService:
@@ -334,12 +375,14 @@ class CatalogService:
             page=page,
             size=size,
         )
+        object_reference_columns = index.action_to_input_object_ref_fields.get(concept.iri, [])
         return CatalogActionRunsResponse(
             catalog_key=concept.catalog_key,
             name=concept.name,
             page=page,
             size=size,
             total=total,
+            object_reference_columns=object_reference_columns,
             runs=[
                 CatalogActionRunItem(
                     run_id=action.action_id,
@@ -350,6 +393,10 @@ class CatalogService:
                     attempt_count=action.attempt_count,
                     last_error_code=action.last_error_code,
                     last_error_detail=action.last_error_detail,
+                    object_references={
+                        field_key: action.input_payload.get(field_key) if isinstance(action.input_payload, dict) else None
+                        for field_key in object_reference_columns
+                    },
                 )
                 for action in actions
             ],
@@ -369,10 +416,14 @@ class CatalogService:
             event_type=concept.iri,
             limit=limit,
         )
+        object_reference_columns = index.event_to_payload_object_ref_fields.get(
+            concept.iri, []
+        )
         return CatalogEventOccurrencesResponse(
             catalog_key=concept.catalog_key,
             name=concept.name,
             limit=limit,
+            object_reference_columns=object_reference_columns,
             occurrences=[
                 CatalogEventOccurrenceItem(
                     event_id=item.event_id,
@@ -381,6 +432,10 @@ class CatalogService:
                     trace_id=item.trace_id,
                     produced_by_execution_id=item.produced_by_execution_id,
                     payload=_strip_type_keys(item.payload),
+                    object_references={
+                        field_key: item.payload.get(field_key) if isinstance(item.payload, dict) else None
+                        for field_key in object_reference_columns
+                    },
                 )
                 for item in timeline.items
             ],
@@ -407,6 +462,11 @@ class CatalogService:
         ]
         event_link = self._link(event_concepts[0]) if event_concepts else None
         action_link = self._link(action_concepts[0]) if action_concepts else None
+        object_reference_columns = (
+            index.event_to_payload_object_ref_fields.get(event_concepts[0].iri, [])
+            if event_concepts
+            else []
+        )
 
         if not event_concepts:
             return CatalogTriggerFiringsResponse(
@@ -415,6 +475,7 @@ class CatalogService:
                 event=event_link,
                 action=action_link,
                 limit=limit,
+                object_reference_columns=object_reference_columns,
                 firings=[],
             )
 
@@ -430,6 +491,7 @@ class CatalogService:
             event=event_link,
             action=action_link,
             limit=limit,
+            object_reference_columns=object_reference_columns,
             firings=[
                 CatalogTriggerFiringItem(
                     event_id=item.event_id,
@@ -437,6 +499,10 @@ class CatalogService:
                     source=item.source,
                     trace_id=item.trace_id,
                     payload=_strip_type_keys(item.payload),
+                    object_references={
+                        field_key: item.payload.get(field_key) if isinstance(item.payload, dict) else None
+                        for field_key in object_reference_columns
+                    },
                 )
                 for item in timeline.items
             ],
@@ -531,6 +597,17 @@ class CatalogService:
             for event_iri in event_iris:
                 trigger_to_objects[trigger_iri].update(event_to_objects.get(event_iri, set()))
 
+        action_to_input_object_ref_fields = _filter_singular_reference_fields(
+            await self._select_rows(_ACTION_INPUT_OBJECT_REFERENCE_QUERY),
+            left_key="action",
+            allowed_left={item.iri for item in by_kind["actions"]},
+        )
+        event_to_payload_object_ref_fields = _filter_singular_reference_fields(
+            await self._select_rows(_EVENT_PAYLOAD_OBJECT_REFERENCE_QUERY),
+            left_key="event",
+            allowed_left={item.iri for item in by_kind["events"]},
+        )
+
         return _CatalogIndex(
             by_iri=by_iri,
             by_kind={kind: by_kind[kind] for kind in by_kind},
@@ -547,6 +624,8 @@ class CatalogService:
             object_to_actions=object_to_actions,
             object_to_triggers=object_to_triggers,
             trigger_to_objects=trigger_to_objects,
+            action_to_input_object_ref_fields=action_to_input_object_ref_fields,
+            event_to_payload_object_ref_fields=event_to_payload_object_ref_fields,
         )
 
     async def _select_rows(self, query: str) -> list[dict[str, str]]:
@@ -656,3 +735,37 @@ def _strip_type_keys(payload: dict[str, Any]) -> dict[str, Any]:
     cleaned.pop("object_type", None)
     cleaned.pop("event_type", None)
     return cleaned
+
+
+def _filter_singular_reference_fields(
+    rows: list[dict[str, str]],
+    *,
+    left_key: str,
+    allowed_left: set[str],
+) -> dict[str, list[str]]:
+    fields_by_left: dict[str, set[str]] = defaultdict(set)
+    for row in rows:
+        left = row.get(left_key, "").strip()
+        if not left or left not in allowed_left:
+            continue
+
+        field_key = row.get("fieldKey", "").strip()
+        if not field_key:
+            continue
+
+        max_cardinality = _parse_optional_int(row.get("maxCardinality"))
+        if max_cardinality is not None and max_cardinality > 1:
+            continue
+
+        fields_by_left[left].add(field_key)
+
+    return {left: sorted(fields) for left, fields in fields_by_left.items()}
+
+
+def _parse_optional_int(value: str | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None

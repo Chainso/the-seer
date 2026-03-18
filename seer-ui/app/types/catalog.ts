@@ -121,6 +121,7 @@ export interface CatalogActionRunItem {
   attempt_count: number;
   last_error_code: string | null;
   last_error_detail: string | null;
+  object_references: Record<string, unknown>;
 }
 
 export interface CatalogActionRunsResponse {
@@ -129,6 +130,7 @@ export interface CatalogActionRunsResponse {
   page: number;
   size: number;
   total: number;
+  object_reference_columns: string[];
   runs: CatalogActionRunItem[];
 }
 
@@ -139,12 +141,14 @@ export interface CatalogEventOccurrenceItem {
   trace_id: string | null;
   produced_by_execution_id: string | null;
   payload: Record<string, unknown>;
+  object_references: Record<string, unknown>;
 }
 
 export interface CatalogEventOccurrencesResponse {
   catalog_key: string;
   name: string;
   limit: number;
+  object_reference_columns: string[];
   occurrences: CatalogEventOccurrenceItem[];
 }
 
@@ -154,6 +158,7 @@ export interface CatalogTriggerFiringItem {
   source: string;
   trace_id: string | null;
   payload: Record<string, unknown>;
+  object_references: Record<string, unknown>;
 }
 
 export interface CatalogTriggerFiringsResponse {
@@ -162,6 +167,7 @@ export interface CatalogTriggerFiringsResponse {
   event: CatalogConceptLink | null;
   action: CatalogConceptLink | null;
   limit: number;
+  object_reference_columns: string[];
   firings: CatalogTriggerFiringItem[];
 }
 

@@ -224,17 +224,35 @@ def test_catalog_action_event_and_trigger_runtime_endpoints() -> None:
 
     action_runs_body = action_runs.json()
     assert action_runs_body["total"] >= 1
+    assert action_runs_body["object_reference_columns"] == sorted(action_runs_body["object_reference_columns"])
     assert action_runs_body["runs"]
+    if action_runs_body["runs"]:
+        first_run = action_runs_body["runs"][0]
+        assert "object_references" in first_run
+        for field_key in action_runs_body["object_reference_columns"]:
+            assert field_key in first_run["object_references"]
     assert "action_uri" not in action_runs_body["runs"][0]
 
     event_occurrences_body = event_occurrences.json()
+    assert event_occurrences_body["object_reference_columns"] == sorted(event_occurrences_body["object_reference_columns"])
     assert event_occurrences_body["occurrences"]
+    if event_occurrences_body["occurrences"]:
+        first_event = event_occurrences_body["occurrences"][0]
+        assert "object_references" in first_event
+        for field_key in event_occurrences_body["object_reference_columns"]:
+            assert field_key in first_event["object_references"]
     assert event_occurrences_body["occurrences"][0]["source"] == "support-api"
 
     trigger_firings_body = trigger_firings.json()
+    assert trigger_firings_body["object_reference_columns"] == sorted(trigger_firings_body["object_reference_columns"])
     assert trigger_firings_body["event"] is not None
     assert trigger_firings_body["action"] is not None
     assert trigger_firings_body["firings"]
+    if trigger_firings_body["firings"]:
+        first_firing = trigger_firings_body["firings"][0]
+        assert "object_references" in first_firing
+        for field_key in trigger_firings_body["object_reference_columns"]:
+            assert field_key in first_firing["object_references"]
 
 
 def test_catalog_detail_returns_404_for_unknown_key() -> None:

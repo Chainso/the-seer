@@ -130,6 +130,7 @@ class CatalogActionRunItem(BaseModel):
     attempt_count: int
     last_error_code: str | None = None
     last_error_detail: str | None = None
+    object_references: dict[str, Any] = Field(default_factory=dict)
 
 
 class CatalogActionRunsResponse(BaseModel):
@@ -138,6 +139,7 @@ class CatalogActionRunsResponse(BaseModel):
     page: int
     size: int
     total: int
+    object_reference_columns: list[str] = Field(default_factory=list)
     runs: list[CatalogActionRunItem] = Field(default_factory=list)
 
 
@@ -148,12 +150,14 @@ class CatalogEventOccurrenceItem(BaseModel):
     trace_id: str | None = None
     produced_by_execution_id: UUID | None = None
     payload: dict[str, Any]
+    object_references: dict[str, Any] = Field(default_factory=dict)
 
 
 class CatalogEventOccurrencesResponse(BaseModel):
     catalog_key: str
     name: str
     limit: int
+    object_reference_columns: list[str] = Field(default_factory=list)
     occurrences: list[CatalogEventOccurrenceItem] = Field(default_factory=list)
 
 
@@ -163,6 +167,7 @@ class CatalogTriggerFiringItem(BaseModel):
     source: str
     trace_id: str | None = None
     payload: dict[str, Any]
+    object_references: dict[str, Any] = Field(default_factory=dict)
 
 
 class CatalogTriggerFiringsResponse(BaseModel):
@@ -171,4 +176,5 @@ class CatalogTriggerFiringsResponse(BaseModel):
     event: CatalogConceptLink | None = None
     action: CatalogConceptLink | None = None
     limit: int
+    object_reference_columns: list[str] = Field(default_factory=list)
     firings: list[CatalogTriggerFiringItem] = Field(default_factory=list)

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Settings2 } from "lucide-react";
 
 import { CatalogKindTabs } from "@/app/components/catalog/catalog-kind-tabs";
 import { ObjectLifecycleWorkspace } from "@/app/components/catalog/object-lifecycle-workspace";
@@ -12,6 +13,14 @@ import {
 } from "@/app/components/objects/object-instance-table-model";
 import { Badge } from "@/app/components/ui/badge";
 import { Card } from "@/app/components/ui/card";
+import { Button } from "@/app/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/app/components/ui/dropdown-menu";
 import {
   TableBody,
   TableCell,
@@ -75,7 +84,10 @@ function humanizeIdentifierToken(value: string): string {
   if (!trimmed) {
     return value;
   }
-  const normalized = trimmed
+  const normalizedSource = trimmed.includes(".")
+    ? trimmed.split(".").filter(Boolean).slice(-1)[0] || trimmed
+    : trimmed;
+  const normalized = normalizedSource
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/[_./-]+/g, " ")
     .replace(/\s+/g, " ")
@@ -95,6 +107,53 @@ function isMappedDisplayLabel(raw: string, candidate: string): boolean {
     return false;
   }
   return normalizedCandidate !== raw;
+}
+
+const DEFAULT_OBJECT_REFERENCE_COLUMN_COUNT = 3;
+const RUNTIME_TABLE_CONTAINER_CLASS =
+  "max-h-[min(32rem,calc(100vh-22rem))] overflow-auto rounded-2xl border border-border";
+
+function sortedReferenceColumns(columns: readonly string[]): string[] {
+  return [...new Set(columns)].map((column) => column.trim()).filter(Boolean).sort((left, right) => left.localeCompare(right));
+}
+
+function RuntimeColumnSettings({
+  availableColumns,
+  enabledColumns,
+  onToggleColumn,
+}: {
+  availableColumns: string[];
+  enabledColumns: string[];
+  onToggleColumn: (column: string, enabled: boolean) => void;
+}) {
+  if (availableColumns.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="absolute right-2 top-2 z-20">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="sm">
+            <Settings2 className="h-4 w-4" />
+            Settings
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuLabel>Columns</DropdownMenuLabel>
+          {availableColumns.map((column) => (
+            <DropdownMenuCheckboxItem
+              key={column}
+              checked={enabledColumns.includes(column)}
+              onCheckedChange={(checked) => onToggleColumn(column, checked === true)}
+            >
+              {humanizeIdentifierToken(column)}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
 }
 
 function CatalogObjectRuntimeTable({
@@ -191,6 +250,252 @@ function CatalogObjectRuntimeTable({
   );
 }
 
+function ActionRuntimeTable({ payload }: { payload: CatalogActionRunsResponse }) {
+  const objectReferenceColumns = useMemo(
+    () => sortedReferenceColumns(payload.object_reference_columns),
+    [payload.object_reference_columns]
+  );
+  const [visibleReferenceColumns, setVisibleReferenceColumns] = useState<string[]>(() =>
+    objectReferenceColumns.slice(0, DEFAULT_OBJECT_REFERENCE_COLUMN_COUNT)
+  );
+
+  const toggleReferenceColumn = (column: string, enabled: boolean) => {
+    if (enabled) {
+      setVisibleReferenceColumns((current) => {
+        if (current.includes(column)) {
+          return current;
+        }
+        return [...current, column].sort((left, right) => left.localeCompare(right));
+      });
+      return;
+    }
+    setVisibleReferenceColumns((current) => current.filter((item) => item !== column));
+  };
+
+  return (
+    <div className="relative">
+      <RuntimeColumnSettings
+        availableColumns={objectReferenceColumns}
+        enabledColumns={visibleReferenceColumns}
+        onToggleColumn={toggleReferenceColumn}
+      />
+      <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
+          <TableRow>
+            <TableColumnHeaderCell>Status</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Submitted</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Completed</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Attempts</TableColumnHeaderCell>
+            {visibleReferenceColumns.map((fieldKey) => (
+              <TableColumnHeaderCell key={fieldKey}>
+                {humanizeIdentifierToken(fieldKey)}
+              </TableColumnHeaderCell>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {payload.runs.map((item) => (
+            <TableRow key={item.run_id}>
+              <TableCell>
+                <Badge variant="outline" className="rounded-full">
+                  {item.status}
+                </Badge>
+              </TableCell>
+              <TableCell>{formatDateTime(item.submitted_at)}</TableCell>
+              <TableCell>{formatDateTime(item.completed_at)}</TableCell>
+              <TableCell>{item.attempt_count}</TableCell>
+              {visibleReferenceColumns.map((fieldKey) => (
+                <TableCell
+                  key={`${item.run_id}-${fieldKey}`}
+                  className="text-xs text-muted-foreground"
+                >
+                  {summarizeValue(item.object_references?.[fieldKey])}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </TableRoot>
+    </div>
+  );
+}
+
+function EventRuntimeTable({ payload }: { payload: CatalogEventOccurrencesResponse }) {
+  const ontologyDisplay = useOntologyDisplay();
+  const objectReferenceColumns = useMemo(
+    () => sortedReferenceColumns(payload.object_reference_columns),
+    [payload.object_reference_columns]
+  );
+  const [visibleReferenceColumns, setVisibleReferenceColumns] = useState<string[]>(() =>
+    objectReferenceColumns.slice(0, DEFAULT_OBJECT_REFERENCE_COLUMN_COUNT)
+  );
+
+  const displaySource = useCallback(
+    (rawSource: string | null | undefined): string => {
+      const raw = rawSource?.trim();
+      if (!raw) {
+        return "Source unavailable";
+      }
+      const conceptLabel = ontologyDisplay.displayConcept(raw);
+      if (isMappedDisplayLabel(raw, conceptLabel)) {
+        return conceptLabel;
+      }
+      const eventLabel = ontologyDisplay.displayEventType(raw);
+      if (isMappedDisplayLabel(raw, eventLabel)) {
+        return eventLabel;
+      }
+      const objectLabel = ontologyDisplay.displayObjectType(raw);
+      if (isMappedDisplayLabel(raw, objectLabel)) {
+        return objectLabel;
+      }
+      return humanizeIdentifierToken(raw);
+    },
+    [ontologyDisplay]
+  );
+
+  const toggleReferenceColumn = (column: string, enabled: boolean) => {
+    if (enabled) {
+      setVisibleReferenceColumns((current) => {
+        if (current.includes(column)) {
+          return current;
+        }
+        return [...current, column].sort((left, right) => left.localeCompare(right));
+      });
+      return;
+    }
+    setVisibleReferenceColumns((current) => current.filter((item) => item !== column));
+  };
+
+  return (
+    <div className="relative">
+      <RuntimeColumnSettings
+        availableColumns={objectReferenceColumns}
+        enabledColumns={visibleReferenceColumns}
+        onToggleColumn={toggleReferenceColumn}
+      />
+      <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
+          <TableRow>
+            <TableColumnHeaderCell>Occurred</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Source</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Summary</TableColumnHeaderCell>
+            {visibleReferenceColumns.map((fieldKey) => (
+              <TableColumnHeaderCell key={fieldKey}>{humanizeIdentifierToken(fieldKey)}</TableColumnHeaderCell>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {payload.occurrences.map((item) => (
+            <TableRow key={item.event_id}>
+              <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
+              <TableCell>{displaySource(item.source)}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {summarizeValue(item.payload)}
+              </TableCell>
+              {visibleReferenceColumns.map((fieldKey) => (
+                <TableCell
+                  key={`${item.event_id}-${fieldKey}`}
+                  className="text-xs text-muted-foreground"
+                >
+                  {summarizeValue(item.object_references?.[fieldKey])}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </TableRoot>
+    </div>
+  );
+}
+
+function TriggerRuntimeTable({ payload }: { payload: CatalogTriggerFiringsResponse }) {
+  const ontologyDisplay = useOntologyDisplay();
+  const objectReferenceColumns = useMemo(
+    () => sortedReferenceColumns(payload.object_reference_columns),
+    [payload.object_reference_columns]
+  );
+  const [visibleReferenceColumns, setVisibleReferenceColumns] = useState<string[]>(() =>
+    objectReferenceColumns.slice(0, DEFAULT_OBJECT_REFERENCE_COLUMN_COUNT)
+  );
+
+  const displaySource = useCallback(
+    (rawSource: string | null | undefined): string => {
+      const raw = rawSource?.trim();
+      if (!raw) {
+        return "Source unavailable";
+      }
+      const conceptLabel = ontologyDisplay.displayConcept(raw);
+      if (isMappedDisplayLabel(raw, conceptLabel)) {
+        return conceptLabel;
+      }
+      const eventLabel = ontologyDisplay.displayEventType(raw);
+      if (isMappedDisplayLabel(raw, eventLabel)) {
+        return eventLabel;
+      }
+      const objectLabel = ontologyDisplay.displayObjectType(raw);
+      if (isMappedDisplayLabel(raw, objectLabel)) {
+        return objectLabel;
+      }
+      return humanizeIdentifierToken(raw);
+    },
+    [ontologyDisplay]
+  );
+
+  const toggleReferenceColumn = (column: string, enabled: boolean) => {
+    if (enabled) {
+      setVisibleReferenceColumns((current) => {
+        if (current.includes(column)) {
+          return current;
+        }
+        return [...current, column].sort((left, right) => left.localeCompare(right));
+      });
+      return;
+    }
+    setVisibleReferenceColumns((current) => current.filter((item) => item !== column));
+  };
+
+  return (
+    <div className="relative">
+      <RuntimeColumnSettings
+        availableColumns={objectReferenceColumns}
+        enabledColumns={visibleReferenceColumns}
+        onToggleColumn={toggleReferenceColumn}
+      />
+      <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
+        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
+          <TableRow>
+            <TableColumnHeaderCell>Occurred</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Source</TableColumnHeaderCell>
+            <TableColumnHeaderCell>Summary</TableColumnHeaderCell>
+            {visibleReferenceColumns.map((fieldKey) => (
+              <TableColumnHeaderCell key={fieldKey}>{humanizeIdentifierToken(fieldKey)}</TableColumnHeaderCell>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {payload.firings.map((item) => (
+            <TableRow key={item.event_id}>
+              <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
+              <TableCell>{displaySource(item.source)}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {summarizeValue(item.payload)}
+              </TableCell>
+              {visibleReferenceColumns.map((fieldKey) => (
+                <TableCell
+                  key={`${item.event_id}-${fieldKey}`}
+                  className="text-xs text-muted-foreground"
+                >
+                  {summarizeValue(item.object_references?.[fieldKey])}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </TableRoot>
+    </div>
+  );
+}
+
 function runtimeTitle(kind: CatalogKind): string {
   if (kind === "objects") {
     return "Instances";
@@ -209,9 +514,6 @@ type RelatedSection = {
   targetKind: CatalogKind;
   links: { catalog_key: string; name: string }[];
 };
-
-const RUNTIME_TABLE_CONTAINER_CLASS =
-  "max-h-[min(32rem,calc(100vh-22rem))] overflow-auto rounded-2xl border border-border";
 
 function relatedSections<TKind extends CatalogKind>(
   kind: TKind,
@@ -258,27 +560,6 @@ function RuntimeTable<TKind extends CatalogKind>({
   payload: CatalogRuntimeResponseByKind[CatalogKind];
   objectDetail?: CatalogObjectDetailResponse | null;
 }) {
-  const ontologyDisplay = useOntologyDisplay();
-  const displaySource = useCallback((rawSource: string | null | undefined): string => {
-    const raw = rawSource?.trim();
-    if (!raw) {
-      return "Source unavailable";
-    }
-    const conceptLabel = ontologyDisplay.displayConcept(raw);
-    if (isMappedDisplayLabel(raw, conceptLabel)) {
-      return conceptLabel;
-    }
-    const eventLabel = ontologyDisplay.displayEventType(raw);
-    if (isMappedDisplayLabel(raw, eventLabel)) {
-      return eventLabel;
-    }
-    const objectLabel = ontologyDisplay.displayObjectType(raw);
-    if (isMappedDisplayLabel(raw, objectLabel)) {
-      return objectLabel;
-    }
-    return humanizeIdentifierToken(raw);
-  }, [ontologyDisplay]);
-
   if (kind === "objects" && objectDetail) {
     const shaped = payload as CatalogObjectInstancesResponse;
     return <CatalogObjectRuntimeTable detail={objectDetail} payload={shaped} />;
@@ -286,83 +567,19 @@ function RuntimeTable<TKind extends CatalogKind>({
 
   if (kind === "actions") {
     const shaped = payload as CatalogActionRunsResponse;
-    return (
-      <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
-        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
-          <TableRow>
-            <TableColumnHeaderCell>Status</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Submitted</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Completed</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Attempts</TableColumnHeaderCell>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {shaped.runs.map((item) => (
-            <TableRow key={item.run_id}>
-              <TableCell>
-                <Badge variant="outline" className="rounded-full">
-                  {item.status}
-                </Badge>
-              </TableCell>
-              <TableCell>{formatDateTime(item.submitted_at)}</TableCell>
-              <TableCell>{formatDateTime(item.completed_at)}</TableCell>
-              <TableCell>{item.attempt_count}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </TableRoot>
-    );
+    const settingsKey = `${shaped.catalog_key}-${shaped.object_reference_columns.join("|")}`;
+    return <ActionRuntimeTable key={settingsKey} payload={shaped} />;
   }
 
   if (kind === "events") {
     const shaped = payload as CatalogEventOccurrencesResponse;
-    return (
-      <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
-        <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
-          <TableRow>
-            <TableColumnHeaderCell>Occurred</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Source</TableColumnHeaderCell>
-            <TableColumnHeaderCell>Summary</TableColumnHeaderCell>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {shaped.occurrences.map((item) => (
-            <TableRow key={item.event_id}>
-              <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
-              <TableCell>{displaySource(item.source)}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">
-                {summarizeValue(item.payload)}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </TableRoot>
-    );
+    const settingsKey = `${shaped.catalog_key}-${shaped.object_reference_columns.join("|")}`;
+    return <EventRuntimeTable key={settingsKey} payload={shaped} />;
   }
 
   const shaped = payload as CatalogTriggerFiringsResponse;
-  return (
-    <TableRoot variant="surface" striped containerClassName={RUNTIME_TABLE_CONTAINER_CLASS}>
-      <TableHeader className="[&_th]:sticky [&_th]:top-0 [&_th]:z-10 [&_th]:bg-card">
-        <TableRow>
-          <TableColumnHeaderCell>Occurred</TableColumnHeaderCell>
-          <TableColumnHeaderCell>Source</TableColumnHeaderCell>
-          <TableColumnHeaderCell>Summary</TableColumnHeaderCell>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {shaped.firings.map((item) => (
-          <TableRow key={item.event_id}>
-            <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
-            <TableCell>{displaySource(item.source)}</TableCell>
-            <TableCell className="text-xs text-muted-foreground">
-              {summarizeValue(item.payload)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </TableRoot>
-  );
+  const settingsKey = `${shaped.catalog_key}-${shaped.object_reference_columns.join("|")}`;
+  return <TriggerRuntimeTable key={settingsKey} payload={shaped} />;
 }
 
 function DetailSummaryLayout({
