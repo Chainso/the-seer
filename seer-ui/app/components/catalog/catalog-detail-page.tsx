@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CatalogKindTabs } from "@/app/components/catalog/catalog-kind-tabs";
 import { ObjectLifecycleWorkspace } from "@/app/components/catalog/object-lifecycle-workspace";
@@ -68,6 +68,33 @@ function summarizeValue(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function humanizeIdentifierToken(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+  const normalized = trimmed
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_./-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return trimmed;
+  }
+  return normalized
+    .split(" ")
+    .map((part) => (part ? `${part[0]?.toUpperCase()}${part.slice(1).toLowerCase()}` : part))
+    .join(" ");
+}
+
+function isMappedDisplayLabel(raw: string, candidate: string): boolean {
+  const normalizedCandidate = candidate.trim();
+  if (!normalizedCandidate || normalizedCandidate === "—") {
+    return false;
+  }
+  return normalizedCandidate !== raw;
 }
 
 function CatalogObjectRuntimeTable({
@@ -231,6 +258,27 @@ function RuntimeTable<TKind extends CatalogKind>({
   payload: CatalogRuntimeResponseByKind[CatalogKind];
   objectDetail?: CatalogObjectDetailResponse | null;
 }) {
+  const ontologyDisplay = useOntologyDisplay();
+  const displaySource = useCallback((rawSource: string | null | undefined): string => {
+    const raw = rawSource?.trim();
+    if (!raw) {
+      return "Source unavailable";
+    }
+    const conceptLabel = ontologyDisplay.displayConcept(raw);
+    if (isMappedDisplayLabel(raw, conceptLabel)) {
+      return conceptLabel;
+    }
+    const eventLabel = ontologyDisplay.displayEventType(raw);
+    if (isMappedDisplayLabel(raw, eventLabel)) {
+      return eventLabel;
+    }
+    const objectLabel = ontologyDisplay.displayObjectType(raw);
+    if (isMappedDisplayLabel(raw, objectLabel)) {
+      return objectLabel;
+    }
+    return humanizeIdentifierToken(raw);
+  }, [ontologyDisplay]);
+
   if (kind === "objects" && objectDetail) {
     const shaped = payload as CatalogObjectInstancesResponse;
     return <CatalogObjectRuntimeTable detail={objectDetail} payload={shaped} />;
@@ -281,7 +329,7 @@ function RuntimeTable<TKind extends CatalogKind>({
           {shaped.occurrences.map((item) => (
             <TableRow key={item.event_id}>
               <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
-              <TableCell>{item.source}</TableCell>
+              <TableCell>{displaySource(item.source)}</TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {summarizeValue(item.payload)}
               </TableCell>
@@ -306,8 +354,10 @@ function RuntimeTable<TKind extends CatalogKind>({
         {shaped.firings.map((item) => (
           <TableRow key={item.event_id}>
             <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
-            <TableCell>{item.source}</TableCell>
-            <TableCell className="text-xs text-muted-foreground">{summarizeValue(item.payload)}</TableCell>
+            <TableCell>{displaySource(item.source)}</TableCell>
+            <TableCell className="text-xs text-muted-foreground">
+              {summarizeValue(item.payload)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
