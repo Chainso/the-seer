@@ -1,6 +1,6 @@
 ---
 name: execute-phase
-description: Execute one scoped implementation phase from an existing execution plan. Use this for worker/subagent delivery when the phase already has a handoff packet, required files, validation commands, documentation targets, and a commit expectation.
+description: "Use this skill when you are a worker/subagent responsible for one bounded phase from an existing execution plan. Do not use this skill to create the plan, sequence phases, or decide cross-phase strategy. That remains the controller's job. Use this for worker/subagent delivery when the phase already has a handoff packet, required files, validation commands, documentation targets, and a commit expectation."
 ---
 
 # Execute Phase
