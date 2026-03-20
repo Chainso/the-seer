@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     dependency_timeout_seconds: float = Field(default=1.0, ge=0.1, le=10.0)
     prophet_metamodel_path: str = "../prophet/prophet.ttl"
     openai_base_url: str = "http://localhost:10531/v1"
-    openai_model: str = "gpt-5.1-codex-mini"
+    openai_model: str = "gpt-5.4-mini"
     openai_api_key: str | None = None
     openai_timeout_seconds: float = Field(default=45.0, ge=1.0, le=300.0)
     copilot_query_row_limit: int = Field(default=100, ge=1, le=1000)

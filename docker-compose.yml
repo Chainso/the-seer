@@ -26,7 +26,7 @@ services:
       SEER_ACTIONS_SCHEMA_BOOTSTRAP_ON_STARTUP: "true"
       SEER_PROPHET_METAMODEL_PATH: /prophet/prophet.ttl
       SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-http://localhost:10531/v1}
-      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gpt-5.1-codex-mini}
+      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gpt-5.4-mini}
       SEER_OPENAI_API_KEY: ${SEER_OPENAI_API_KEY:-}
     volumes:
       - ./prophet:/prophet:ro
@@ -85,7 +85,7 @@ services:
       SEER_MANAGED_AGENT_RUNNER_INSTANCE_ID: ${SEER_MANAGED_AGENT_RUNNER_INSTANCE_ID:-seer-managed-agent-runner}
       SEER_PROPHET_METAMODEL_PATH: /prophet/prophet.ttl
       SEER_OPENAI_BASE_URL: ${SEER_OPENAI_BASE_URL:-http://localhost:10531/v1}
-      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gpt-5.1-codex-mini}
+      SEER_OPENAI_MODEL: ${SEER_OPENAI_MODEL:-gpt-5.4-mini}
       SEER_OPENAI_API_KEY: ${SEER_OPENAI_API_KEY:-}
     volumes:
       - ./prophet:/prophet:ro
