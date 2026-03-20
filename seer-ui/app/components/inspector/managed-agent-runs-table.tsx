@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Filter, Search } from "lucide-react";
 
 import { listAgenticWorkflowExecutions } from "@/app/lib/api/agentic-workflows";
@@ -100,48 +100,43 @@ export function ManagedAgentRunsTable({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
-  useEffect(() => {
-    setPage(1);
-  }, [deferredSearch, status]);
-
-  useEffect(() => {
-    let active = true;
+  const loadExecutions = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
-
-    listAgenticWorkflowExecutions({
-      actionUri,
-      status: status === "all" ? undefined : status,
-      search: deferredSearch || undefined,
-      page,
-      size: PAGE_SIZE,
-    })
-      .then((response) => {
-        if (!active) {
-          return;
-        }
-        setExecutions(response.executions);
-        setTotal(response.total);
-        setError(null);
-      })
-      .catch((cause) => {
-        if (!active) {
-          return;
-        }
-        setExecutions([]);
-        setTotal(0);
-        setError(cause instanceof Error ? cause.message : "Failed to load managed-agent runs");
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
+    setError(null);
+    try {
+      const response = await listAgenticWorkflowExecutions({
+        actionUri,
+        status: status === "all" ? undefined : status,
+        search: deferredSearch || undefined,
+        page,
+        size: PAGE_SIZE,
       });
-
-    return () => {
-      active = false;
-    };
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setExecutions(response.executions);
+      setTotal(response.total);
+      setError(null);
+    } catch (cause) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setExecutions([]);
+      setTotal(0);
+      setError(cause instanceof Error ? cause.message : "Failed to load managed-agent runs");
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
+    }
   }, [actionUri, deferredSearch, page, status]);
+
+  useEffect(() => {
+    void loadExecutions();
+  }, [loadExecutions]);
 
   const visiblePages = useMemo(() => totalPages(total), [total]);
   const actionLabel = ontologyDisplay.displayConcept(actionUri);
@@ -171,7 +166,10 @@ export function ManagedAgentRunsTable({
             </label>
             <Select
               value={status}
-              onValueChange={(value) => setStatus(value as AgenticWorkflowStatus | "all")}
+              onValueChange={(value) => {
+                setPage(1);
+                setStatus(value as AgenticWorkflowStatus | "all");
+              }}
             >
               <SelectTrigger id="managed-agent-runs-status" className="w-full">
                 <SelectValue />
@@ -196,7 +194,10 @@ export function ManagedAgentRunsTable({
               <Input
                 id="managed-agent-runs-search"
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => {
+                  setPage(1);
+                  setSearch(event.target.value);
+                }}
                 placeholder="Search run IDs, errors, or action URIs..."
                 className="pl-9"
               />

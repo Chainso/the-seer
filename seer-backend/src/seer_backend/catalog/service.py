@@ -394,7 +394,11 @@ class CatalogService:
                     last_error_code=action.last_error_code,
                     last_error_detail=action.last_error_detail,
                     object_references={
-                        field_key: action.input_payload.get(field_key) if isinstance(action.input_payload, dict) else None
+                        field_key: (
+                            action.input_payload.get(field_key)
+                            if isinstance(action.input_payload, dict)
+                            else None
+                        )
                         for field_key in object_reference_columns
                     },
                 )
@@ -433,7 +437,11 @@ class CatalogService:
                     produced_by_execution_id=item.produced_by_execution_id,
                     payload=_strip_type_keys(item.payload),
                     object_references={
-                        field_key: item.payload.get(field_key) if isinstance(item.payload, dict) else None
+                        field_key: (
+                            item.payload.get(field_key)
+                            if isinstance(item.payload, dict)
+                            else None
+                        )
                         for field_key in object_reference_columns
                     },
                 )
@@ -500,7 +508,11 @@ class CatalogService:
                     trace_id=item.trace_id,
                     payload=_strip_type_keys(item.payload),
                     object_references={
-                        field_key: item.payload.get(field_key) if isinstance(item.payload, dict) else None
+                        field_key: (
+                            item.payload.get(field_key)
+                            if isinstance(item.payload, dict)
+                            else None
+                        )
                         for field_key in object_reference_columns
                     },
                 )

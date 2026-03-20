@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Settings2 } from "lucide-react";
 
 import { CatalogKindTabs } from "@/app/components/catalog/catalog-kind-tabs";
@@ -695,6 +695,76 @@ function DetailSummaryLayout({
   );
 }
 
+function ObjectDetailTabs({
+  objectDetail,
+  runtime,
+  sections,
+}: {
+  objectDetail: CatalogObjectDetailResponse;
+  runtime: CatalogObjectInstancesResponse;
+  sections: RelatedSection[];
+}) {
+  const [objectViewTab, setObjectViewTab] = useState<"summary" | "lifecycle">(
+    "summary"
+  );
+
+  return (
+    <Tabs
+      value={objectViewTab}
+      onValueChange={(nextValue) => {
+        if (nextValue === "summary" || nextValue === "lifecycle") {
+          setObjectViewTab(nextValue);
+        }
+      }}
+      className="space-y-5"
+    >
+      <TabsList variant="rail" className="grid grid-cols-2 gap-0">
+        <TabsTrigger
+          value="summary"
+          variant="rail"
+          className="min-h-[84px] px-1 py-0 transition-colors duration-200"
+        >
+          <div className="flex w-full flex-col gap-1 px-3 py-4 text-left">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Overview
+            </span>
+            <p className="text-sm font-semibold leading-tight text-foreground">Summary</p>
+          </div>
+        </TabsTrigger>
+        <TabsTrigger
+          value="lifecycle"
+          variant="rail"
+          className="min-h-[84px] px-1 py-0 transition-colors duration-200"
+        >
+          <div className="flex w-full flex-col gap-1 px-3 py-4 text-left">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Investigation
+            </span>
+            <p className="text-sm font-semibold leading-tight text-foreground">
+              {objectDetail.name} Lifecycle
+            </p>
+          </div>
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="summary" className="space-y-4">
+        <DetailSummaryLayout
+          kind="objects"
+          detail={objectDetail}
+          runtime={runtime}
+          sections={sections}
+        />
+      </TabsContent>
+      <TabsContent value="lifecycle" className="space-y-4">
+        <ObjectLifecycleWorkspace
+          objectName={objectDetail.name}
+          objectType={objectDetail.object_type_uri}
+          isActive={objectViewTab === "lifecycle"}
+        />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
 export function CatalogDetailPage({
   kind,
   catalogKey,
@@ -706,53 +776,45 @@ export function CatalogDetailPage({
   const [runtime, setRuntime] = useState<CatalogRuntimeResponseByKind[CatalogKind] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [objectViewTab, setObjectViewTab] = useState<"summary" | "lifecycle">("summary");
+  const requestIdRef = useRef(0);
 
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-
+  const loadCatalogDetail = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     const runtimeOptions =
       kind === "objects"
         ? { page: 0, size: 50 }
         : kind === "actions"
           ? { page: 1, size: 20 }
           : { limit: 200 };
-
-    Promise.all([
-      getCatalogDetailByKind(kind, catalogKey),
-      getCatalogRuntimeByKind(kind, catalogKey, runtimeOptions),
-    ])
-      .then(([detailResponse, runtimeResponse]) => {
-        if (!active) {
-          return;
-        }
-        setDetail(detailResponse);
-        setRuntime(runtimeResponse);
-        setError(null);
-      })
-      .catch((cause) => {
-        if (!active) {
-          return;
-        }
-        setDetail(null);
-        setRuntime(null);
-        setError(cause instanceof Error ? cause.message : "Failed to load catalog detail.");
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
+    setLoading(true);
+    setError(null);
+    try {
+      const [detailResponse, runtimeResponse] = await Promise.all([
+        getCatalogDetailByKind(kind, catalogKey),
+        getCatalogRuntimeByKind(kind, catalogKey, runtimeOptions),
+      ]);
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setDetail(detailResponse);
+      setRuntime(runtimeResponse);
+    } catch (cause) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setDetail(null);
+      setRuntime(null);
+      setError(cause instanceof Error ? cause.message : "Failed to load catalog detail.");
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
+    }
   }, [catalogKey, kind]);
 
   useEffect(() => {
-    setObjectViewTab("summary");
-  }, [catalogKey, kind]);
+    void loadCatalogDetail();
+  }, [loadCatalogDetail]);
 
   const sections = useMemo(() => {
     if (!detail) {
@@ -798,40 +860,12 @@ export function CatalogDetailPage({
           Loading detail...
         </Card>
       ) : kind === "objects" && objectDetail ? (
-        <Tabs
-          value={objectViewTab}
-          onValueChange={(nextValue) => {
-            if (nextValue === "summary" || nextValue === "lifecycle") {
-              setObjectViewTab(nextValue);
-            }
-          }}
-          className="space-y-5"
-        >
-          <TabsList variant="rail" className="grid grid-cols-2 gap-0">
-            <TabsTrigger value="summary" variant="rail" className="min-h-[84px] px-1 py-0 transition-colors duration-200">
-              <div className="flex w-full flex-col gap-1 px-3 py-4 text-left">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Overview</span>
-                <p className="text-sm font-semibold leading-tight text-foreground">Summary</p>
-              </div>
-            </TabsTrigger>
-            <TabsTrigger value="lifecycle" variant="rail" className="min-h-[84px] px-1 py-0 transition-colors duration-200">
-              <div className="flex w-full flex-col gap-1 px-3 py-4 text-left">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Investigation</span>
-                <p className="text-sm font-semibold leading-tight text-foreground">{objectDetail.name} Lifecycle</p>
-              </div>
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="summary" className="space-y-4">
-            <DetailSummaryLayout kind={kind} detail={objectDetail} runtime={runtime} sections={sections} />
-          </TabsContent>
-          <TabsContent value="lifecycle" className="space-y-4">
-            <ObjectLifecycleWorkspace
-              objectName={objectDetail.name}
-              objectType={objectDetail.object_type_uri}
-              isActive={objectViewTab === "lifecycle"}
-            />
-          </TabsContent>
-        </Tabs>
+        <ObjectDetailTabs
+          key={`${kind}-${catalogKey}`}
+          objectDetail={objectDetail}
+          runtime={runtime as CatalogObjectInstancesResponse}
+          sections={sections}
+        />
       ) : (
         <DetailSummaryLayout kind={kind} detail={detail} runtime={runtime} sections={sections} />
       )}

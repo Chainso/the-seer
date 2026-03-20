@@ -1,6 +1,14 @@
 "use client";
 
-import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
+import {
+  startTransition,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { ArrowRight, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -95,35 +103,38 @@ export function CatalogListPage({ kind }: { kind: CatalogKind }) {
   const [rows, setRows] = useState<CatalogListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
+
+  const loadRows = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await listCatalogByKind(kind, {
+        search: deferredSearch,
+        limit: 300,
+      });
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setRows(toRows(kind, response));
+      setError(null);
+    } catch (cause) {
+      if (requestId !== requestIdRef.current) {
+        return;
+      }
+      setRows([]);
+      setError(cause instanceof Error ? cause.message : "Failed to load catalog list.");
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false);
+      }
+    }
+  }, [deferredSearch, kind]);
 
   useEffect(() => {
-    let active = true;
-    setLoading(true);
-    listCatalogByKind(kind, { search: deferredSearch, limit: 300 })
-      .then((response) => {
-        if (!active) {
-          return;
-        }
-        setRows(toRows(kind, response));
-        setError(null);
-      })
-      .catch((cause) => {
-        if (!active) {
-          return;
-        }
-        setRows([]);
-        setError(cause instanceof Error ? cause.message : "Failed to load catalog list.");
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [deferredSearch, kind]);
+    void loadRows();
+  }, [loadRows]);
 
   const headers = METRIC_HEADERS[kind];
   const title = CATALOG_KIND_LABEL[kind];

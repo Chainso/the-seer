@@ -140,10 +140,19 @@ def test_catalog_list_endpoints_expose_clean_concept_contracts() -> None:
     created_event = next(item for item in event_items if item["name"] == "Ticket Created")
     created_trigger = next(item for item in trigger_items if item["name"] == "On Ticket Created")
 
-    assert ticket_object["description"] == "Support request tracked through a minimal triage lifecycle."
-    assert triage_action["description"] == "Runs ticket triage and returns the updated ticket state."
+    assert (
+        ticket_object["description"]
+        == "Support request tracked through a minimal triage lifecycle."
+    )
+    assert (
+        triage_action["description"]
+        == "Runs ticket triage and returns the updated ticket state."
+    )
     assert created_event["description"] == "Event emitted when a new ticket is created."
-    assert created_trigger["description"] == "Starts triage when the TicketCreated event is observed."
+    assert (
+        created_trigger["description"]
+        == "Starts triage when the TicketCreated event is observed."
+    )
     assert ticket_object["action_count"] >= 1
     assert ticket_object["event_count"] >= 1
     assert triage_action["object_count"] >= 1
@@ -176,8 +185,14 @@ def test_catalog_object_detail_and_instances_use_catalog_keys() -> None:
     detail_body = detail.json()
     assert detail_body["catalog_key"] == object_key
     assert detail_body["name"] == "Ticket"
-    assert detail_body["description"] == "Support request tracked through a minimal triage lifecycle."
-    assert detail_body["documentation"] == "Support request tracked through a minimal triage lifecycle."
+    assert (
+        detail_body["description"]
+        == "Support request tracked through a minimal triage lifecycle."
+    )
+    assert (
+        detail_body["documentation"]
+        == "Support request tracked through a minimal triage lifecycle."
+    )
     assert detail_body["actions"]
     assert detail_body["events"]
     assert detail_body["triggers"]
@@ -224,7 +239,10 @@ def test_catalog_action_event_and_trigger_runtime_endpoints() -> None:
 
     action_runs_body = action_runs.json()
     assert action_runs_body["total"] >= 1
-    assert action_runs_body["object_reference_columns"] == sorted(action_runs_body["object_reference_columns"])
+    assert (
+        action_runs_body["object_reference_columns"]
+        == sorted(action_runs_body["object_reference_columns"])
+    )
     assert action_runs_body["runs"]
     if action_runs_body["runs"]:
         first_run = action_runs_body["runs"][0]
@@ -234,7 +252,10 @@ def test_catalog_action_event_and_trigger_runtime_endpoints() -> None:
     assert "action_uri" not in action_runs_body["runs"][0]
 
     event_occurrences_body = event_occurrences.json()
-    assert event_occurrences_body["object_reference_columns"] == sorted(event_occurrences_body["object_reference_columns"])
+    assert (
+        event_occurrences_body["object_reference_columns"]
+        == sorted(event_occurrences_body["object_reference_columns"])
+    )
     assert event_occurrences_body["occurrences"]
     if event_occurrences_body["occurrences"]:
         first_event = event_occurrences_body["occurrences"][0]
@@ -244,7 +265,10 @@ def test_catalog_action_event_and_trigger_runtime_endpoints() -> None:
     assert event_occurrences_body["occurrences"][0]["source"] == "support-api"
 
     trigger_firings_body = trigger_firings.json()
-    assert trigger_firings_body["object_reference_columns"] == sorted(trigger_firings_body["object_reference_columns"])
+    assert (
+        trigger_firings_body["object_reference_columns"]
+        == sorted(trigger_firings_body["object_reference_columns"])
+    )
     assert trigger_firings_body["event"] is not None
     assert trigger_firings_body["action"] is not None
     assert trigger_firings_body["firings"]
