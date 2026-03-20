@@ -109,6 +109,54 @@ function isMappedDisplayLabel(raw: string, candidate: string): boolean {
   return normalizedCandidate !== raw;
 }
 
+function actionStatusLabel(rawStatus: string): string {
+  if (!rawStatus) {
+    return rawStatus;
+  }
+  return rawStatus
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(" ");
+}
+
+function actionStatusBadgeClass(status: string): string {
+  switch (status) {
+    case "running":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "completed":
+      return "border-blue-200 bg-blue-50 text-blue-700";
+    case "retry_wait":
+      return "border-amber-200 bg-amber-50 text-amber-700";
+    case "failed_terminal":
+      return "border-rose-200 bg-rose-50 text-rose-700";
+    case "dead_letter":
+      return "border-rose-200 bg-rose-100 text-rose-800";
+    case "queued":
+      return "border-slate-200 bg-slate-50 text-slate-700";
+    default:
+      return "border-border bg-muted/50 text-muted-foreground";
+  }
+}
+
+function sortByOccurredAtDesc<T extends { occurred_at: string | null | undefined }>(rows: readonly T[]): T[] {
+  return [...rows].sort((left, right) => {
+    const leftValue = left.occurred_at ? Date.parse(left.occurred_at) : NaN;
+    const rightValue = right.occurred_at ? Date.parse(right.occurred_at) : NaN;
+
+    if (Number.isNaN(rightValue) && Number.isNaN(leftValue)) {
+      return 0;
+    }
+    if (Number.isNaN(rightValue)) {
+      return -1;
+    }
+    if (Number.isNaN(leftValue)) {
+      return 1;
+    }
+    return rightValue - leftValue;
+  });
+}
+
 const DEFAULT_OBJECT_REFERENCE_COLUMN_COUNT = 3;
 const RUNTIME_TABLE_CONTAINER_CLASS =
   "max-h-[min(32rem,calc(100vh-22rem))] overflow-auto rounded-2xl border border-border";
@@ -297,8 +345,8 @@ function ActionRuntimeTable({ payload }: { payload: CatalogActionRunsResponse })
           {payload.runs.map((item) => (
             <TableRow key={item.run_id}>
               <TableCell>
-                <Badge variant="outline" className="rounded-full">
-                  {item.status}
+                <Badge variant="outline" className={`rounded-full ${actionStatusBadgeClass(item.status)}`}>
+                  {actionStatusLabel(item.status)}
                 </Badge>
               </TableCell>
               <TableCell>{formatDateTime(item.submitted_at)}</TableCell>
@@ -366,6 +414,8 @@ function EventRuntimeTable({ payload }: { payload: CatalogEventOccurrencesRespon
     setVisibleReferenceColumns((current) => current.filter((item) => item !== column));
   };
 
+  const occurrences = useMemo(() => sortByOccurredAtDesc(payload.occurrences), [payload.occurrences]);
+
   return (
     <div className="relative">
       <RuntimeColumnSettings
@@ -385,7 +435,7 @@ function EventRuntimeTable({ payload }: { payload: CatalogEventOccurrencesRespon
           </TableRow>
         </TableHeader>
         <TableBody>
-          {payload.occurrences.map((item) => (
+          {occurrences.map((item) => (
             <TableRow key={item.event_id}>
               <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
               <TableCell>{displaySource(item.source)}</TableCell>
@@ -454,6 +504,8 @@ function TriggerRuntimeTable({ payload }: { payload: CatalogTriggerFiringsRespon
     setVisibleReferenceColumns((current) => current.filter((item) => item !== column));
   };
 
+  const firings = useMemo(() => sortByOccurredAtDesc(payload.firings), [payload.firings]);
+
   return (
     <div className="relative">
       <RuntimeColumnSettings
@@ -473,7 +525,7 @@ function TriggerRuntimeTable({ payload }: { payload: CatalogTriggerFiringsRespon
           </TableRow>
         </TableHeader>
         <TableBody>
-          {payload.firings.map((item) => (
+          {firings.map((item) => (
             <TableRow key={item.event_id}>
               <TableCell>{formatDateTime(item.occurred_at)}</TableCell>
               <TableCell>{displaySource(item.source)}</TableCell>
