@@ -76,6 +76,26 @@
       "sourceType": "github",
       "computedHash": "7bd7b19fcbe3f51b1c967ecdc7fef8ef0e94a3cabebe73d7bd0b83221724d5f8"
     },
+    "ultrakit:orchestrator:discover": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "30749e8efab1a7a876f102ec1b6807943396806b5cfe173c2f058c9ccccca3af"
+    },
+    "ultrakit:orchestrator:execute": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "563e1c8bb253e3ddeebf0518fc4c1ee5f9891a81ac45e42d1146896b02b9d919"
+    },
+    "ultrakit:orchestrator:orchestrate": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "24da0fc16eb71f369fd54cc004e7220b10129bc5b7bd5ee87ebc0509d77131f1"
+    },
+    "ultrakit:orchestrator:plan": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "a7ec1f5b18d52c2533bfc35ca56b4825cf2ff4ab7ed67f196a96eed33e8aa0dc"
+    },
     "ultrakit:worker:fix": {
       "source": "Chainso/ultrakit",
       "sourceType": "github",
