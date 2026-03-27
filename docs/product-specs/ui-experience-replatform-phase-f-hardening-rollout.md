@@ -1,7 +1,7 @@
 # UI Experience Replatform Phase F Hardening and Rollout Spec
 
 **Status:** completed  
-**Owner phase:** `docs/exec-plans/completed/ui-experience-replatform-2026.md`  
+**Owner phase:** `.ultrakit/exec-plans/completed/ui-experience-replatform-2026.md`  
 **Last updated:** 2026-02-23
 
 ---

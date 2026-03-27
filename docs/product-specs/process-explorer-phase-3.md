@@ -1,7 +1,7 @@
 # Process Explorer Phase 3 Spec
 
 **Status:** completed  
-**Owner phase:** `docs/exec-plans/completed/ocdfg-ui-layout-engine-upgrade.md`  
+**Owner phase:** `.ultrakit/exec-plans/completed/ocdfg-ui-layout-engine-upgrade.md`  
 **Last updated:** 2026-03-14
 
 ---

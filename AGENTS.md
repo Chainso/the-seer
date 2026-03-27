@@ -9,13 +9,14 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 1. `VISION.md`
 2. `DESIGN.md`
 3. `ARCHITECTURE.md`
-4. `PLANS.md`
+4. `.ultrakit/exec-plans/plan-contract.md`
 5. `docs/design-docs/index.md`
 6. `docs/product-specs/index.md`
-7. `docs/exec-plans/active/`
-8. `docs/exec-plans/completed/`
-9. `docs/exec-plans/tech-debt-tracker.md`
-10. `prophet/prophet.ttl`
+7. `.ultrakit/exec-plans/active/`
+8. `.ultrakit/exec-plans/completed/`
+9. `.ultrakit/exec-plans/tech-debt-tracker.md`
+10. `.ultrakit/notes.md`
+11. `prophet/prophet.ttl`
 
 ## Operating Model
 
@@ -40,17 +41,17 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 2. Technical approach and boundaries: `DESIGN.md`, then `ARCHITECTURE.md`.
 3. Deep design decisions: `docs/design-docs/index.md`, then selected topic docs.
 4. User-facing behavior and acceptance: `docs/product-specs/index.md`, then specific spec.
-5. Multi-step execution planning and plan maintenance: `PLANS.md`, then `docs/exec-plans/active/`.
-6. Delivery status and sequencing: `docs/exec-plans/active/`.
+5. Multi-step execution planning and plan maintenance: `.ultrakit/exec-plans/plan-contract.md`, then `.ultrakit/exec-plans/active/`.
+6. Delivery status and sequencing: `.ultrakit/exec-plans/active/`.
 
 ## Execution Plan Lifecycle
 
-1. Multi-step work must have a checked-in plan under `docs/exec-plans/active/`.
-2. `PLANS.md` is the canonical contract for what an execution plan must contain and how it must be maintained.
-3. Active plans are living documents; keep `Progress`, `Surprises & Discoveries`, `Decision Log`, and `Outcomes & Retrospective` current during execution.
+1. Multi-step work must have a checked-in plan under `.ultrakit/exec-plans/active/`.
+2. `.ultrakit/exec-plans/plan-contract.md` is the canonical contract for what an execution plan must contain and how it must be maintained.
+3. Active plans are living documents; keep the contract's required sections current during execution.
 4. Plan completion requires acceptance criteria to be met and recorded.
-5. Completed plans move to `docs/exec-plans/completed/`.
-6. Known gaps or intentionally deferred work go to `docs/exec-plans/tech-debt-tracker.md`.
+5. Completed plans move to `.ultrakit/exec-plans/completed/`.
+6. Known gaps or intentionally deferred work go to `.ultrakit/exec-plans/tech-debt-tracker.md`.
 
 ## Documentation Update Matrix
 
@@ -60,8 +61,8 @@ When behavior changes, update the matching source of truth in the same change:
 2. Design choices, tradeoffs, interaction patterns: `DESIGN.md` or `docs/design-docs/*`.
 3. System boundaries, invariants, dependency direction: `ARCHITECTURE.md`.
 4. User flows and acceptance expectations: `docs/product-specs/*`.
-5. Milestones, sequencing, execution status: `docs/exec-plans/active/*`.
-6. Deferred cleanup or known limitations: `docs/exec-plans/tech-debt-tracker.md`.
+5. Milestones, sequencing, execution status: `.ultrakit/exec-plans/active/*`.
+6. Deferred cleanup or known limitations: `.ultrakit/exec-plans/tech-debt-tracker.md`.
 
 ## PR/Change Enforcement Checklist
 
@@ -93,7 +94,7 @@ These checks should be automated as repository tooling matures:
 
 1. Validate required docs exist and core indexes reference current files.
 2. Flag broken internal markdown links.
-3. Flag plans in `active/` that do not conform to `PLANS.md` required sections or have stale status/progress metadata.
+3. Flag plans in `.ultrakit/exec-plans/active/` that do not conform to `.ultrakit/exec-plans/plan-contract.md` or have stale status/progress metadata.
 4. Flag specs/design docs not indexed by their corresponding index files.
 5. Run recurring doc-gardening passes to reduce stale guidance drift.
 
@@ -109,12 +110,12 @@ These checks should be automated as repository tooling matures:
 2. `seer-backend/`
 3. `seer-ui/`
 4. `docs/design-docs/`
-5. `docs/exec-plans/`
+5. `.ultrakit/`
 6. `docs/product-specs/`
 
 ## Agent Skills
 
 1. Skills are loaded from `.agent/skills` (symlink to `.agents/skills`).
-2. Use `plan-and-execute` when a request asks to plan work and execute it end-to-end.
-3. `plan-and-execute` must operate against `PLANS.md` and the relevant execution-plan docs under `docs/exec-plans/active/`.
-4. When executing a single phase in an existing plan, use the `execute-phase` skill together with `PLANS.md`.
+2. Use `ultrakit:orchestrator` for non-trivial work that needs discovery, planning, and execution.
+3. `ultrakit:orchestrator` operates against `.ultrakit/exec-plans/plan-contract.md` and the relevant execution-plan docs under `.ultrakit/exec-plans/`.
+4. Keep Seer-specific policy in this file and the repository docs, not in the copied Ultrakit skill definitions.

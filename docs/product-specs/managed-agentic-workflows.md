@@ -1,7 +1,7 @@
 # Managed Agent Actions
 
 **Status:** completed (`current managed-agent authoring, catalog, and execution surface`)
-**Owner plan:** `docs/exec-plans/completed/managed-agent-authoring-and-seer-data.md`
+**Owner plan:** `.ultrakit/exec-plans/completed/managed-agent-authoring-and-seer-data.md`
 **Last updated:** 2026-03-16
 
 ---

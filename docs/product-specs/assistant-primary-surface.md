@@ -1,7 +1,7 @@
 # Assistant Primary Surface
 
 **Status:** completed
-**Owner plan:** `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md`
+**Owner plan:** `.ultrakit/exec-plans/completed/assistant-conversation-canvas-and-skills.md`
 **Last updated:** 2026-03-08
 
 ---

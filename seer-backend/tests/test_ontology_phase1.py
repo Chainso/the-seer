@@ -505,14 +505,6 @@ def test_default_assistant_skill_catalog_is_separate_from_developer_skills() -> 
         skill_name: skill.allowed_tools for skill_name, skill in discovered.items()
     } == expected_tools
 
-    developer_registry = AssistantSkillRegistry([str(REPO_ROOT / ".agents" / "skills")])
-    developer_skills = developer_registry.discover()
-
-    assert "execute-phase" in developer_skills
-    assert "execute-phase" not in discovered
-    assert set(discovered).isdisjoint(developer_skills)
-
-
 def test_openai_runtime_normalizes_long_provider_tool_call_ids() -> None:
     long_id = "call_abc123__sig__" + ("x" * 4096)
 

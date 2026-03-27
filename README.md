@@ -13,9 +13,9 @@ This repository provides a deterministic local runtime for:
 
 ## Agent Workflow
 
-For agent-driven delivery, use the `plan-and-execute` skill from `.agent/skills/plan-and-execute/SKILL.md` whenever work should be planned and then executed end-to-end.
+For agent-driven delivery, use the `ultrakit:orchestrator` skill from `.agent/skills/ultrakit-orchestrator/SKILL.md` whenever work should go through discovery, planning, and execution.
 
-Execution plans remain canonical in `docs/exec-plans/active/` and must be updated during implementation.
+Execution plans are canonical under `.ultrakit/exec-plans/` and must be updated during implementation.
 
 ## Devcontainer
 

@@ -1,7 +1,7 @@
 # Root-Cause Lab Phase 4 Spec
 
 **Status:** completed  
-**Owner phase:** `docs/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`  
+**Owner phase:** `.ultrakit/exec-plans/completed/mvp-phase-4-root-cause-analysis-v1.md`  
 **Last updated:** 2026-03-14
 
 ---

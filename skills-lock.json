@@ -46,6 +46,56 @@
       "sourceType": "github",
       "computedHash": "55a64b569cf4eac3bc8877e216e401af6b40d296e5180eb71174ac80b68d670d"
     },
+    "ultrakit:audit:code-worker": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "81e9c23281015f0fcfe8e58ff2d54687d9b1ca4b50636ff1dabc6d91118b63b0"
+    },
+    "ultrakit:audit:doc-fixer": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "12d4ef59890a8b43316eafaef240fdd8da14ce22f1b468375a07e13d72865ad4"
+    },
+    "ultrakit:audit:doc-worker": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "de36a6cc7c6787e0ca506b36823380e7edfc8c224aa26d240899c58934bb4083"
+    },
+    "ultrakit:audit:docs": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "bf9557f01057ae94991d7e2dee504cd374b8460ff05f26dc27ffcc39319cecbe"
+    },
+    "ultrakit:init": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "9abb924a2d9a7ab1f7b3dac020220accb0a1f4becee6e63d09b85e7b0319a09f"
+    },
+    "ultrakit:orchestrator": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "7bd7b19fcbe3f51b1c967ecdc7fef8ef0e94a3cabebe73d7bd0b83221724d5f8"
+    },
+    "ultrakit:worker:fix": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "3ebb5ea766b157f26794317a85591f03f46a694cbdcb9049f648af2dcc6e4207"
+    },
+    "ultrakit:worker:implement": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "b0e23dfca7d0bbde1948440948f54c47a671532c8887e010eb82f4067b9cb12a"
+    },
+    "ultrakit:worker:resume": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "d7e8374d37dfce27e7a18359b286036ccc87fbb4bd0905e3913a21b9f62127ed"
+    },
+    "ultrakit:worker:review": {
+      "source": "Chainso/ultrakit",
+      "sourceType": "github",
+      "computedHash": "68209f3c0dc4c6b8354e4c150ed3d4ebd9197f0ed1efe775eec48db127400567"
+    },
     "update": {
       "source": "assistant-ui/skills",
       "sourceType": "github",

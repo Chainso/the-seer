@@ -1,9 +1,9 @@
 # AI Investigation Workbench
 
 **Status:** completed (`delivered workbench snapshot; superseded by current /assistant surface`)
-**Owner plan:** `docs/exec-plans/completed/ai-investigation-workbench-execution.md`
+**Owner plan:** `.ultrakit/exec-plans/completed/ai-investigation-workbench-execution.md`
 **Superseded by:** `docs/product-specs/assistant-primary-surface.md`
-**Supersession execution:** `docs/exec-plans/completed/assistant-conversation-canvas-and-skills.md`
+**Supersession execution:** `.ultrakit/exec-plans/completed/assistant-conversation-canvas-and-skills.md`
 **Last updated:** 2026-03-07
 
 ---

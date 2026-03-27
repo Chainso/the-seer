@@ -8,7 +8,14 @@ Each completed plan should preserve:
 - major decisions/deviations
 - follow-up items (if any)
 
+## Historical Migration Notes
+
+- The old Seer `docs/exec-plans/completed/` corpus now lives here.
+- The old `docs/exec-plans/active/index.md` history ledger was archived as `mvp-phase-execution-index.md`.
+
 ## Plans
+
+0. `mvp-phase-execution-index.md` - historical execution ledger migrated from the pre-Ultrakit `active/index.md`
 
 1. `mvp-phase-0-foundation-skeleton.md` - completed (2026-02-22)
 2. `mvp-phase-1-ontology-copilot-v1.md` - completed (2026-02-22)

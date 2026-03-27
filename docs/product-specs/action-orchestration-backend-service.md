@@ -1,7 +1,7 @@
 # Action Orchestration Backend Service Spec
 
 **Status:** completed  
-**Owner phase:** `docs/exec-plans/completed/action-orchestration-backend-service.md`  
+**Owner phase:** `.ultrakit/exec-plans/completed/action-orchestration-backend-service.md`  
 **Last updated:** 2026-03-16
 
 ---

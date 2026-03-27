@@ -8,7 +8,7 @@ Catalog user-facing product specs and make implementation state obvious.
 
 1. `completed` means the spec describes behavior that has already been delivered or ratified.
 2. `draft` means the spec captures intended product behavior that is not yet implemented end-to-end.
-3. If a draft spec moves into active delivery, the relevant execution plan under `docs/exec-plans/active/` should be the canonical place to track implementation progress.
+3. If a draft spec moves into active delivery, the relevant execution plan under `.ultrakit/exec-plans/active/` should be the canonical place to track implementation progress.
 4. If there are no active execution plans for a draft spec, treat it as product direction only, not in-flight implementation.
 
 ## Implemented Specs

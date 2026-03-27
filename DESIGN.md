@@ -16,7 +16,7 @@ For a new reader, the shortest useful summary is:
 1. Product direction: `VISION.md`
 2. Architecture map: `ARCHITECTURE.md`
 3. Deep design notes: `docs/design-docs/index.md`
-4. Execution plans: `docs/exec-plans/active/`
+4. Execution plans: `.ultrakit/exec-plans/active/`
 
 ## Current Design Themes
 

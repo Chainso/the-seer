@@ -1,7 +1,7 @@
 # History Inspector Phase 3A Spec
 
 **Status:** completed  
-**Owner phase:** `docs/exec-plans/completed/object-store-model-locked-tabs.md`  
+**Owner phase:** `.ultrakit/exec-plans/completed/object-store-model-locked-tabs.md`  
 **Last updated:** 2026-03-14
 
 ---
