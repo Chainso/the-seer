@@ -13,7 +13,13 @@ This repository provides a deterministic local runtime for:
 
 ## Agent Workflow
 
-For agent-driven delivery, use the `ultrakit:orchestrator` skill from `.agent/skills/ultrakit-orchestrator/SKILL.md` whenever work should go through discovery, planning, and execution.
+For agent-driven delivery, use `ultrakit:orchestrator:orchestrate` from `.agent/skills/ultrakit-orchestrator-orchestrate/SKILL.md` whenever work should go through discovery, planning, and execution.
+
+The stage skills are:
+
+1. `ultrakit:orchestrator:discover`
+2. `ultrakit:orchestrator:plan`
+3. `ultrakit:orchestrator:execute`
 
 Execution plans are canonical under `.ultrakit/exec-plans/` and must be updated during implementation.
 

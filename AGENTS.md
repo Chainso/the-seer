@@ -116,6 +116,7 @@ These checks should be automated as repository tooling matures:
 ## Agent Skills
 
 1. Skills are loaded from `.agent/skills` (symlink to `.agents/skills`).
-2. Use `ultrakit:orchestrator` for non-trivial work that needs discovery, planning, and execution.
-3. `ultrakit:orchestrator` operates against `.ultrakit/exec-plans/plan-contract.md` and the relevant execution-plan docs under `.ultrakit/exec-plans/`.
-4. Keep Seer-specific policy in this file and the repository docs, not in the copied Ultrakit skill definitions.
+2. Use `ultrakit:orchestrator:orchestrate` as the default entrypoint for non-trivial work that needs discovery, planning, and execution.
+3. The stage-specific skills are `ultrakit:orchestrator:discover`, `ultrakit:orchestrator:plan`, and `ultrakit:orchestrator:execute`.
+4. Ultrakit orchestration operates against `.ultrakit/exec-plans/plan-contract.md` and the relevant execution-plan docs under `.ultrakit/exec-plans/`.
+5. Keep Seer-specific policy in this file and the repository docs, not in the installed Ultrakit skill definitions.
