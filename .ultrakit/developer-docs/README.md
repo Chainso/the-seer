@@ -2,6 +2,8 @@
 
 Internal developer documentation for the project team. Covers architecture, runtime internals, and key design decisions.
 
+Start with `index.md` in this directory for the current document map.
+
 ## Who This Is For
 
 Software engineers working on or integrating with this system. This is NOT user-facing documentation.
@@ -30,3 +32,18 @@ This documentation focuses on **architecture, contracts, and design rationale** 
 - Phase-by-phase implementation details (those belong in execution plans)
 
 When in doubt, err on the side of not updating. These docs should be stable enough that reading them once gives someone a correct understanding for months of work.
+
+## Docs In This Folder
+
+1. [backend-domain-map.md](./backend-domain-map.md) - backend service boundaries, domain ownership, and API composition.
+2. [ui-surface-architecture.md](./ui-surface-architecture.md) - shared shell, surface organization, assistant runtime usage, and UI-to-backend boundaries.
+3. [ontology-history-and-catalog.md](./ontology-history-and-catalog.md) - how ontology state, immutable history, and catalog read models fit together.
+4. [assistant-actions-and-managed-agents.md](./assistant-actions-and-managed-agents.md) - how assistant investigation, generic action execution, and managed-agent orchestration share runtime infrastructure.
+5. [local-runtime-and-data-stores.md](./local-runtime-and-data-stores.md) - local composition, data stores, configuration, and service bootstrapping.
+
+## How To Read This Folder
+
+1. Start with `ARCHITECTURE.md` for the repository-wide map.
+2. Use this folder when you need a deeper mental model of one subsystem boundary.
+3. Prefer the smallest relevant doc rather than reading this folder end to end.
+4. Keep cross-links current when adding or renaming docs in this folder.
