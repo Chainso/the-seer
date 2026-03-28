@@ -1,5 +1,7 @@
 FROM mcr.microsoft.com/devcontainers/universal:2
 
+ENV NVM_DIR=/usr/local/share/nvm
+
 RUN rm -f /etc/apt/sources.list.d/yarn.list \
     && apt-get update \
     && export DEBIAN_FRONTEND=noninteractive \
@@ -14,12 +16,22 @@ RUN rm -f /etc/apt/sources.list.d/yarn.list \
     && tar -xzf /tmp/zellij.tar.gz -C /usr/local/bin zellij \
     && chmod +x /usr/local/bin/zellij \
     && rm /tmp/zellij.tar.gz \
-    && npm install -g @openai/codex \
+    && bash -lc 'set -euo pipefail \
+      && source "$NVM_DIR/nvm.sh" \
+      && nvm install node \
+      && nvm alias default node \
+      && nvm use node \
+      && npm install -g @openai/codex \
+      && NODE_VERSION="$(nvm version node)" \
+      && NODE_BIN_DIR="$NVM_DIR/versions/node/${NODE_VERSION}/bin" \
+      && ln -sf "$NODE_BIN_DIR/node" /usr/local/bin/node \
+      && ln -sf "$NODE_BIN_DIR/npm" /usr/local/bin/npm \
+      && ln -sf "$NODE_BIN_DIR/npx" /usr/local/bin/npx \
+      && ln -sf "$NODE_BIN_DIR/codex" /usr/local/bin/codex' \
     && python3 -m pip install --no-cache-dir --break-system-packages uv \
-    && CODEX_BIN="$(command -v codex)" \
-    && mv "${CODEX_BIN}" /usr/local/bin/codex-real \
-    && printf '#!/usr/bin/env bash\nexec /usr/local/bin/codex-real --dangerously-bypass-approvals-and-sandbox "$@"\n' > /usr/local/bin/codex \
-    && chmod +x /usr/local/bin/codex \
+    && rm -f /usr/local/bin/codex-real \
+    && printf '#!/usr/bin/env bash\nexec /usr/local/bin/codex --dangerously-bypass-approvals-and-sandbox "$@"\n' > /usr/local/bin/codex-no-perm \
+    && chmod +x /usr/local/bin/codex-no-perm \
     && chsh -s /bin/zsh root \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

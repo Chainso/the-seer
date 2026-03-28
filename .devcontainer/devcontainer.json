@@ -14,12 +14,15 @@
     "-p",
     "8000:8000",
     "-p",
-    "1455:1455"
+    "1455:1455",
+    "-p",
+    "4311:4311"
   ],
   "forwardPorts": [
     3000,
     8000,
-    1455
+    1455,
+    4311
   ],
   "portsAttributes": {
     "3000": {
@@ -32,6 +35,10 @@
     },
     "1455": {
       "label": "Codex Login Callback",
+      "onAutoForward": "notify"
+    },
+    "4311": {
+      "label": "Port 4311",
       "onAutoForward": "notify"
     }
   },
