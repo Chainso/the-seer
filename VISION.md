@@ -113,7 +113,7 @@ From the rest of the platform's point of view:
 
 This is the primary user-facing product surface.
 
-The canonical entry point is `/assistant`.
+The primary investigation workspace is the dedicated assistant experience.
 
 The user starts with a business question, not a diagram configuration form.
 

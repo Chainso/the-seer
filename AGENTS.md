@@ -37,7 +37,7 @@ Treat this file as a table of contents, not an encyclopedia. Start here, then lo
 
 ## Read Order by Task Type
 
-1. Product scope or priorities: `VISION.md`, then `prophet/prohet.ttl` then active execution plans.
+1. Product scope or priorities: `VISION.md`, then `prophet/prophet.ttl` then active execution plans.
 2. Technical approach and boundaries: `DESIGN.md`, then `ARCHITECTURE.md`.
 3. Deep design decisions: `docs/design-docs/index.md`, then selected topic docs.
 4. User-facing behavior and acceptance: `docs/product-specs/index.md`, then specific spec.

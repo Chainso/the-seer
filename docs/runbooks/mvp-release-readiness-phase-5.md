@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Define repeatable local checks and smoke steps used to decide MVP release readiness.
+Record the local checks and smoke steps used to decide Phase 5 MVP release readiness.
 
 ## Preconditions
 

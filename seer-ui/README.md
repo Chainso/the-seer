@@ -1,13 +1,21 @@
 # Seer UI
 
-Read-first ontology explorer and digital twin interface for Seer.
+Catalog-first investigation and managed-agent interface for Seer.
 
 ## Product Surfaces
 
-- `\/ontology/[tab]`: ontology explorer (graph-first, deep-linkable)
-- `\/inspector` and `\/inspector/analytics`: runtime/process mining views
+- `\/`: redirects to `\/catalog/objects`
+- `\/catalog`, `\/catalog/[kind]`, and `\/catalog/[kind]/[catalogKey]`: primary discovery workspace for objects, actions, events, and triggers
+- `\/inspector/managed-agents`: managed-agent authoring, run visibility, and nested execution drill-down
 - global shell assistant: bottom-right launcher + panel powered by assistant-ui
-- `\/assistant`: evidence-grounded mission control fallback route
+- `\/assistant`: dedicated investigation workspace with optional artifact canvas
+- `\/ontology`, `\/inspector/history`, and `\/inspector/insights`: retained reference surfaces for expert diagnostics
+
+## Related Specs
+
+1. `../docs/product-specs/foundation-module-shell-phase-0.md`
+2. `../docs/product-specs/assistant-primary-surface.md`
+3. `../docs/product-specs/managed-agentic-workflows.md`
 
 ## Local Development
 
@@ -18,18 +26,27 @@ npm run dev
 
 Default API base URL:
 - `NEXT_PUBLIC_API_BASE_URL` (recommended: `http://localhost:8000/api/v1`)
-- `NEXT_PUBLIC_API_URL` is still accepted for legacy compatibility.
+- `NEXT_PUBLIC_API_URL` is also accepted for legacy compatibility.
+
+The primary shell navigation exposes `Catalog`, `Managed Agents`, and `Assistant`.
 
 ## Validation
 
-Lint all:
+Build:
+
+```bash
+cd seer-ui
+npm run build
+```
+
+Lint:
 
 ```bash
 cd seer-ui
 npm run lint
 ```
 
-Contract + smoke suite:
+Contract suite:
 
 ```bash
 cd seer-ui
@@ -51,11 +68,10 @@ Table components under `app/components/ui/table.tsx` follow a Radix Themes-compa
 Legacy aliases remain exported for incremental migration, but new code should use the namespaced API.
 Implementation note: this is a local compatibility layer matching Radix Themes table semantics. Full package-level adoption in `seer-ui/package.json` is pending network access for lockfile updates.
 
-## Security and Trust Notes
+## Security Utilities
 
-- Assistant safe mode is ON by default.
-- Audit entries are persisted with redaction policy for prompts/answers/evidence.
-- Redaction logic lives in `app/lib/security-redaction.ts`.
+Sensitive assistant text and evidence references can be redacted with the helpers
+in `app/lib/security-redaction.ts`.
 
 ## Performance Budget Notes
 

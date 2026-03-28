@@ -8,16 +8,16 @@
 
 ## What This Is
 
-This spec defines the current `/assistant` product surface.
+This spec defines the current primary assistant investigation surface.
 
-`/assistant` is Seer's primary AI-first investigation experience:
+The primary assistant surface is Seer's AI-first investigation experience:
 
-1. one conversational assistant thread,
+1. a thread-based assistant workspace,
 2. one canonical `completion_messages` contract,
 3. dynamic skill loading when the task needs deeper capability,
 4. and an optional attached canvas for inspectable artifacts such as OC-DFG.
 
-This replaces the delivered workbench-first `/assistant` snapshot documented separately in `ai-investigation-workbench.md`.
+This replaces the delivered workbench-first investigation snapshot documented separately in `ai-investigation-workbench.md`.
 
 ## Core User Promise
 
@@ -27,21 +27,23 @@ The user should be able to:
 2. receive an evidence-grounded conversational answer,
 3. let Seer decide when to load deeper analytical capability,
 4. inspect visual artifacts without leaving the conversation,
-5. and continue the same thread while the canvas stays attached.
+5. start a new thread or return to an earlier one in the assistant workspace,
+6. and keep canvas state attached to the active thread.
 
 ## Primary Interaction Model
 
-1. `/assistant` opens as a calm full-width conversation surface by default.
+1. The assistant opens as a calm investigation workspace with a thread rail and primary conversation area.
 2. The assistant starts with lightweight ontology grounding and ontology tools only.
 3. If the task requires deeper capability, the assistant calls `load_skill`.
-4. Skill activation expands instructions and tool access in the same thread rather than switching routes or protocols.
+4. Skill activation expands instructions and tool access in the active thread rather than switching routes or protocols.
 5. Tool results may create typed artifacts.
 6. The assistant may present those artifacts in the right-side canvas through canvas tools.
 7. The conversation remains primary while the canvas is open.
+8. Users can create a new thread, switch between threads, and delete existing threads from the workspace.
 
 ## Conversation Contract
 
-The canonical durable state is the saved conversation history.
+The canonical durable state is the saved conversation history for each thread.
 
 The stable contract is:
 
@@ -49,7 +51,7 @@ The stable contract is:
 2. ordinary assistant/tool messages for skill activation, domain tool calls, artifact creation, and canvas actions,
 3. markdown-first assistant responses, including semantic `:::` blocks where trust or drill-down semantics matter.
 
-The assistant should not rely on a second workflow-specific response protocol for `/assistant`.
+The assistant should not rely on a second workflow-specific response protocol for this surface.
 
 ## Skill Loading Expectations
 
@@ -74,7 +76,7 @@ Canvas behavior is tool-driven, not markdown-driven.
 
 Delivered expectations:
 
-1. desktop `/assistant` opens a right-side split canvas when an artifact is presented,
+1. the desktop assistant opens a right-side split canvas when an artifact is presented,
 2. the thread shrinks but remains fully usable,
 3. canvas state is derived from persisted tool history,
 4. the assistant can present, update, or close the canvas in-thread.
@@ -86,18 +88,19 @@ Mobile and compact variants may fall back to an inline compact canvas treatment 
 Current delivered artifact behavior:
 
 1. `ocdfg` renders with the shipped OC-DFG graph component in the desktop canvas,
-2. `rca` renders with the shared RCA results surface used by `/inspector/insights`,
-3. `object-timeline` renders with the shared object-history display surface used by `/inspector/history/object`,
-4. `ontology-graph` renders with the shared ontology explorer display used by `/ontology/[tab]`,
+2. `rca` renders with the shared RCA results surface,
+3. `object-timeline` renders with the shared object-history display surface,
+4. `ontology-graph` renders with the shared ontology explorer display,
 5. other artifact families currently use the generic artifact panel,
 6. non-visual artifact fallback remains available even when no specialized renderer exists.
 
 ## Acceptance Expectations
 
-1. `/assistant` uses one conversational assistant contract based on `completion_messages`.
+1. The assistant uses one conversational contract based on `completion_messages`.
 2. The assistant starts generic and ontology-grounded.
 3. The assistant can dynamically load skills to expand tools and instructions.
-4. The assistant can open a right-side canvas without leaving the thread.
-5. Canvas state is driven by tool calls/results stored in the conversation history.
-6. Desktop OC-DFG artifacts render with the existing Seer graphing component.
-7. `/assistant` keeps a calmer generic assistant identity instead of the earlier workbench dashboard treatment.
+4. The assistant workspace lets users create, switch, and delete threads while preserving each thread's saved conversation history.
+5. The assistant can open a right-side canvas without leaving the active thread.
+6. Canvas state is driven by tool calls/results stored in the active thread history.
+7. Desktop OC-DFG artifacts render with the existing Seer graphing component.
+8. The assistant keeps a calmer generic assistant identity instead of the earlier workbench dashboard treatment.

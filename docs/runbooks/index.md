@@ -2,8 +2,13 @@
 
 ## Purpose
 
-Catalog operator runbooks used for MVP startup, smoke verification, and release readiness checks.
+Catalog operator runbooks and make it explicit whether each one is current guidance or
+historical delivery context.
 
-## Runbooks
+## Current Runbooks
 
-1. `mvp-release-readiness-phase-5.md` - completed
+1. none
+
+## Historical Runbooks
+
+1. `mvp-release-readiness-phase-5.md` - completed (`historical MVP release-readiness snapshot, not current shell guidance`)
